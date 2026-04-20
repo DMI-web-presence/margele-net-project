@@ -15,6 +15,32 @@ type Product = {
   createdAt: string;
 };
 
+const categoryDefinitions: Record<number, { label: string; parentId?: string }> = {
+  1: { label: 'Craciun', parentId: 'event' },
+  2: { label: 'pandandive' },
+};
+
+const parentCategoryLabels: Record<string, string> = {
+  event: 'Articole pentru evenimente',
+};
+
+const getCategoryLabel = (categoryId: number | null) => {
+  if (!categoryId) {
+    return 'Uncategorized';
+  }
+
+  const category = categoryDefinitions[categoryId];
+  if (!category) {
+    return `Category ${categoryId}`;
+  }
+
+  if (category.parentId) {
+    return `${parentCategoryLabels[category.parentId]} / ${category.label}`;
+  }
+
+  return category.label;
+};
+
 async function getProduct(id: string): Promise<Product | null> {
   const res = await fetch(`http://127.0.0.1:3001/products/${id}`, {
     cache: 'no-store',
@@ -85,12 +111,12 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           <Card className="space-y-6 p-8">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
-                <Badge>{product.categoryId ? `Category ${product.categoryId}` : 'Uncategorized'}</Badge>
+                <Badge>{getCategoryLabel(product.categoryId)}</Badge>
                 <Badge className="bg-indigo-100 text-indigo-700">Limited Release</Badge>
               </div>
               <div className="space-y-2">
                 <p className="text-3xl font-semibold tracking-tight text-slate-900">{product.name}</p>
-                <p className="text-2xl font-semibold text-slate-900">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(product.price))}</p>
+                <p className="text-2xl font-semibold text-slate-900">{new Intl.NumberFormat('ro-RO', { style: 'currency', currency: 'RON', currencyDisplay: 'narrowSymbol' }).format(Number(product.price))}</p>
               </div>
               <p className="text-sm leading-7 text-slate-600">{product.description ?? 'A detailed product description will help your customers feel confident and excited.'}</p>
             </div>
