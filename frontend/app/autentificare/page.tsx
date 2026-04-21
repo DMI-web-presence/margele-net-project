@@ -2,8 +2,16 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+
 const socialActions = [
-  { label: 'Continua cu Google', icon: 'G', iconClass: 'text-red-500' },
+  {
+    label: 'Continua cu Google',
+    icon: 'G',
+    iconClass: 'text-red-500',
+    href: `${backendUrl}/auth/google`,
+  },
   { label: 'Continua cu Apple', icon: '', iconClass: 'text-slate-900' },
   { label: 'Continua cu Facebook', icon: 'f', iconClass: 'text-blue-600' },
 ];
@@ -52,14 +60,25 @@ export default function AutentificarePage() {
 
             <div className="space-y-3">
               {socialActions.map((action) => (
-                <button
-                  key={action.label}
-                  type="button"
-                  className="inline-flex w-full cursor-pointer items-center justify-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-900 transition hover:bg-slate-100"
-                >
-                  <span className={`text-lg ${action.iconClass}`}>{action.icon}</span>
-                  <span>{action.label}</span>
-                </button>
+                action.href ? (
+                  <a
+                    key={action.label}
+                    href={action.href}
+                    className="inline-flex w-full cursor-pointer items-center justify-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-900 transition hover:bg-slate-100"
+                  >
+                    <span className={`text-lg ${action.iconClass}`}>{action.icon}</span>
+                    <span>{action.label}</span>
+                  </a>
+                ) : (
+                  <button
+                    key={action.label}
+                    type="button"
+                    className="inline-flex w-full cursor-pointer items-center justify-center gap-3 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-900 transition hover:bg-slate-100"
+                  >
+                    <span className={`text-lg ${action.iconClass}`}>{action.icon}</span>
+                    <span>{action.label}</span>
+                  </button>
+                )
               ))}
             </div>
 

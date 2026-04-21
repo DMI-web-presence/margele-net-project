@@ -8,6 +8,9 @@ import BasketPreviewCard from '@/components/basket-preview-card';
 import FavoritePreviewCard from '@/components/favorite-preview-card';
 import { useCart } from '@/components/cart-provider';
 
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+
 function AccountIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-2">
@@ -42,6 +45,32 @@ function BasketIcon({ filled = false }: { filled?: boolean }) {
   );
 }
 
+function ChevronDownIcon({ open = false }: { open?: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
+    >
+      <path
+        d="M6 9l6 6 6-6"
+        className="fill-none stroke-current stroke-2"
+      />
+    </svg>
+  );
+}
+
+function getFirstName(fullName: string | null | undefined, email: string | null | undefined) {
+  if (fullName && fullName.trim()) {
+    const parts = fullName.trim().split(/\s+/);
+    return parts[0];
+  }
+  if (email && email.includes('@')) {
+    return email.split('@')[0];
+  }
+  return 'utilizator';
+}
+
 export default function NavBar() {
   const pathname = usePathname();
   const {
@@ -57,6 +86,8 @@ export default function NavBar() {
   const [isAccountPreviewOpen, setIsAccountPreviewOpen] = useState(false);
   const [isBasketPreviewOpen, setIsBasketPreviewOpen] = useState(false);
   const [isFavoritePreviewOpen, setIsFavoritePreviewOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authUser, setAuthUser] = useState<{ name?: string; email?: string } | null>(null);
 
   useEffect(() => {
     if (basketPulseToken === 0) return;
@@ -72,29 +103,69 @@ export default function NavBar() {
     return () => window.clearTimeout(timeout);
   }, [favoritePulseToken]);
 
-  if (pathname.startsWith('/autentificare')) {
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/auth/me`, {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (!response.ok) {
+          setIsAuthenticated(false);
+          setAuthUser(null);
+          return;
+        }
+        const data = (await response.json()) as {
+          authenticated?: boolean;
+          user?: { name?: string; email?: string };
+        };
+        setIsAuthenticated(Boolean(data.authenticated));
+        setAuthUser(data.user ?? null);
+      } catch {
+        setIsAuthenticated(false);
+        setAuthUser(null);
+      }
+    };
+    void checkAuth();
+  }, [pathname]);
+
+  if (pathname?.startsWith('/autentificare')) {
     return null;
   }
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex w-full max-w-[1400px] items-center justify-end gap-2 px-6 py-4 sm:px-10 lg:px-16">
         <div
           className="relative"
           onMouseEnter={() => setIsAccountPreviewOpen(true)}
           onMouseLeave={() => setIsAccountPreviewOpen(false)}
         >
-          <Link
-            href="/autentificare"
-            aria-label="Account"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
-          >
-            <AccountIcon />
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              href="/cont"
+              aria-label="Cont utilizator"
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+            >
+              <span>Bine ai revenit, {getFirstName(authUser?.name, authUser?.email)} 👋</span>
+              <ChevronDownIcon open={isAccountPreviewOpen} />
+            </Link>
+          ) : (
+            <Link
+              href="/autentificare"
+              aria-label="Account"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+            >
+              <AccountIcon />
+            </Link>
+          )}
 
           {isAccountPreviewOpen ? (
             <div className="absolute right-0 top-full z-30 pt-3">
-              <AccountPreviewCard />
+              <AccountPreviewCard
+                isAuthenticated={isAuthenticated}
+                onLoggedOut={() => setIsAuthenticated(false)}
+              />
             </div>
           ) : null}
         </div>

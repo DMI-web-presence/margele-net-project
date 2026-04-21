@@ -31,7 +31,7 @@ export default async function Home() {
   const products = await getProducts();
 
   return (
-    <main className="px-6 py-8 sm:px-10 lg:px-16">
+    <main className="px-10 py-8 sm:px-20 lg:px-32">
       <ProductsPage products={products} />
     </main>
   );
