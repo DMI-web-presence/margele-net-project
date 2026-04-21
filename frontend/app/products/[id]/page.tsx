@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
+import ProductHistoryRecorder from '@/components/product-history-recorder';
 import ProductImageMagnifier from '@/components/product-image-magnifier';
 import { ProductReviewsProvider } from '@/components/product-reviews-provider';
 import QuantitySelector from '@/components/quantity-selector';
@@ -110,6 +111,13 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
 
   return (
     <main className="px-6 py-8 sm:px-10 lg:px-54">
+      <ProductHistoryRecorder
+        product={{
+          id: product.id,
+          name: product.name,
+          imageUrl: product.imageUrl,
+        }}
+      />
       <div className="mx-auto mb-8 flex w-full max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Detalii produs</p>
