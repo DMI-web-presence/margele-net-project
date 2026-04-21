@@ -48,6 +48,60 @@ const categoryGroups = [
   { id: 'uncategorized', label: 'Uncategorized', children: [] },
 ] as const;
 
+const colorOptions = ['Toate culorile', 'Alb', 'Rosu', 'Verde', 'Auriu', 'Argintiu', 'Natural'];
+const dimensionOptions = ['Toate dimensiunile', '6.5 mm', '8.5 mm', '10.5 mm', '12.5 mm', '14.5 mm'];
+const producerOptions = ['Toti producatorii', 'Margele.net', 'Degetar', 'Import'];
+const priceStep = 0.5;
+
+const roundToPriceStep = (value: number) => Math.round(value / priceStep) * priceStep;
+
+function FilterGroup({
+  title,
+  options,
+  selectedValues,
+  onToggle,
+}: {
+  title: string;
+  options: string[];
+  selectedValues: string[];
+  onToggle: (value: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left"
+        aria-expanded={isOpen}
+      >
+        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{title}</span>
+        <span className={`text-slate-500 transition ${isOpen ? 'rotate-180' : ''}`}>⌄</span>
+      </button>
+
+      {isOpen ? (
+        <div className="flex flex-col gap-2 border-t border-slate-200 px-4 py-3">
+          {options.map((option) => {
+            const checked = selectedValues.includes(option);
+            return (
+              <label key={option} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(option)}
+                  className="h-4 w-4 cursor-pointer accent-indigo-600"
+                />
+                <span>{option}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function FavoriteButtonIcon({ filled = false }: { filled?: boolean }) {
   return (
     <svg
@@ -63,12 +117,49 @@ function FavoriteButtonIcon({ filled = false }: { filled?: boolean }) {
 export default function ProductsPage({ products }: ProductsPageProps) {
   const { addToCart, toggleFavorite, isFavorite } = useCart();
   const searchParams = useSearchParams();
+  const priceBounds = useMemo(() => {
+    const prices = products.map((product) => Number(product.price)).filter(Number.isFinite);
+    if (prices.length === 0) {
+      return { min: 0, max: 100 };
+    }
+
+    return {
+      min: Math.floor(Math.min(...prices)),
+      max: Math.ceil(Math.max(...prices)),
+    };
+  }, [products]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Toate');
   const [subcategory, setSubcategory] = useState('Toate');
   const [sort, setSort] = useState('featured');
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedDimensions, setSelectedDimensions] = useState<string[]>([]);
+  const [selectedProducers, setSelectedProducers] = useState<string[]>([]);
+  const [minPrice, setMinPrice] = useState(priceBounds.min);
+  const [maxPrice, setMaxPrice] = useState(priceBounds.max);
 
   const selectedGroup = categoryGroups.find((group) => group.id === category) ?? categoryGroups[0];
+
+  const resetSideFilters = () => {
+    setSelectedColors([]);
+    setSelectedDimensions([]);
+    setSelectedProducers([]);
+    setMinPrice(priceBounds.min);
+    setMaxPrice(priceBounds.max);
+  };
+
+  const toggleSelectedValue = (
+    value: string,
+    selectedValues: string[],
+    setSelectedValues: (values: string[]) => void,
+  ) => {
+    if (selectedValues.includes(value)) {
+      setSelectedValues(selectedValues.filter((item) => item !== value));
+      return;
+    }
+
+    setSelectedValues([...selectedValues, value]);
+  };
 
   useEffect(() => {
     const categoryParam = searchParams.get('category');
@@ -115,6 +206,24 @@ export default function ProductsPage({ products }: ProductsPageProps) {
 
         return String(productCategoryId) === category;
       })
+      .filter((product) => {
+        const price = Number(product.price);
+        return price >= minPrice && price <= maxPrice;
+      })
+      .filter((product) => {
+        const text = `${product.name} ${product.description ?? ''}`.toLowerCase();
+        const matchesColor =
+          selectedColors.length === 0 ||
+          selectedColors.some((value) => text.includes(value.toLowerCase()));
+        const matchesDimension =
+          selectedDimensions.length === 0 ||
+          selectedDimensions.some((value) => text.includes(value.toLowerCase()));
+        const matchesProducer =
+          selectedProducers.length === 0 ||
+          selectedProducers.some((value) => text.includes(value.toLowerCase()));
+
+        return matchesColor && matchesDimension && matchesProducer;
+      })
       .sort((a, b) => {
         if (sort === 'price-asc') {
           return Number(a.price) - Number(b.price);
@@ -124,7 +233,7 @@ export default function ProductsPage({ products }: ProductsPageProps) {
         }
         return a.id - b.id;
       });
-  }, [products, search, category, subcategory, sort, selectedGroup]);
+  }, [products, search, category, subcategory, sort, selectedGroup, minPrice, maxPrice, selectedColors, selectedDimensions, selectedProducers]);
 
   return (
     <div className="space-y-8">
@@ -199,17 +308,124 @@ export default function ProductsPage({ products }: ProductsPageProps) {
         </div>
       </Card>
 
-      <section>
-        <div className="flex items-center justify-between gap-4 sm:flex-row sm:gap-0">
-          <div>
-            <p className="text-sm font-medium text-slate-500">{filteredProducts.length} produse afisate</p>
+      <section className="grid gap-6 lg:grid-cols-[17rem_1fr]">
+        <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-600">Filtre</h2>
+            <button
+              type="button"
+              onClick={resetSideFilters}
+              className="cursor-pointer rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"
+            >
+              Reset
+            </button>
           </div>
-          <div className="text-sm text-slate-500">
-            {/* {filteredProducts.length === 0 ? 'No products match your search.' : ` ${products.length} total products.`} */}
-          </div>
-        </div>
 
-        <div className="mt-6 grid items-stretch justify-items-center gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-5 flex flex-col gap-4">
+            <FilterGroup
+              title="Culoare"
+              options={colorOptions.slice(1)}
+              selectedValues={selectedColors}
+              onToggle={(value) => toggleSelectedValue(value, selectedColors, setSelectedColors)}
+            />
+
+            <FilterGroup
+              title="Dimensiune"
+              options={dimensionOptions.slice(1)}
+              selectedValues={selectedDimensions}
+              onToggle={(value) => toggleSelectedValue(value, selectedDimensions, setSelectedDimensions)}
+            />
+
+            <FilterGroup
+              title="Producator"
+              options={producerOptions.slice(1)}
+              selectedValues={selectedProducers}
+              onToggle={(value) => toggleSelectedValue(value, selectedProducers, setSelectedProducers)}
+            />
+
+            <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Pret</p>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="range"
+                  step={priceStep}
+                  min={priceBounds.min}
+                  max={priceBounds.max}
+                  value={minPrice}
+                  onChange={(event) => {
+                    const value = roundToPriceStep(Number(event.target.value));
+                    setMinPrice(Math.min(value, maxPrice));
+                  }}
+                  className="cursor-pointer accent-indigo-600"
+                  aria-label="Pret minim"
+                />
+                <input
+                  type="range"
+                  step={priceStep}
+                  min={priceBounds.min}
+                  max={priceBounds.max}
+                  value={maxPrice}
+                  onChange={(event) => {
+                    const value = roundToPriceStep(Number(event.target.value));
+                    setMaxPrice(Math.max(value, minPrice));
+                  }}
+                  className="cursor-pointer accent-indigo-600"
+                  aria-label="Pret maxim"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-slate-500">Min</span>
+                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-slate-400 focus-within:bg-white">
+                    <input
+                      type="number"
+                      step={priceStep}
+                      min={priceBounds.min}
+                      max={maxPrice}
+                      value={minPrice.toFixed(2)}
+                      onChange={(event) => {
+                        const value = roundToPriceStep(Number(event.target.value));
+                        setMinPrice(Math.min(value, maxPrice));
+                      }}
+                      className="min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-900 outline-none"
+                    />
+                    <span className="text-xs font-semibold text-slate-500">lei</span>
+                  </div>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs text-slate-500">Max</span>
+                  <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 focus-within:border-slate-400 focus-within:bg-white">
+                    <input
+                      type="number"
+                      step={priceStep}
+                      min={minPrice}
+                      max={priceBounds.max}
+                      value={maxPrice.toFixed(2)}
+                      onChange={(event) => {
+                        const value = roundToPriceStep(Number(event.target.value));
+                        setMaxPrice(Math.max(value, minPrice));
+                      }}
+                      className="min-w-0 flex-1 bg-transparent py-2 text-sm text-slate-900 outline-none"
+                    />
+                    <span className="text-xs font-semibold text-slate-500">lei</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div>
+          <div className="flex items-center justify-between gap-4 sm:flex-row sm:gap-0">
+            <div>
+              <p className="text-sm font-medium text-slate-500">{filteredProducts.length} produse afisate</p>
+            </div>
+            <div className="text-sm text-slate-500">
+              {/* {filteredProducts.length === 0 ? 'No products match your search.' : ` ${products.length} total products.`} */}
+            </div>
+          </div>
+
+        <div className="mt-6 grid items-stretch justify-items-center gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filteredProducts.map((product) => {
             const favorited = isFavorite(product.id);
             return (
@@ -298,6 +514,7 @@ export default function ProductsPage({ products }: ProductsPageProps) {
             </Card>
             );
           })}
+        </div>
         </div>
       </section>
     </div>
