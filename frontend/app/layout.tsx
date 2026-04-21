@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CartProvider } from "@/components/cart-provider";
 import Footer from "@/components/footer";
 import { Geist, Geist_Mono } from "next/font/google";
+import NavigationHistory from "@/components/navigation-history";
 import NavBar from "@/components/nav-bar";
 import "./globals.css";
 
@@ -34,6 +35,7 @@ export default function RootLayout({
         <CartProvider>
           <NavBar />
           <div className="flex-1">{children}</div>
+          <NavigationHistory />
           <Footer />
         </CartProvider>
       </body>
