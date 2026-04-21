@@ -9,7 +9,7 @@ function cn(...classes: Array<string | undefined | false>) {
   return classes.filter(Boolean).join(' ');
 }
 
-type CarouselApi = UseEmblaCarouselType[1];
+export type CarouselApi = UseEmblaCarouselType[1];
 type CarouselProps = {
   opts?: Parameters<typeof useEmblaCarousel>[0];
   plugins?: Parameters<typeof useEmblaCarousel>[1];
