@@ -148,7 +148,13 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           <Card className="space-y-6 p-8">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] uppercase tracking-[0.25em] text-slate-500">
-                <span>{getCategoryLabel(product.categoryId)}</span>
+                <Link href="/" className="transition hover:text-slate-700 hover:underline">
+                  Articole
+                </Link>
+                <span>/</span>
+                <Link href="/" className="transition hover:text-slate-700 hover:underline">
+                  {getCategoryLabel(product.categoryId)}
+                </Link>
                 {Number(product.price) > 20 ? <Badge className="px-2 py-0.5 text-[10px]">Popular</Badge> : null}
               </div>
               <ReviewsSummary />
