@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -10,6 +11,13 @@ import { useCart } from '@/components/cart-provider';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+
+const categoryLinks = [
+  { label: 'Toate', href: '/' },
+  { label: 'Evenimente', href: '/?category=event' },
+  { label: 'Craciun', href: '/?category=1' },
+  { label: 'Pandantive', href: '/?category=2' },
+];
 
 function AccountIcon() {
   return (
@@ -86,21 +94,28 @@ export default function NavBar() {
   const [isAccountPreviewOpen, setIsAccountPreviewOpen] = useState(false);
   const [isBasketPreviewOpen, setIsBasketPreviewOpen] = useState(false);
   const [isFavoritePreviewOpen, setIsFavoritePreviewOpen] = useState(false);
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUser, setAuthUser] = useState<{ name?: string; email?: string } | null>(null);
 
   useEffect(() => {
     if (basketPulseToken === 0) return;
-    setIsBasketPulsing(true);
-    const timeout = window.setTimeout(() => setIsBasketPulsing(false), 420);
-    return () => window.clearTimeout(timeout);
+    const startTimeout = window.setTimeout(() => setIsBasketPulsing(true), 0);
+    const endTimeout = window.setTimeout(() => setIsBasketPulsing(false), 420);
+    return () => {
+      window.clearTimeout(startTimeout);
+      window.clearTimeout(endTimeout);
+    };
   }, [basketPulseToken]);
 
   useEffect(() => {
     if (favoritePulseToken === 0) return;
-    setIsFavoritePulsing(true);
-    const timeout = window.setTimeout(() => setIsFavoritePulsing(false), 420);
-    return () => window.clearTimeout(timeout);
+    const startTimeout = window.setTimeout(() => setIsFavoritePulsing(true), 0);
+    const endTimeout = window.setTimeout(() => setIsFavoritePulsing(false), 420);
+    return () => {
+      window.clearTimeout(startTimeout);
+      window.clearTimeout(endTimeout);
+    };
   }, [favoritePulseToken]);
 
   useEffect(() => {
@@ -135,7 +150,64 @@ export default function NavBar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-[1400px] items-center justify-end gap-2 px-6 py-4 sm:px-10 lg:px-16">
+      <div className="mx-auto grid w-full max-w-[1400px] grid-cols-[auto_1fr_auto] items-center gap-4 px-6 py-4 sm:px-10 lg:px-16">
+        <Link href="/" className="inline-flex items-center" aria-label="Margele.net">
+          <Image
+            src="/margelenet-logo-nav-bar.webp"
+            alt="Margele.net"
+            width={120}
+            height={80}
+            className="h-auto w-[300px]"
+            unoptimized
+          />
+        </Link>
+
+        <nav className="hidden items-center justify-center gap-2 md:flex" aria-label="Categorii produse">
+          <div
+            className="relative"
+            onMouseEnter={() => setIsCategoryMenuOpen(true)}
+            onMouseLeave={() => setIsCategoryMenuOpen(false)}
+          >
+            <button
+              type="button"
+              className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+              aria-expanded={isCategoryMenuOpen}
+              onClick={() => setIsCategoryMenuOpen((current) => !current)}
+            >
+              Categorii
+              <ChevronDownIcon open={isCategoryMenuOpen} />
+            </button>
+
+            {isCategoryMenuOpen ? (
+              <div className="absolute left-1/2 top-full z-30 w-64 -translate-x-1/2 pt-3">
+                <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-xl">
+                  {categoryLinks.map((category) => (
+                    <Link
+                      key={category.href}
+                      href={category.href}
+                      className="block rounded-2xl px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
+                      onClick={() => setIsCategoryMenuOpen(false)}
+                    >
+                      {category.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {categoryLinks.slice(1).map((category) => (
+            <Link
+              key={category.href}
+              href={category.href}
+              className="rounded-full px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              {category.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="flex items-center justify-end gap-2">
         <div
           className="relative"
           onMouseEnter={() => setIsAccountPreviewOpen(true)}
@@ -228,6 +300,7 @@ export default function NavBar() {
               <BasketPreviewCard items={items} totalCount={count} />
             </div>
           ) : null}
+        </div>
         </div>
       </div>
     </header>

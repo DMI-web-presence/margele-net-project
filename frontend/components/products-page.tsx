@@ -2,7 +2,8 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/components/cart-provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -61,12 +62,37 @@ function FavoriteButtonIcon({ filled = false }: { filled?: boolean }) {
 
 export default function ProductsPage({ products }: ProductsPageProps) {
   const { addToCart, toggleFavorite, isFavorite } = useCart();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Toate');
   const [subcategory, setSubcategory] = useState('Toate');
   const [sort, setSort] = useState('featured');
 
   const selectedGroup = categoryGroups.find((group) => group.id === category) ?? categoryGroups[0];
+
+  useEffect(() => {
+    const categoryParam = searchParams.get('category');
+    const timeout = window.setTimeout(() => {
+      if (!categoryParam) {
+        setCategory('Toate');
+        setSubcategory('Toate');
+        return;
+      }
+
+      if (categoryParam === '1') {
+        setCategory('event');
+        setSubcategory('1');
+        return;
+      }
+
+      if (categoryParam === 'event' || categoryParam === '2' || categoryParam === 'uncategorized') {
+        setCategory(categoryParam);
+        setSubcategory('Toate');
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchParams]);
 
   const filteredProducts = useMemo(() => {
     return products
