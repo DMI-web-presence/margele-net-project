@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 type HistoryItem = {
@@ -15,6 +16,7 @@ const storageKey = 'margele_navigation_history_v1';
 const historyEventName = 'margele-product-history-recorded';
 
 export default function NavigationHistory() {
+  const pathname = usePathname();
   const [items, setItems] = useState<HistoryItem[]>(() => {
     if (typeof window === 'undefined') {
       return [];
@@ -63,7 +65,7 @@ export default function NavigationHistory() {
     setItems([]);
   };
 
-  if (items.length === 0) {
+  if (pathname === '/' || items.length === 0) {
     return null;
   }
 

@@ -13,10 +13,10 @@ const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
 
 const categoryLinks = [
-  { label: 'Toate', href: '/' },
-  { label: 'Evenimente', href: '/?category=event' },
-  { label: 'Craciun', href: '/?category=1' },
-  { label: 'Pandantive', href: '/?category=2' },
+  { label: 'Toate', href: '/catalog' },
+  { label: 'Evenimente', href: '/catalog?category=event' },
+  { label: 'Craciun', href: '/catalog?category=1' },
+  { label: 'Pandantive', href: '/catalog?category=2' },
 ];
 
 function AccountIcon() {

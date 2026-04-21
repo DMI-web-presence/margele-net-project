@@ -1,4 +1,4 @@
-import LandingPage from '@/components/landing-page';
+import ProductsPage from '@/components/products-page';
 
 type Product = {
   id: number;
@@ -16,23 +16,23 @@ async function getProducts(): Promise<Product[]> {
   });
 
   if (!res.ok) {
-    return [];
+    throw new Error('Failed to load products');
   }
 
   const text = await res.text();
   if (!text.trim()) {
-    return [];
+    throw new Error('Failed to load products');
   }
 
   return JSON.parse(text) as Product[];
 }
 
-export default async function Home() {
+export default async function CatalogPage() {
   const products = await getProducts();
 
   return (
-    <main>
-      <LandingPage products={products} />
+    <main className="px-10 py-8 sm:px-20 lg:px-32">
+      <ProductsPage products={products} />
     </main>
   );
 }
