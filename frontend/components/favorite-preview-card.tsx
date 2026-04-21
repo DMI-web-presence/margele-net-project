@@ -20,10 +20,10 @@ export default function FavoritePreviewCard({ items, totalCount }: FavoritePrevi
   const { removeFromFavorites } = useCart();
 
   return (
-    <div className="w-[320px] rounded-2xl border border-rose-200 bg-white p-4 shadow-xl">
-      <div className="flex items-center justify-between border-b border-rose-100 pb-3">
+    <div className="w-[320px] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <p className="text-sm font-semibold text-slate-900">Favoritele tale</p>
-        <p className="text-xs font-medium uppercase tracking-[0.25em] text-rose-500">{totalCount} produse</p>
+        <p className="text-xs font-medium uppercase tracking-[0.25em] text-slate-500">{totalCount} produse</p>
       </div>
 
       {items.length === 0 ? (

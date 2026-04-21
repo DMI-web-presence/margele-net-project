@@ -4,7 +4,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useCart } from '@/components/cart-provider';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
@@ -47,23 +46,6 @@ const categoryGroups = [
   { id: '2', label: categoryDefinitions[2].label, children: [] },
   { id: 'uncategorized', label: 'Uncategorized', children: [] },
 ] as const;
-
-const getCategoryLabel = (categoryId: number | null) => {
-  if (!categoryId) {
-    return 'Uncategorized';
-  }
-
-  const category = categoryDefinitions[categoryId];
-  if (!category) {
-    return `Category ${categoryId}`;
-  }
-
-  if (category.parentId) {
-    return `${parentCategoryLabels[category.parentId]} / ${category.label}`;
-  }
-
-  return category.label;
-};
 
 function FavoriteButtonIcon({ filled = false }: { filled?: boolean }) {
   return (
@@ -201,20 +183,21 @@ export default function ProductsPage({ products }: ProductsPageProps) {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid items-stretch justify-items-center gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {filteredProducts.map((product) => {
             const favorited = isFavorite(product.id);
             return (
-            <Card key={product.id} className="overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
+            <Card key={product.id} className="flex h-full w-full max-w-[16rem] flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
               <div className="relative">
                 <Link href={`/products/${product.id}`} className="group block">
-                  <div className="relative aspect-[1/1] bg-slate-100">
+                  <div className="bg-slate-100">
                     {product.imageUrl ? (
                       <Image
                         src={product.imageUrl}
                         alt={product.name}
-                        fill
-                        className="object-cover transition duration-300 group-hover:scale-105"
+                        width={640}
+                        height={640}
+                        className="h-auto w-full object-contain transition duration-300 group-hover:scale-105"
                         unoptimized
                       />
                     ) : (
@@ -238,39 +221,38 @@ export default function ProductsPage({ products }: ProductsPageProps) {
                       event.currentTarget,
                     )
                   }
-                  className={`absolute right-3 top-3 z-10 inline-flex h-10 w-10 cursor-pointer items-center justify-center transition hover:scale-110 ${
+                  className={`absolute right-2 top-2 z-10 inline-flex h-8 w-8 cursor-pointer items-center justify-center transition hover:scale-110 ${
                     favorited ? 'text-rose-600' : 'text-rose-500'
                   }`}
                 >
                   <FavoriteButtonIcon filled={favorited} />
                 </button>
               </div>
-              <div className="space-y-4 p-6">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.35em] text-slate-500">
-                    <span>{getCategoryLabel(product.categoryId)}</span>
-                    {Number(product.price) > 20 ? <Badge>Popular</Badge> : null}
-                    <Badge className="bg-emerald-100 text-emerald-800">In stoc</Badge>
-                  </div>
-                  <Link href={`/products/${product.id}`} className="text-lg font-semibold text-slate-900 transition hover:text-indigo-600">
+              <div className="flex flex-1 flex-col space-y-3 p-4">
+                <div className="space-y-1.5">
+                  <Link
+                    href={`/products/${product.id}`}
+                    className="line-clamp-2 min-h-[3.5rem] text-base font-semibold text-slate-900 transition hover:text-indigo-600"
+                  >
                     {product.name}
                   </Link>
                   <div className="flex items-center gap-1">
-                    <p className="text-sm font-medium text-slate-900">Material: </p>
-                    <p className="text-sm leading-6 text-slate-600">{product.description ?? 'High-quality craft material.'}</p>
+                    <p className="text-xs font-medium text-slate-900">Material: </p>
+                    <p className="text-xs leading-5 text-slate-600">{product.description ?? 'High-quality craft material.'}</p>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-6 py-4">
-                <p className="text-lg font-semibold text-slate-900">{numberFormatter.format(Number(product.price))}</p>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-6">
+                <p className="text-2xl font-semibold text-slate-900">{numberFormatter.format(Number(product.price))}</p>
+                <div className="flex flex-col items-center gap-1.5">
                   <Link
                     href={`/products/${product.id}`}
-                    className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+                    className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-100"
                   >
                     Detalii produs
                   </Link>
                   <Button
+                    className="h-8 rounded-xl px-3 text-xs"
                     onClick={(event) =>
                       addToCart(
                         {
