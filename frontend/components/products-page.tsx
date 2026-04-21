@@ -52,6 +52,7 @@ const colorOptions = ['Toate culorile', 'Alb', 'Rosu', 'Verde', 'Auriu', 'Argint
 const dimensionOptions = ['Toate dimensiunile', '6.5 mm', '8.5 mm', '10.5 mm', '12.5 mm', '14.5 mm'];
 const producerOptions = ['Toti producatorii', 'Margele.net', 'Degetar', 'Import'];
 const priceStep = 0.5;
+const pageSizeOptions = [12, 24, 35, 48];
 
 const roundToPriceStep = (value: number) => Math.round(value / priceStep) * priceStep;
 
@@ -137,6 +138,8 @@ export default function ProductsPage({ products }: ProductsPageProps) {
   const [selectedProducers, setSelectedProducers] = useState<string[]>([]);
   const [minPrice, setMinPrice] = useState(priceBounds.min);
   const [maxPrice, setMaxPrice] = useState(priceBounds.max);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [productsPerPage, setProductsPerPage] = useState(35);
 
   const selectedGroup = categoryGroups.find((group) => group.id === category) ?? categoryGroups[0];
 
@@ -234,6 +237,29 @@ export default function ProductsPage({ products }: ProductsPageProps) {
         return a.id - b.id;
       });
   }, [products, search, category, subcategory, sort, selectedGroup, minPrice, maxPrice, selectedColors, selectedDimensions, selectedProducers]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (safeCurrentPage - 1) * productsPerPage;
+  const paginatedProducts = filteredProducts.slice(pageStartIndex, pageStartIndex + productsPerPage);
+  const displayStart = filteredProducts.length === 0 ? 0 : pageStartIndex + 1;
+  const displayEnd = Math.min(pageStartIndex + productsPerPage, filteredProducts.length);
+  const visiblePages = Array.from({ length: totalPages }, (_, index) => index + 1).filter((page) => {
+    if (totalPages <= 5) return true;
+    if (page === 1 || page === totalPages) return true;
+    return Math.abs(page - safeCurrentPage) <= 1;
+  });
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setCurrentPage(1), 0);
+    return () => window.clearTimeout(timeout);
+  }, [search, category, subcategory, sort, minPrice, maxPrice, selectedColors, selectedDimensions, selectedProducers, productsPerPage]);
+
+  useEffect(() => {
+    if (currentPage <= totalPages) return;
+    const timeout = window.setTimeout(() => setCurrentPage(totalPages), 0);
+    return () => window.clearTimeout(timeout);
+  }, [currentPage, totalPages]);
 
   return (
     <div className="space-y-8">
@@ -420,13 +446,27 @@ export default function ProductsPage({ products }: ProductsPageProps) {
             <div>
               <p className="text-sm font-medium text-slate-500">{filteredProducts.length} produse afisate</p>
             </div>
-            <div className="text-sm text-slate-500">
-              {/* {filteredProducts.length === 0 ? 'No products match your search.' : ` ${products.length} total products.`} */}
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <label htmlFor="products-per-page" className="font-medium">
+                Pe pagina
+              </label>
+              <select
+                id="products-per-page"
+                value={productsPerPage}
+                onChange={(event) => setProductsPerPage(Number(event.target.value))}
+                className="cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition hover:bg-slate-50 focus:border-slate-400"
+              >
+                {pageSizeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
         <div className="mt-6 grid items-stretch justify-items-center gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredProducts.map((product) => {
+          {paginatedProducts.map((product) => {
             const favorited = isFavorite(product.id);
             return (
             <Card key={product.id} className="flex h-full w-full max-w-[16rem] flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
@@ -514,6 +554,72 @@ export default function ProductsPage({ products }: ProductsPageProps) {
             </Card>
             );
           })}
+        </div>
+
+        <div className="mt-6 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-slate-700">
+            Afisare {displayStart} - {displayEnd} din {filteredProducts.length}
+          </p>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCurrentPage(1)}
+              disabled={safeCurrentPage === 1}
+              className="inline-flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Prima pagina"
+            >
+              |‹
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={safeCurrentPage === 1}
+              className="inline-flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Pagina precedenta"
+            >
+              ‹
+            </button>
+            {visiblePages.map((page, index) => {
+              const previousPage = visiblePages[index - 1];
+              const showGap = previousPage != null && page - previousPage > 1;
+              return (
+                <span key={page} className="flex items-center gap-1">
+                  {showGap ? <span className="px-1 text-slate-400">...</span> : null}
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    aria-current={page === safeCurrentPage ? 'page' : undefined}
+                    className={`inline-flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md border px-2 transition ${
+                      page === safeCurrentPage
+                        ? 'border-[#7b4a75] bg-white text-[#7b4a75]'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                </span>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={safeCurrentPage === totalPages}
+              className="inline-flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Pagina urmatoare"
+            >
+              ›
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safeCurrentPage === totalPages}
+              className="inline-flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Ultima pagina"
+            >
+              ›|
+            </button>
+          </div>
         </div>
         </div>
       </section>
