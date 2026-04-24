@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { FormEvent, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
@@ -17,6 +21,37 @@ const socialActions = [
 ];
 
 export default function AutentificarePage() {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const email = String(data.get('email') ?? '').trim().toLowerCase();
+    if (!email) return;
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/auth/email-exists?email=${encodeURIComponent(email)}`,
+      );
+
+      if (!response.ok) {
+        throw new Error('Email lookup failed');
+      }
+
+      const result = (await response.json()) as { exists?: boolean };
+      const nextPath = result.exists
+        ? `/autentificare/conectare?email=${encodeURIComponent(email)}`
+        : `/autentificare/inregistrare?email=${encodeURIComponent(email)}`;
+
+      router.push(nextPath);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
       <div className="mx-auto max-w-[560px]">
@@ -28,7 +63,7 @@ export default function AutentificarePage() {
               </h1>
             </div>
 
-            <form action="/autentificare/conectare" method="get" className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <label className="text-sm font-semibold text-slate-900" htmlFor="email">
                 Adresa de email
               </label>
@@ -41,8 +76,12 @@ export default function AutentificarePage() {
                 className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
               />
 
-              <Button type="submit" className="w-full rounded-2xl bg-slate-900 py-3 text-base hover:bg-black">
-                Continua
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full rounded-2xl bg-slate-900 py-3 text-base hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSubmitting ? 'Se verifica...' : 'Continua'}
               </Button>
             </form>
 

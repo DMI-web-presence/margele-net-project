@@ -17,26 +17,8 @@ const historyEventName = 'margele-product-history-recorded';
 
 export default function NavigationHistory() {
   const pathname = usePathname();
-  const [items, setItems] = useState<HistoryItem[]>(() => {
-    if (typeof window === 'undefined') {
-      return [];
-    }
-    try {
-      const storedItems = window.localStorage.getItem(storageKey);
-      if (storedItems) {
-        const parsedItems = JSON.parse(storedItems) as HistoryItem[];
-        if (Array.isArray(parsedItems)) {
-          const productItems = parsedItems.filter((item) => item.type === 'product' || Boolean(item.imageUrl));
-          window.localStorage.setItem(storageKey, JSON.stringify(productItems));
-          return productItems;
-        }
-      }
-    } catch {
-      return [];
-    }
-
-    return [];
-  });
+  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [hasMounted, setHasMounted] = useState(false);
 
   const readStoredItems = () => {
     try {
@@ -52,6 +34,11 @@ export default function NavigationHistory() {
   };
 
   useEffect(() => {
+    setItems(readStoredItems());
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
     const handleProductHistoryRecorded = () => {
       setItems(readStoredItems());
     };
@@ -65,7 +52,7 @@ export default function NavigationHistory() {
     setItems([]);
   };
 
-  if (pathname === '/' || items.length === 0) {
+  if (!hasMounted || pathname === '/' || items.length === 0) {
     return null;
   }
 
