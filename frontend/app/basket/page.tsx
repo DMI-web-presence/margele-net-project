@@ -1,12 +1,37 @@
-export default function BasketPage() {
-  return (
-    <main className="px-6 py-8 sm:px-10 lg:px-16">
-      <section className="rounded-3xl border border-slate-200 bg-white p-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Cosul tau</h1>
-        <p className="mt-3 text-sm text-slate-600">
-          Pagina cosului este pregatita. Functionalitatea completa va fi adaugata in pasul urmator.
-        </p>
-      </section>
-    </main>
-  );
+import BasketPageContent from '@/components/basket-page-content';
+
+type Product = {
+  id: number;
+  name: string;
+  description: string | null;
+  price: string;
+  imageUrl: string | null;
+  categoryId: number | null;
+  createdAt: string;
+};
+
+async function getProducts(): Promise<Product[]> {
+  const backendUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+
+  const response = await fetch(`${backendUrl}/products`, {
+    cache: 'no-store',
+  }).catch(() => null);
+
+  if (!response?.ok) {
+    return [];
+  }
+
+  const text = await response.text();
+  if (!text.trim()) {
+    return [];
+  }
+
+  return JSON.parse(text) as Product[];
+}
+
+export default async function BasketPage() {
+  const products = await getProducts();
+
+  return <BasketPageContent products={products} />;
 }

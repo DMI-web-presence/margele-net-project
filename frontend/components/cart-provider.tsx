@@ -27,6 +27,7 @@ type CartContextValue = {
   removeFromCart: (productId: number) => void;
   incrementCartQuantity: (productId: number) => void;
   decrementCartQuantity: (productId: number) => void;
+  setCartQuantity: (productId: number, quantity: number) => void;
   removeFromFavorites: (productId: number) => void;
   isFavorite: (productId: number) => boolean;
 };
@@ -207,6 +208,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 : item,
             )
             .filter((item) => item.quantity > 0),
+        );
+      },
+      setCartQuantity: (productId, quantity) => {
+        const normalizedQuantity = Math.max(1, Math.min(999, Math.floor(quantity)));
+        setItems((currentItems) =>
+          currentItems.map((item) =>
+            item.product.id === productId
+              ? { ...item, quantity: normalizedQuantity }
+              : item,
+          ),
         );
       },
       removeFromFavorites: (productId) => {

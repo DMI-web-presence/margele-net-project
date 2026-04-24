@@ -9,9 +9,8 @@ const backendUrl =
 
 const accountLinks = [
   { href: '/cont/adrese', label: 'Contul tau' },
-  { href: '/cont', label: 'Comenzi' },
-  { href: '/cont', label: 'Retur produs' },
-  { href: '/cont', label: 'Marimile tale' },
+  { href: '/cont/comenzi', label: 'Comenzi' },
+  { href: '/cont/date-personale', label: 'Date personale' },
   { href: '/cont', label: 'Ajutor & FAQ' },
 ];
 
@@ -49,14 +48,8 @@ export default function AccountPreviewCard({
           href="/autentificare"
           className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black"
         >
-          Autentificare
+          Conectare
         </Link>
-
-        <div className="mt-3 border-b border-slate-200 pb-3 text-sm text-slate-900">
-          <span className="font-semibold">Inregistrare</span>
-          <span className="mx-2 text-slate-400">-</span>
-          <span>rapid</span>
-        </div>
 
         <div className="mt-2">
           <Link
@@ -75,8 +68,14 @@ export default function AccountPreviewCard({
             href="/autentificare"
             className="block rounded-lg px-2 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
           >
-            Retur produs
+            Date personale
           </Link>
+          {/* <Link
+            href="/autentificare"
+            className="block rounded-lg px-2 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
+          >
+            Retur produs
+          </Link> */}
           <Link
             href="/autentificare"
             className="block rounded-lg px-2 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
@@ -100,12 +99,6 @@ export default function AccountPreviewCard({
             {item.label}
           </Link>
         ))}
-
-        <div className="px-2 py-2">
-          <span className="inline-flex items-center rounded-full border border-slate-400 px-3 py-1 text-sm font-semibold text-slate-900">
-            Plus
-          </span>
-        </div>
       </div>
 
       <div className="border-t border-slate-200 px-6 py-4">

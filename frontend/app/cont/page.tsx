@@ -1,20 +1,12 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import AccountSidebar from '@/components/account-sidebar';
 import { Card } from '@/components/ui/card';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
-
-const accountItems = [
-  { label: 'Contul tau', href: '/cont/adrese' },
-  { label: 'Comenzi', href: '#' },
-  { label: 'Retur produs', href: '#' },
-  { label: 'Marimile tale', href: '#' },
-  { label: 'Ajutor & FAQ', href: '#' },
-];
 
 export default function ContPage() {
   const router = useRouter();
@@ -36,7 +28,9 @@ export default function ContPage() {
 
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
-      <div className="mx-auto max-w-[560px]">
+      <div className="mx-auto grid max-w-[1100px] gap-6 lg:grid-cols-[18rem_1fr]">
+        <AccountSidebar />
+
         <Card className="p-0">
           <div className="border-b border-slate-200 px-8 py-6">
             <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
@@ -44,21 +38,9 @@ export default function ContPage() {
             </h1>
           </div>
 
-          <div className="space-y-1 px-8 py-6">
-            {accountItems.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className="block rounded-lg px-2 py-3 text-2xl text-slate-900 transition hover:bg-slate-100"
-              >
-                {item.label}
-              </Link>
-            ))}
-
-            <div className="px-2 py-3">
-              <span className="inline-flex items-center rounded-full border border-slate-400 px-3 py-1 text-xl font-semibold text-slate-900">
-                Plus
-              </span>
+          <div className="px-8 py-6">
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-slate-600">
+              Selecteaza o sectiune din meniul din stanga.
             </div>
           </div>
 
