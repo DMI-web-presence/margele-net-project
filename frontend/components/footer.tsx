@@ -1,5 +1,8 @@
+'use client';
+
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 const infoLinks = ['Transport', 'Conditii Retur', 'Cum cumpar', 'Despre noi', 'GDPR'];
 const storeLinks = ['Margele.net', 'Degetar.ro', 'Comunitatea Facebook'];
@@ -23,6 +26,12 @@ function FooterColumn({ title, links }: { title: string; links: string[] }) {
 }
 
 export default function Footer() {
+  const pathname = usePathname();
+
+  // Hide footer on authentication pages
+  if (pathname?.startsWith('/autentificare')) {
+    return null;
+  }
   return (
     <footer className="mt-14 border-t border-[#a6669f] bg-gradient-to-b from-[#94608d] to-[#7b4a75] text-white">
       <div className="mx-auto w-full max-w-[1400px] px-6 py-12 sm:px-10 lg:px-16">
