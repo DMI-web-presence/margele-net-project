@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
 
-export default function InregistrarePage() {
+function InregistrareContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [password, setPassword] = useState('');
@@ -274,5 +274,13 @@ export default function InregistrarePage() {
         </Card>
       </div>
     </main>
+  );
+}
+
+export default function InregistrarePage() {
+  return (
+    <Suspense>
+      <InregistrareContent />
+    </Suspense>
   );
 }
