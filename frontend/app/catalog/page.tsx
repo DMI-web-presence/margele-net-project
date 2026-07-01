@@ -11,20 +11,26 @@ type Product = {
 };
 
 async function getProducts(): Promise<Product[]> {
-  const res = await fetch('http://127.0.0.1:3001/products', {
-    cache: 'no-store',
-  });
+  try {
+    const res = await fetch('http://127.0.0.1:3001/products', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
 
-  if (!res.ok) {
-    throw new Error('Failed to load products');
+    if (!res.ok) {
+      return [];
+    }
+
+    const text = await res.text();
+    if (!text.trim()) {
+      return [];
+    }
+
+    return JSON.parse(text) as Product[];
+  } catch (error) {
+    console.error('Failed to fetch products:', error);
+    return [];
   }
-
-  const text = await res.text();
-  if (!text.trim()) {
-    throw new Error('Failed to load products');
-  }
-
-  return JSON.parse(text) as Product[];
 }
 
 export default async function CatalogPage() {

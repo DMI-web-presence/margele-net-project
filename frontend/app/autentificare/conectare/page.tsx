@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
@@ -19,7 +19,7 @@ function EyeIcon({ visible = false }: { visible?: boolean }) {
   );
 }
 
-export default function ConectarePage() {
+function ConectareContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [password, setPassword] = useState('');
@@ -139,5 +139,13 @@ export default function ConectarePage() {
         </Card>
       </div>
     </main>
+  );
+}
+
+export default function ConectarePage() {
+  return (
+    <Suspense>
+      <ConectareContent />
+    </Suspense>
   );
 }

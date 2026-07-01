@@ -51,42 +51,45 @@ const getCategoryLabel = (categoryId: number | null) => {
 };
 
 async function getProduct(id: string): Promise<Product | null> {
-  const res = await fetch(`http://127.0.0.1:3001/products/${id}`, {
-    cache: 'no-store',
-  });
-
-  if (!res.ok) {
-    return null;
-  }
-
-  const text = await res.text();
-  if (!text.trim()) {
-    return null;
-  }
-
   try {
+    const res = await fetch(`http://127.0.0.1:3001/products/${id}`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const text = await res.text();
+    if (!text.trim()) {
+      return null;
+    }
+
     const data = JSON.parse(text);
     return data as Product;
-  } catch {
+  } catch (error) {
+    console.error(`Failed to fetch product ${id}:`, error);
     return null;
   }
 }
 
 async function getProducts(): Promise<Product[]> {
-  const res = await fetch('http://127.0.0.1:3001/products', {
-    cache: 'no-store',
-  });
-
-  if (!res.ok) {
-    return [];
-  }
-
-  const text = await res.text();
-  if (!text.trim()) {
-    return [];
-  }
-
   try {
+    const res = await fetch('http://127.0.0.1:3001/products', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) {
+      return [];
+    }
+
+    const text = await res.text();
+    if (!text.trim()) {
+      return [];
+    }
+
     return JSON.parse(text) as Product[];
   } catch {
     return [];
