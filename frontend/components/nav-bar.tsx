@@ -10,7 +10,7 @@ import FavoritePreviewCard from '@/components/favorite-preview-card';
 import { useCart } from '@/components/cart-provider';
 
 const backendUrl =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 const categoryLinks = [
   { label: 'Toate', href: '/catalog' },

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import AccountSidebar from '@/components/account-sidebar';
 
 const backendUrl =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 type PersonalInfo = {
   fullName: string;

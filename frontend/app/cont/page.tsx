@@ -6,7 +6,7 @@ import AccountSidebar from '@/components/account-sidebar';
 import { Card } from '@/components/ui/card';
 
 const backendUrl =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 export default function ContPage() {
   const router = useRouter();
