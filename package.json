@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "backend:dev": "node backend/src/server.js",
+    "backend:start": "node backend/src/server.js"
+  },
   "devDependencies": {
     "tailwindcss": "^4.2.2"
   },
