@@ -23,6 +23,7 @@ const socialActions = [
 export default function AutentificarePage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -31,6 +32,7 @@ export default function AutentificarePage() {
     if (!email) return;
 
     setIsSubmitting(true);
+    setErrorMessage('');
 
     try {
       const response = await fetch(
@@ -38,7 +40,8 @@ export default function AutentificarePage() {
       );
 
       if (!response.ok) {
-        throw new Error('Email lookup failed');
+        setErrorMessage('Nu am putut verifica emailul. Incearca din nou.');
+        return;
       }
 
       const result = (await response.json()) as { exists?: boolean };
@@ -47,6 +50,8 @@ export default function AutentificarePage() {
         : `/autentificare/inregistrare?email=${encodeURIComponent(email)}`;
 
       router.push(nextPath);
+    } catch {
+      setErrorMessage('Nu am putut contacta serverul. Verifica daca backend-ul ruleaza.');
     } finally {
       setIsSubmitting(false);
     }
@@ -83,6 +88,10 @@ export default function AutentificarePage() {
               >
                 {isSubmitting ? 'Se verifica...' : 'Continua'}
               </Button>
+
+              {errorMessage ? (
+                <p className="text-sm font-semibold text-red-600">{errorMessage}</p>
+              ) : null}
             </form>
 
             <p className="text-sm leading-6 text-slate-700">
