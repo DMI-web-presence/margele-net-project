@@ -39,11 +39,11 @@ export default function Footer() {
           <div className="space-y-4">
             <Link href="/" className="inline-flex">
               <Image
-                src="/margelenet-logo-webp.webp"
+                src="/margelenet-logo-nav-bar-cropped.png"
                 alt="Margele.net"
-                width={160}
-                height={120}
-                className="h-auto w-[150px]"
+                width={1045}
+                height={290}
+                className="h-auto w-[220px]"
                 unoptimized
               />
             </Link>
