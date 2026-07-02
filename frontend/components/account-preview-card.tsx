@@ -30,7 +30,7 @@ export default function AccountPreviewCard({
     setIsSigningOut(true);
     try {
       await fetch(`${backendUrl}/auth/logout`, {
-        method: 'GET',
+        method: 'POST',
         credentials: 'include',
       });
     } finally {

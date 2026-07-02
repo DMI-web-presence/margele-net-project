@@ -16,7 +16,7 @@ export default function ContPage() {
     setIsSigningOut(true);
     try {
       await fetch(`${backendUrl}/auth/logout`, {
-        method: 'GET',
+        method: 'POST',
         credentials: 'include',
       });
     } finally {
