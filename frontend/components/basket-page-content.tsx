@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useCart } from '@/components/cart-provider';
 
@@ -24,6 +25,9 @@ const currencyFormatter = new Intl.NumberFormat('ro-RO', {
   currency: 'RON',
   currencyDisplay: 'narrowSymbol',
 });
+
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 function BasketIcon() {
   return (
@@ -90,13 +94,17 @@ function PlusIcon() {
 }
 
 export default function BasketPageContent({ products }: BasketPageContentProps) {
+  const router = useRouter();
   const {
     items,
     count,
     removeFromCart,
     setCartQuantity,
+    clearCart,
   } = useCart();
   const [voucherOpen, setVoucherOpen] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [orderError, setOrderError] = useState('');
   const productMap = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
     [products],
@@ -125,6 +133,35 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
   );
   const delivery = 0;
   const total = subtotal + delivery;
+
+  const handlePlaceOrder = async () => {
+    setOrderError('');
+    setIsPlacingOrder(true);
+
+    try {
+      const response = await fetch(`${backendUrl}/auth/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          items: enrichedItems,
+          deliveryTotal: delivery,
+        }),
+      });
+
+      const result = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) {
+        throw new Error(result?.message || 'Nu am putut plasa comanda.');
+      }
+
+      clearCart();
+      router.push('/cont/comenzi');
+    } catch (error) {
+      setOrderError(error instanceof Error ? error.message : 'Nu am putut plasa comanda.');
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
 
   if (enrichedItems.length === 0) {
     return (
@@ -358,10 +395,16 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
 
             <button
               type="button"
-              className="mt-6 inline-flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-black"
+              onClick={handlePlaceOrder}
+              disabled={isPlacingOrder}
+              className="mt-6 inline-flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Mergeti la checkout
+              {isPlacingOrder ? 'Se plaseaza comanda...' : 'Mergeti la checkout'}
             </button>
+
+            {orderError ? (
+              <p className="mt-3 text-sm font-semibold text-red-600">{orderError}</p>
+            ) : null}
 
             <div className="mt-6 space-y-3 border-t border-slate-200 pt-6">
               <p className="text-sm font-semibold text-slate-900">Acceptam</p>
