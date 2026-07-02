@@ -153,11 +153,11 @@ export default function NavBar() {
       <div className="mx-auto grid w-full max-w-[1400px] grid-cols-[auto_1fr_auto] items-center gap-4 px-6 py-4 sm:px-10 lg:px-16">
         <Link href="/" className="inline-flex items-center" aria-label="Margele.net">
           <Image
-            src="/margelenet-logo-nav-bar.webp"
+            src="/margelenet-logo-nav-bar-cropped.png"
             alt="Margele.net"
-            width={120}
-            height={80}
-            className="h-auto w-[300px]"
+            width={1045}
+            height={290}
+            className="h-auto w-[220px] sm:w-[260px]"
             unoptimized
           />
         </Link>
