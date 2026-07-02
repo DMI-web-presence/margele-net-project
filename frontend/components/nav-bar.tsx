@@ -97,6 +97,20 @@ export default function NavBar() {
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUser, setAuthUser] = useState<{ name?: string; email?: string } | null>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 24);
+    };
+
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   useEffect(() => {
     if (basketPulseToken === 0) return;
@@ -149,15 +163,21 @@ export default function NavBar() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto grid w-full max-w-[1400px] grid-cols-[auto_1fr_auto] items-center gap-4 px-6 py-4 sm:px-10 lg:px-16">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur transition-shadow duration-300 data-[scrolled=true]:shadow-sm" data-scrolled={isScrolled}>
+      <div
+        className={`mx-auto grid w-full max-w-[1400px] grid-cols-[auto_1fr_auto] items-center gap-4 px-6 transition-all duration-300 sm:px-10 lg:px-16 ${
+          isScrolled ? 'py-2' : 'py-4'
+        }`}
+      >
         <Link href="/" className="inline-flex items-center" aria-label="Margele.net">
           <Image
             src="/margelenet-logo-nav-bar-cropped.png"
             alt="Margele.net"
             width={1045}
             height={290}
-            className="h-auto w-[220px] sm:w-[260px]"
+            className={`h-auto transition-all duration-300 ${
+              isScrolled ? 'w-[150px] sm:w-[180px]' : 'w-[220px] sm:w-[260px]'
+            }`}
             unoptimized
           />
         </Link>
@@ -170,7 +190,9 @@ export default function NavBar() {
           >
             <button
               type="button"
-              className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isScrolled ? 'h-9' : 'h-10'
+              }`}
               aria-expanded={isCategoryMenuOpen}
               onClick={() => setIsCategoryMenuOpen((current) => !current)}
             >
@@ -200,7 +222,9 @@ export default function NavBar() {
             <Link
               key={category.href}
               href={category.href}
-              className="rounded-full px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              className={`rounded-full px-3 text-sm font-semibold text-slate-600 transition-all duration-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isScrolled ? 'py-1.5' : 'py-2'
+              }`}
             >
               {category.label}
             </Link>
@@ -217,7 +241,9 @@ export default function NavBar() {
             <Link
               href="/cont"
               aria-label="Cont utilizator"
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+              className={`inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isScrolled ? 'h-9' : 'h-10'
+              }`}
             >
               <span>Bine ai revenit, {getFirstName(authUser?.name, authUser?.email)} 👋</span>
               <ChevronDownIcon open={isAccountPreviewOpen} />
@@ -226,7 +252,9 @@ export default function NavBar() {
             <Link
               href="/autentificare"
               aria-label="Account"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900"
+              className={`inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isScrolled ? 'h-9 w-9' : 'h-10 w-10'
+              }`}
             >
               <AccountIcon />
             </Link>
@@ -251,7 +279,9 @@ export default function NavBar() {
             href="#"
             aria-label="Favorite"
             id="favorite-icon-button"
-            className={`relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 transition hover:border-slate-300 hover:bg-slate-100 ${
+            className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 ${
+              isScrolled ? 'h-9 w-9' : 'h-10 w-10'
+            } ${
               isFavoritePulsing ? 'animate-[favorite-bump_400ms_ease-out]' : ''
             }`}
           >
@@ -281,7 +311,9 @@ export default function NavBar() {
             href="#"
             aria-label="Basket"
             id="basket-icon-button"
-            className={`relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+            className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+              isScrolled ? 'h-9 w-9' : 'h-10 w-10'
+            } ${
               isBasketPulsing ? 'animate-[basket-bump_400ms_ease-out]' : ''
             }`}
           >
