@@ -542,7 +542,6 @@ function EditPasswordModal({
   onClose,
   onSave,
 }: EditPasswordModalProps) {
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNextPassword, setShowNextPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -605,29 +604,39 @@ function EditPasswordModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6 p-8">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label htmlFor="current-password" className="text-sm font-semibold text-slate-900">
                 Parola actuala
               </label>
-              <div className="relative">
-                <input
-                  id="current-password"
-                  name="currentPassword"
-                  type={showCurrentPassword ? 'text' : 'password'}
-                  required
-                  minLength={8}
-                  className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 pr-12 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword((current) => !current)}
-                  className="absolute inset-y-0 right-3 inline-flex cursor-pointer items-center justify-center text-slate-500 transition hover:text-slate-900"
-                  aria-label={showCurrentPassword ? 'Ascunde parola actuala' : 'Afiseaza parola actuala'}
-                >
-                  <EyeIcon visible={showCurrentPassword} />
-                </button>
-              </div>
+              <input
+                id="current-password"
+                type="password"
+                value="**************"
+                readOnly
+                aria-readonly="true"
+                tabIndex={-1}
+                className="w-full cursor-not-allowed rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-500 outline-none"
+              />
+              <p className="text-xs text-slate-500">
+                Din motive de securitate, parola actuala nu poate fi afisata automat.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="confirm-current-password" className="text-sm font-semibold text-slate-900">
+                Confirma parola actuala
+              </label>
+              <input
+                id="confirm-current-password"
+                name="currentPassword"
+                type="password"
+                required
+                minLength={8}
+                autoComplete="current-password"
+                placeholder="Introdu parola actuala"
+                className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
+              />
             </div>
 
             <div className="space-y-2">
