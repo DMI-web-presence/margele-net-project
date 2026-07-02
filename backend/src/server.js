@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const https = require('https');
 const http = require('http');
 const path = require('path');
 const { URL } = require('url');
@@ -16,6 +17,10 @@ const config = {
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET,
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  googleClientId: process.env.GOOGLE_CLIENT_ID,
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  googleCallbackUrl:
+    process.env.GOOGLE_CALLBACK_URL || `http://localhost:${process.env.PORT || 3001}/auth/google/callback`,
   cookieName: 'auth_token',
 };
 
@@ -53,6 +58,16 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && requestUrl.pathname === '/auth/email-exists') {
       await handleEmailExists(requestUrl, res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/auth/google') {
+      await handleGoogleStart(res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/auth/google/callback') {
+      await handleGoogleCallback(req, requestUrl, res);
       return;
     }
 
@@ -217,6 +232,77 @@ async function handleEmailExists(requestUrl, res) {
   sendJson(res, 200, { exists: result.rowCount > 0 });
 }
 
+async function handleGoogleStart(res) {
+  if (!config.googleClientId || !config.googleClientSecret) {
+    sendJson(res, 501, {
+      message: 'Google authentication is not configured.',
+    });
+    return;
+  }
+
+  const state = crypto.randomBytes(16).toString('hex');
+  const googleUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  googleUrl.searchParams.set('client_id', config.googleClientId);
+  googleUrl.searchParams.set('redirect_uri', config.googleCallbackUrl);
+  googleUrl.searchParams.set('response_type', 'code');
+  googleUrl.searchParams.set('scope', 'openid email profile');
+  googleUrl.searchParams.set('prompt', 'select_account');
+  googleUrl.searchParams.set('state', state);
+
+  res.writeHead(302, {
+    Location: googleUrl.toString(),
+    'Set-Cookie': `google_oauth_state=${state}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax`,
+  });
+  res.end();
+}
+
+async function handleGoogleCallback(req, requestUrl, res) {
+  const code = requestUrl.searchParams.get('code');
+  const state = requestUrl.searchParams.get('state');
+  const storedState = parseCookies(req.headers.cookie || '').google_oauth_state;
+
+  if (!code || !state || !storedState || state !== storedState) {
+    redirectToFrontend(res, '/autentificare?error=google');
+    return;
+  }
+
+  let tokenResponse;
+  try {
+    tokenResponse = await postForm('https://oauth2.googleapis.com/token', {
+      code,
+      client_id: config.googleClientId,
+      client_secret: config.googleClientSecret,
+      redirect_uri: config.googleCallbackUrl,
+      grant_type: 'authorization_code',
+    });
+  } catch {
+    redirectToFrontend(res, '/autentificare?error=google');
+    return;
+  }
+
+  if (!tokenResponse.id_token) {
+    redirectToFrontend(res, '/autentificare?error=google');
+    return;
+  }
+
+  const googleProfile = decodeJwtPayload(tokenResponse.id_token);
+  const email = normalizeEmail(googleProfile.email);
+  const fullName = String(googleProfile.name || email.split('@')[0] || 'Google user').trim();
+
+  if (!email || googleProfile.email_verified === false) {
+    redirectToFrontend(res, '/autentificare?error=google');
+    return;
+  }
+
+  const user = await findOrCreateGoogleUser({ email, fullName });
+  const authToken = signToken({ sub: user.id, email: user.email });
+  res.setHeader('Set-Cookie', [
+    `${config.cookieName}=${authToken}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax`,
+    'google_oauth_state=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax',
+  ]);
+  redirectToFrontend(res, '/');
+}
+
 async function handleRegister(req, res) {
   const body = await readJson(req);
   const email = normalizeEmail(body.email);
@@ -259,6 +345,21 @@ async function handleRegister(req, res) {
 
   setAuthCookie(res, signToken({ sub: insertedUser.id, email: insertedUser.email }));
   sendJson(res, 201, { user: publicUser(insertedUser) });
+}
+
+async function findOrCreateGoogleUser({ email, fullName }) {
+  const existing = await pool.query(
+    'SELECT * FROM users WHERE lower(email) = lower($1) LIMIT 1',
+    [email],
+  );
+
+  if (existing.rows[0]) return existing.rows[0];
+
+  return insertUser({
+    full_name: fullName,
+    email,
+    password_hash: `google$${crypto.randomBytes(32).toString('hex')}`,
+  });
 }
 
 async function handleLogin(req, res) {
@@ -800,6 +901,65 @@ function clearAuthCookie(res) {
     'Set-Cookie',
     `${config.cookieName}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`,
   );
+}
+
+function redirectToFrontend(res, pathName) {
+  const destination = new URL(pathName, config.frontendOrigin);
+  res.writeHead(302, { Location: destination.toString() });
+  res.end();
+}
+
+function postForm(url, values) {
+  const body = new URLSearchParams(values).toString();
+  const parsedUrl = new URL(url);
+
+  return new Promise((resolve, reject) => {
+    const request = https.request(
+      {
+        method: 'POST',
+        hostname: parsedUrl.hostname,
+        path: `${parsedUrl.pathname}${parsedUrl.search}`,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (response) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          try {
+            const data = JSON.parse(text);
+            if (response.statusCode >= 400) {
+              const error = new Error(data.error_description || data.error || 'OAuth request failed.');
+              error.status = response.statusCode;
+              reject(error);
+              return;
+            }
+            resolve(data);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      },
+    );
+
+    request.on('error', reject);
+    request.write(body);
+    request.end();
+  });
+}
+
+function decodeJwtPayload(token) {
+  const [, payload] = String(token || '').split('.');
+  if (!payload) return {};
+
+  try {
+    return JSON.parse(base64UrlDecode(payload));
+  } catch {
+    return {};
+  }
 }
 
 function parseCookies(cookieHeader) {
