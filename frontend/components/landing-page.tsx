@@ -3,6 +3,7 @@ import Link from 'next/link';
 import BenefitsStrip from '@/components/benefits-strip';
 import CategoryHighlights from '@/components/category-highlights';
 import FeaturedProductsSection from '@/components/featured-products-section';
+import NewArrivalsSection from '@/components/new-arrivals-section';
 import FeaturedProductsOrbit from '@/components/featured-products-orbit';
 import LandingProductCarousel from '@/components/landing-product-carousel';
 
@@ -84,6 +85,7 @@ export default function LandingPage({ products }: LandingPageProps) {
       <BenefitsStrip />
       <CategoryHighlights />
       <FeaturedProductsSection products={featuredProducts} />
+      <NewArrivalsSection />
 
       <section className="mx-auto flex w-full max-w-[1400px] flex-col gap-12 px-6 py-12 sm:px-10 lg:px-16">
         <FeaturedProductsOrbit title="Promotie de Paste" products={promotionProducts} />
