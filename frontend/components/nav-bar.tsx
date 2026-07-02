@@ -171,12 +171,12 @@ export default function NavBar() {
       >
         <Link href="/" className="inline-flex items-center" aria-label="Margele.net">
           <Image
-            src="/margelenet-logo-nav-bar-cropped.png"
+            src="/margele-logo-mark.png"
             alt="Margele.net"
-            width={1045}
-            height={290}
+            width={430}
+            height={430}
             className={`h-auto transition-all duration-300 ${
-              isScrolled ? 'w-[150px] sm:w-[180px]' : 'w-[220px] sm:w-[260px]'
+              isScrolled ? 'w-[42px] sm:w-[48px]' : 'w-[56px] sm:w-[64px]'
             }`}
             unoptimized
           />
