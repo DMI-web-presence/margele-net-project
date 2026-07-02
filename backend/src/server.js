@@ -81,7 +81,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === 'POST' && requestUrl.pathname === '/auth/logout') {
+    if ((req.method === 'POST' || req.method === 'GET') && requestUrl.pathname === '/auth/logout') {
       clearAuthCookie(res);
       sendJson(res, 200, { ok: true });
       return;
@@ -897,10 +897,10 @@ function setAuthCookie(res, token) {
 }
 
 function clearAuthCookie(res) {
-  res.setHeader(
-    'Set-Cookie',
+  res.setHeader('Set-Cookie', [
     `${config.cookieName}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`,
-  );
+    'google_oauth_state=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax',
+  ]);
 }
 
 function redirectToFrontend(res, pathName) {
