@@ -526,6 +526,13 @@ async function handleAddressCreate(req, res) {
   const body = await readJson(req);
   const columns = await getAddressColumns();
   const insertData = buildAddressData(columns, body, user.id);
+  const validationMessage = validateAddressData(insertData);
+  if (validationMessage) {
+    sendJson(res, 400, { message: validationMessage });
+    return;
+  }
+
+  await clearDefaultAddresses(user.id, insertData);
   const address = await insertRow('addresses', insertData);
   sendJson(res, 201, addressResponse(address));
 }
@@ -542,6 +549,13 @@ async function handleAddressUpdate(req, res, addressId) {
   const body = await readJson(req);
   const columns = await getAddressColumns();
   const updates = buildAddressData(columns, body);
+  const validationMessage = validateAddressData(updates);
+  if (validationMessage) {
+    sendJson(res, 400, { message: validationMessage });
+    return;
+  }
+
+  await clearDefaultAddresses(user.id, updates, addressId);
   const address = await updateRowForUser('addresses', addressId, user.id, updates);
 
   if (!address) {
@@ -707,6 +721,7 @@ function addOptionalUserData(insertData, columns, body) {
 function buildAddressData(columns, body, userId) {
   const data = {};
   const map = {
+    apelativ: ['apelativ', 'title'],
     prenume: ['prenume', 'first_name'],
     nume: ['nume', 'last_name'],
     companie: ['companie', 'company'],
@@ -737,6 +752,40 @@ function buildAddressData(columns, body, userId) {
   return data;
 }
 
+function validateAddressData(data) {
+  const requiredFields = ['prenume', 'nume', 'tara', 'adresa1', 'cod_postal', 'oras'];
+  for (const field of requiredFields) {
+    if (Object.prototype.hasOwnProperty.call(data, field) && !String(data[field] || '').trim()) {
+      return 'Completeaza toate campurile obligatorii pentru adresa.';
+    }
+  }
+
+  return '';
+}
+
+async function clearDefaultAddresses(userId, data, exceptAddressId = null) {
+  const updates = [];
+  const values = [userId];
+  let where = 'user_id = $1';
+
+  if (exceptAddressId !== null) {
+    values.push(exceptAddressId);
+    where += ` AND id <> $${values.length}`;
+  }
+
+  if (data.implicit_facturare === true) {
+    updates.push(`UPDATE addresses SET implicit_facturare = false WHERE ${where}`);
+  }
+
+  if (data.implicit_livrare === true) {
+    updates.push(`UPDATE addresses SET implicit_livrare = false WHERE ${where}`);
+  }
+
+  for (const sql of updates) {
+    await pool.query(sql, values);
+  }
+}
+
 function profileResponse(user) {
   return {
     fullName: user.full_name || '',
@@ -755,6 +804,7 @@ function profileResponse(user) {
 function addressResponse(address) {
   return {
     id: address.id,
+    apelativ: address.apelativ || address.title || 'Dl.',
     prenume: address.prenume || address.first_name || '',
     nume: address.nume || address.last_name || '',
     companie: address.companie || address.company || '',

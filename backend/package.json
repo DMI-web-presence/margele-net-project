@@ -4,6 +4,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
+    "db:migrate": "node scripts/migrate.js",
     "dev": "node src/server.js",
     "start": "node src/server.js"
   },
