@@ -1,0 +1,13 @@
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS phone VARCHAR(30),
+  ADD COLUMN IF NOT EXISTS client_type VARCHAR(30) NOT NULL DEFAULT 'Persoana fizica',
+  ADD COLUMN IF NOT EXISTS birth_date DATE,
+  ADD COLUMN IF NOT EXISTS company_name VARCHAR(150),
+  ADD COLUMN IF NOT EXISTS cui VARCHAR(50),
+  ADD COLUMN IF NOT EXISTS trade_register_number VARCHAR(80),
+  ADD COLUMN IF NOT EXISTS newsletter_subscribed BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+UPDATE users
+SET client_type = 'Persoana fizica'
+WHERE client_type IS NULL OR trim(client_type) = '';
