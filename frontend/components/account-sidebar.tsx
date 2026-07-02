@@ -11,7 +11,7 @@ const accountSections = [
       { label: 'Date personale', href: '/cont/date-personale' },
     ],
   },
-  { label: 'Ajutor & FAQ', href: '#' },
+  { label: 'Ajutor & FAQ', href: '/cont/ajutor-faq' },
 ] as const;
 
 type AccountSidebarProps = {

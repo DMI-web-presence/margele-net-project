@@ -11,7 +11,7 @@ const accountLinks = [
   { href: '/cont/adrese', label: 'Contul tau' },
   { href: '/cont/comenzi', label: 'Comenzi' },
   { href: '/cont/date-personale', label: 'Date personale' },
-  { href: '/cont', label: 'Ajutor & FAQ' },
+  { href: '/cont/ajutor-faq', label: 'Ajutor & FAQ' },
 ];
 
 type AccountPreviewCardProps = {
