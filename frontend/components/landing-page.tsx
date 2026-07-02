@@ -75,20 +75,20 @@ export default function LandingPage({ products }: LandingPageProps) {
           alt="Margele si accesorii pentru proiecte handmade"
           fill
           priority
-          className="object-cover"
+          className="animate-hero-image object-cover"
           unoptimized
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/70 to-white/10" />
+        <div className="animate-hero-item absolute inset-0 bg-gradient-to-r from-white/95 via-white/70 to-white/10 [animation-delay:180ms]" />
         <div className="relative mx-auto flex min-h-[72svh] w-full max-w-[1400px] items-center px-6 py-16 sm:px-10 lg:px-16">
           <div className="max-w-xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.34em] text-[#7b4a75]">Margele.net</p>
-            <h1 className="mt-5 text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl">
+            <p className="animate-hero-item text-sm font-semibold uppercase tracking-[0.34em] text-[#7b4a75] [animation-delay:260ms]">Margele.net</p>
+            <h1 className="animate-hero-item mt-5 text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl [animation-delay:420ms]">
               Materiale pentru creatii handmade
             </h1>
-            <p className="mt-5 max-w-lg text-base leading-7 text-slate-700 sm:text-lg">
+            <p className="animate-hero-item mt-5 max-w-lg text-base leading-7 text-slate-700 sm:text-lg [animation-delay:580ms]">
               Alege margele, accesorii si decoratiuni atent selectate pentru proiecte mici, cadouri si comenzi en-gross.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="animate-hero-item mt-8 flex flex-wrap gap-3 [animation-delay:740ms]">
               <Link
                 href="/catalog"
                 className="inline-flex items-center rounded-full bg-[#7b4a75] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#663b61]"
@@ -108,8 +108,12 @@ export default function LandingPage({ products }: LandingPageProps) {
 
       <section className="bg-[#f7f1f5]">
         <div className="mx-auto grid w-full max-w-[1400px] gap-6 px-6 py-7 sm:grid-cols-2 sm:px-10 lg:grid-cols-4 lg:px-16">
-          {benefits.map((benefit) => (
-            <div key={benefit.title} className="flex flex-col items-center text-center text-[#70416b]">
+          {benefits.map((benefit, index) => (
+            <div
+              key={benefit.title}
+              className="animate-benefit-item flex flex-col items-center text-center text-[#70416b]"
+              style={{ animationDelay: `${900 + index * 150}ms` }}
+            >
               <div className="mb-2">{benefit.icon}</div>
               <h2 className="text-xl font-semibold tracking-wide text-slate-950">{benefit.title}</h2>
               <p className="mt-2 max-w-xs text-xs leading-5 text-slate-700">{benefit.description}</p>
