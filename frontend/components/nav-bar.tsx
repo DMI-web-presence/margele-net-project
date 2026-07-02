@@ -264,6 +264,7 @@ export default function NavBar() {
             <div className="absolute right-0 top-full z-30 pt-3">
               <AccountPreviewCard
                 isAuthenticated={isAuthenticated}
+                onClose={() => setIsAccountPreviewOpen(false)}
                 onLoggedOut={() => setIsAuthenticated(false)}
               />
             </div>
