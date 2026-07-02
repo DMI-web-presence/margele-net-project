@@ -1,5 +1,8 @@
 import LandingPage from '@/components/landing-page';
 
+const backendUrl =
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
 type Product = {
   id: number;
   name: string;
@@ -12,7 +15,7 @@ type Product = {
 
 async function getProducts(): Promise<Product[]> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/products', {
+    const res = await fetch(`${backendUrl}/products`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });

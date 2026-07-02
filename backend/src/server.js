@@ -56,6 +56,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && requestUrl.pathname === '/products') {
+      await handleProductList(res);
+      return;
+    }
+
+    const productMatch = requestUrl.pathname.match(/^\/products\/(\d+)$/);
+    if (productMatch && req.method === 'GET') {
+      await handleProductDetails(res, Number(productMatch[1]));
+      return;
+    }
+
     if (req.method === 'GET' && requestUrl.pathname === '/auth/email-exists') {
       await handleEmailExists(requestUrl, res);
       return;
@@ -240,6 +251,32 @@ async function handleEmailExists(requestUrl, res) {
     email,
   ]);
   sendJson(res, 200, { exists: result.rowCount > 0 });
+}
+
+async function handleProductList(res) {
+  if (!(await hasTable('products'))) {
+    sendJson(res, 200, []);
+    return;
+  }
+
+  const result = await pool.query('SELECT * FROM products ORDER BY id DESC');
+  sendJson(res, 200, result.rows.map(productResponse));
+}
+
+async function handleProductDetails(res, productId) {
+  if (!(await hasTable('products'))) {
+    sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+    return;
+  }
+
+  const result = await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1', [productId]);
+  const product = result.rows[0];
+  if (!product) {
+    sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+    return;
+  }
+
+  sendJson(res, 200, productResponse(product));
 }
 
 async function handleGoogleStart(res) {
@@ -1051,6 +1088,18 @@ function orderItemResponse(item) {
     unitPrice: String(item.unit_price || '0'),
     quantity: Number(item.quantity || 0),
     lineTotal: String(item.line_total || '0'),
+  };
+}
+
+function productResponse(product) {
+  return {
+    id: product.id,
+    name: product.name || '',
+    description: product.description || null,
+    price: String(product.price || '0'),
+    imageUrl: product.image_url || product.imageUrl || product.image || null,
+    categoryId: product.category_id ?? product.categoryId ?? null,
+    createdAt: product.created_at || product.createdAt || null,
   };
 }
 
