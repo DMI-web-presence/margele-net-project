@@ -78,17 +78,34 @@ export default function LandingPage({ products }: LandingPageProps) {
           className="animate-hero-image object-cover"
           unoptimized
         />
-        <div className="animate-hero-item absolute inset-0 bg-gradient-to-r from-white/95 via-white/70 to-white/10 [animation-delay:180ms]" />
+        <div
+          className="animate-hero-item absolute inset-0 bg-gradient-to-r from-white/95 via-white/70 to-white/10"
+          style={{ animationDelay: '180ms' }}
+        />
         <div className="relative mx-auto flex min-h-[72svh] w-full max-w-[1400px] items-center px-6 py-16 sm:px-10 lg:px-16">
           <div className="max-w-xl">
-            <p className="animate-hero-item text-sm font-semibold uppercase tracking-[0.34em] text-[#7b4a75] [animation-delay:260ms]">Margele.net</p>
-            <h1 className="animate-hero-item mt-5 text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl [animation-delay:420ms]">
+            <p
+              className="animate-hero-item text-sm font-semibold uppercase tracking-[0.34em] text-[#7b4a75]"
+              style={{ animationDelay: '260ms' }}
+            >
+              Margele.net
+            </p>
+            <h1
+              className="animate-hero-item mt-5 text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl"
+              style={{ animationDelay: '420ms' }}
+            >
               Materiale pentru creatii handmade
             </h1>
-            <p className="animate-hero-item mt-5 max-w-lg text-base leading-7 text-slate-700 sm:text-lg [animation-delay:580ms]">
+            <p
+              className="animate-hero-item mt-5 max-w-lg text-base leading-7 text-slate-700 sm:text-lg"
+              style={{ animationDelay: '580ms' }}
+            >
               Alege margele, accesorii si decoratiuni atent selectate pentru proiecte mici, cadouri si comenzi en-gross.
             </p>
-            <div className="animate-hero-item mt-8 flex flex-wrap gap-3 [animation-delay:740ms]">
+            <div
+              className="animate-hero-item mt-8 flex flex-wrap gap-3"
+              style={{ animationDelay: '740ms' }}
+            >
               <Link
                 href="/catalog"
                 className="inline-flex items-center rounded-full bg-[#7b4a75] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#663b61]"

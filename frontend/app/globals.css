@@ -85,14 +85,17 @@ body {
 
 .animate-hero-image {
   animation: hero-image-reveal 900ms ease-out both;
+  will-change: opacity, transform, filter;
 }
 
 .animate-hero-item {
   animation: hero-fade-up 680ms ease-out both;
+  will-change: opacity, transform;
 }
 
 .animate-benefit-item {
   animation: benefit-fade-in 620ms ease-out both;
+  will-change: opacity, transform;
 }
 
 @media (prefers-reduced-motion: reduce) {
