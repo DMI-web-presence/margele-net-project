@@ -47,3 +47,58 @@ body {
     transform: scale(1);
   }
 }
+
+@keyframes hero-image-reveal {
+  0% {
+    opacity: 0;
+    transform: scale(1.06);
+    filter: saturate(0.85) blur(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: saturate(1) blur(0);
+  }
+}
+
+@keyframes hero-fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes benefit-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-hero-image {
+  animation: hero-image-reveal 900ms ease-out both;
+}
+
+.animate-hero-item {
+  animation: hero-fade-up 680ms ease-out both;
+}
+
+.animate-benefit-item {
+  animation: benefit-fade-in 620ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-hero-image,
+  .animate-hero-item,
+  .animate-benefit-item {
+    animation: none;
+  }
+}
