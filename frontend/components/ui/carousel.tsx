@@ -160,7 +160,9 @@ export function CarouselPrevious({
       onClick={scrollPrev}
       {...props}
     >
-      <span aria-hidden="true">←</span>
+      <div className="flex justify-center items-center w-full h-full">
+        <span className="text-2xl" aria-hidden="true">←</span>
+      </div>
       <span className="sr-only">Slide precedent</span>
     </button>
   );
@@ -186,7 +188,9 @@ export function CarouselNext({
       onClick={scrollNext}
       {...props}
     >
-      <span aria-hidden="true">→</span>
+      <div className="flex justify-center items-center w-full h-full">
+        <span className="text-2xl" aria-hidden="true">→</span>
+      </div>
       <span className="sr-only">Slide urmator</span>
     </button>
   );
