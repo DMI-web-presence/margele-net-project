@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import BenefitsStrip from '@/components/benefits-strip';
+import CampaignSection from '@/components/campaign-section';
 import CategoryHighlights from '@/components/category-highlights';
 import FeaturedProductsSection from '@/components/featured-products-section';
 import NewArrivalsSection from '@/components/new-arrivals-section';
@@ -84,6 +85,7 @@ export default function LandingPage({ products }: LandingPageProps) {
 
       <BenefitsStrip />
       <CategoryHighlights />
+      <CampaignSection />
       <FeaturedProductsSection products={featuredProducts} />
       <NewArrivalsSection />
 
