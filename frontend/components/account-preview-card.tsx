@@ -16,11 +16,13 @@ const accountLinks = [
 
 type AccountPreviewCardProps = {
   isAuthenticated: boolean;
+  onClose?: () => void;
   onLoggedOut?: () => void;
 };
 
 export default function AccountPreviewCard({
   isAuthenticated,
+  onClose,
   onLoggedOut,
 }: AccountPreviewCardProps) {
   const router = useRouter();
@@ -46,6 +48,7 @@ export default function AccountPreviewCard({
       <div className="w-[340px] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
         <Link
           href="/autentificare"
+          onClick={onClose}
           className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black"
         >
           Conectare
@@ -54,24 +57,28 @@ export default function AccountPreviewCard({
         <div className="mt-2">
           <Link
             href="/autentificare"
+            onClick={onClose}
             className="block rounded-lg px-2 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
           >
             Contul meu
           </Link>
           <Link
             href="/autentificare"
+            onClick={onClose}
             className="block rounded-lg px-2 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
           >
             Comenzi
           </Link>
           <Link
             href="/autentificare"
+            onClick={onClose}
             className="block rounded-lg px-2 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
           >
             Date personale
           </Link>
           {/* <Link
             href="/autentificare"
+            onClick={onClose}
             className="block rounded-lg px-2 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
           >
             Retur produs
@@ -94,6 +101,7 @@ export default function AccountPreviewCard({
           <Link
             key={item.label}
             href={item.href}
+            onClick={onClose}
             className="block rounded-lg px-2 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-100"
           >
             {item.label}
