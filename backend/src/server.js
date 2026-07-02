@@ -112,6 +112,16 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && requestUrl.pathname === '/auth/orders') {
+      await handleOrderList(req, requestUrl, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/auth/orders') {
+      await handleOrderCreate(req, res);
+      return;
+    }
+
     if (req.method === 'GET' && requestUrl.pathname === '/auth/addresses') {
       await handleAddressList(req, res);
       return;
@@ -514,6 +524,145 @@ async function handleAddressList(req, res) {
   sendJson(res, 200, result.rows.map(addressResponse));
 }
 
+async function handleOrderList(req, requestUrl, res) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+    sendJson(res, 200, []);
+    return;
+  }
+
+  const months = Number(requestUrl.searchParams.get('months') || 0);
+  const values = [user.id];
+  let dateFilter = '';
+  if (Number.isFinite(months) && months > 0) {
+    values.push(months);
+    dateFilter = ` AND created_at >= CURRENT_TIMESTAMP - ($${values.length}::int * INTERVAL '1 month')`;
+  }
+
+  const ordersResult = await pool.query(
+    `
+      SELECT *
+      FROM orders
+      WHERE user_id = $1${dateFilter}
+      ORDER BY created_at DESC
+    `,
+    values,
+  );
+
+  const orders = ordersResult.rows;
+  if (orders.length === 0) {
+    sendJson(res, 200, []);
+    return;
+  }
+
+  const orderIds = orders.map((order) => order.id);
+  const itemsResult = await pool.query(
+    `
+      SELECT *
+      FROM order_items
+      WHERE order_id = ANY($1::int[])
+      ORDER BY id ASC
+    `,
+    [orderIds],
+  );
+
+  const itemsByOrderId = new Map();
+  for (const item of itemsResult.rows) {
+    const existing = itemsByOrderId.get(item.order_id) || [];
+    existing.push(orderItemResponse(item));
+    itemsByOrderId.set(item.order_id, existing);
+  }
+
+  sendJson(
+    res,
+    200,
+    orders.map((order) => orderResponse(order, itemsByOrderId.get(order.id) || [])),
+  );
+}
+
+async function handleOrderCreate(req, res) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+    sendJson(res, 501, { message: 'Tabelele pentru comenzi nu exista inca.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const orderItems = buildOrderItems(body.items);
+  if (orderItems.length === 0) {
+    sendJson(res, 400, { message: 'Cosul este gol.' });
+    return;
+  }
+
+  const subtotal = roundMoney(orderItems.reduce((sum, item) => sum + item.line_total, 0));
+  const deliveryTotal = roundMoney(body.deliveryTotal || body.delivery || 0);
+  const total = roundMoney(subtotal + deliveryTotal);
+  const orderNumber = await generateOrderNumber();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    const orderResult = await client.query(
+      `
+        INSERT INTO orders (
+          user_id,
+          order_number,
+          status,
+          subtotal,
+          delivery_total,
+          total,
+          currency
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `,
+      [user.id, orderNumber, 'Plasata', subtotal, deliveryTotal, total, 'RON'],
+    );
+    const order = orderResult.rows[0];
+    const insertedItems = [];
+
+    for (const item of orderItems) {
+      const itemResult = await client.query(
+        `
+          INSERT INTO order_items (
+            order_id,
+            product_id,
+            product_name,
+            product_image_url,
+            unit_price,
+            quantity,
+            line_total
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING *
+        `,
+        [
+          order.id,
+          item.product_id,
+          item.product_name,
+          item.product_image_url,
+          item.unit_price,
+          item.quantity,
+          item.line_total,
+        ],
+      );
+      insertedItems.push(orderItemResponse(itemResult.rows[0]));
+    }
+
+    await client.query('COMMIT');
+    sendJson(res, 201, orderResponse(order, insertedItems));
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function handleAddressCreate(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
@@ -763,6 +912,65 @@ function validateAddressData(data) {
   return '';
 }
 
+function buildOrderItems(rawItems) {
+  if (!Array.isArray(rawItems)) return [];
+
+  return rawItems
+    .map((item) => {
+      const product = item && typeof item === 'object' ? item.product || item : {};
+      const productName = String(product.name || item.productName || item.name || '').trim();
+      const unitPrice = parseMoney(product.price || item.unitPrice || item.price);
+      const quantity = Math.max(1, Math.min(999, Math.floor(Number(item.quantity || 1))));
+      const lineTotal = roundMoney(unitPrice * quantity);
+
+      if (!productName || unitPrice < 0 || !Number.isFinite(quantity)) {
+        return null;
+      }
+
+      return {
+        product_id: normalizeInteger(product.id || item.productId || item.product_id),
+        product_name: productName,
+        product_image_url: cleanOptionalValue(product.imageUrl || item.productImageUrl || item.imageUrl),
+        unit_price: unitPrice,
+        quantity,
+        line_total: lineTotal,
+      };
+    })
+    .filter(Boolean);
+}
+
+async function generateOrderNumber() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randomPart = crypto.randomBytes(3).toString('hex').toUpperCase();
+    const orderNumber = `MN-${datePart}-${randomPart}`;
+    const existing = await pool.query(
+      'SELECT 1 FROM orders WHERE order_number = $1 LIMIT 1',
+      [orderNumber],
+    );
+    if (existing.rowCount === 0) return orderNumber;
+  }
+
+  return `MN-${Date.now()}`;
+}
+
+function parseMoney(value) {
+  const normalized = String(value || '0')
+    .replace(',', '.')
+    .replace(/[^\d.-]/g, '');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? roundMoney(number) : 0;
+}
+
+function roundMoney(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function normalizeInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
+}
+
 async function clearDefaultAddresses(userId, data, exceptAddressId = null) {
   const updates = [];
   const values = [userId];
@@ -817,6 +1025,32 @@ function addressResponse(address) {
     telefon: address.telefon || address.phone || '',
     implicitFacturare: Boolean(address.implicit_facturare || address.billing_default),
     implicitLivrare: Boolean(address.implicit_livrare || address.shipping_default || address.is_default),
+  };
+}
+
+function orderResponse(order, items = []) {
+  return {
+    id: order.id,
+    orderNumber: order.order_number,
+    status: order.status || 'Plasata',
+    subtotal: String(order.subtotal || '0'),
+    deliveryTotal: String(order.delivery_total || '0'),
+    total: String(order.total || '0'),
+    currency: order.currency || 'RON',
+    createdAt: order.created_at,
+    items,
+  };
+}
+
+function orderItemResponse(item) {
+  return {
+    id: item.id,
+    productId: item.product_id,
+    productName: item.product_name || '',
+    productImageUrl: item.product_image_url || '',
+    unitPrice: String(item.unit_price || '0'),
+    quantity: Number(item.quantity || 0),
+    lineTotal: String(item.line_total || '0'),
   };
 }
 

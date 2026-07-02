@@ -28,6 +28,7 @@ type CartContextValue = {
   incrementCartQuantity: (productId: number) => void;
   decrementCartQuantity: (productId: number) => void;
   setCartQuantity: (productId: number, quantity: number) => void;
+  clearCart: () => void;
   removeFromFavorites: (productId: number) => void;
   isFavorite: (productId: number) => boolean;
 };
@@ -219,6 +220,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               : item,
           ),
         );
+      },
+      clearCart: () => {
+        setItems([]);
       },
       removeFromFavorites: (productId) => {
         setFavoriteItems((currentItems) =>
