@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import ProductAddToCartButton from '@/components/product-add-to-cart-button';
 import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
 import ProductHistoryRecorder from '@/components/product-history-recorder';
 import ProductImageMagnifier from '@/components/product-image-magnifier';
@@ -12,6 +12,7 @@ import ReviewsSection from '@/components/reviews-section';
 import ReviewsSummary from '@/components/reviews-summary';
 import SimilarProductsSlider from '@/components/similar-products-slider';
 import SizeSelector from '@/components/size-selector';
+import { mockProducts } from '@/lib/mock-products';
 
 type Product = {
   id: number;
@@ -98,8 +99,10 @@ async function getProducts(): Promise<Product[]> {
 
 export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const product = await getProduct(id);
-  const allProducts = await getProducts();
+  const fetchedProduct = await getProduct(id);
+  const fetchedProducts = await getProducts();
+  const allProducts = fetchedProducts.length > 0 ? fetchedProducts : mockProducts;
+  const product = fetchedProduct ?? mockProducts.find((item) => item.id === Number(id)) ?? null;
 
   if (!product) {
     notFound();
@@ -196,7 +199,14 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
 
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <Button>Adauga in cos</Button>
+                <ProductAddToCartButton
+                  product={{
+                    id: product.id,
+                    name: product.name,
+                    price: product.price,
+                    imageUrl: product.imageUrl,
+                  }}
+                />
                 <ProductFavoriteIconButton
                   product={{
                     id: product.id,

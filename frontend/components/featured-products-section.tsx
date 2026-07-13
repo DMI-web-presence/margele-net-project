@@ -143,18 +143,16 @@ export default function FeaturedProductsSection({ products }: FeaturedProductsSe
                       </div>
                     </Link>
 
-                    {!isUsingMockProducts ? (
-                      <div className="absolute right-3 top-3">
-                        <ProductFavoriteIconButton
-                          product={{
-                            id: product.id,
-                            name: product.name,
-                            price: product.price,
-                            imageUrl: product.imageUrl,
-                          }}
-                        />
-                      </div>
-                    ) : null}
+                    <div className="absolute right-3 top-3">
+                      <ProductFavoriteIconButton
+                        product={{
+                          id: product.id,
+                          name: product.name,
+                          price: product.price,
+                          imageUrl: product.imageUrl,
+                        }}
+                      />
+                    </div>
                   </div>
 
                   <div className="flex flex-1 flex-col p-5">

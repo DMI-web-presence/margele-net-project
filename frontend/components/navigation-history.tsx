@@ -85,7 +85,7 @@ export default function NavigationHistory() {
                     src={item.imageUrl}
                     alt={item.label}
                     fill
-                    className="object-contain p-3 transition group-hover:scale-105"
+                    className="object-cover transition group-hover:scale-105"
                     unoptimized
                   />
                 </div>

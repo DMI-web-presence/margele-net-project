@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
 import { Card } from '@/components/ui/card';
 import {
   Carousel,
@@ -56,23 +57,35 @@ export default function SimilarProductsSlider({
               className="basis-full sm:basis-1/2 lg:basis-1/3"
             >
               <Card className="h-full overflow-hidden rounded-3xl border-slate-200">
-                <Link href={`/products/${item.id}`} className="block">
-                  {item.imageUrl ? (
-                    <div className="relative aspect-square bg-slate-100">
-                      <Image
-                        src={item.imageUrl}
-                        alt={item.name}
-                        fill
-                        className="object-contain p-4"
-                        unoptimized
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex aspect-square items-center justify-center bg-slate-100 text-sm text-slate-500">
-                      Imagine indisponibila
-                    </div>
-                  )}
-                </Link>
+                <div className="relative">
+                  <Link href={`/products/${item.id}`} className="block">
+                    {item.imageUrl ? (
+                      <div className="relative aspect-square bg-slate-100">
+                        <Image
+                          src={item.imageUrl}
+                          alt={item.name}
+                          fill
+                          className="object-contain p-4"
+                          unoptimized
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex aspect-square items-center justify-center bg-slate-100 text-sm text-slate-500">
+                        Imagine indisponibila
+                      </div>
+                    )}
+                  </Link>
+                  <div className="absolute right-3 top-3">
+                    <ProductFavoriteIconButton
+                      product={{
+                        id: item.id,
+                        name: item.name,
+                        price: item.price,
+                        imageUrl: item.imageUrl,
+                      }}
+                    />
+                  </div>
+                </div>
 
                 <div className="space-y-2 p-4">
                   <Link
