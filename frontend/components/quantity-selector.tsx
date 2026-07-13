@@ -6,14 +6,32 @@ import { Button } from '@/components/ui/button';
 type QuantitySelectorProps = {
   min?: number;
   initialValue?: number;
+  value?: number;
+  onChange?: (quantity: number) => void;
 };
 
-export default function QuantitySelector({ min = 1, initialValue = 1 }: QuantitySelectorProps) {
+export default function QuantitySelector({
+  min = 1,
+  initialValue = 1,
+  value,
+  onChange,
+}: QuantitySelectorProps) {
   const safeInitial = Math.max(min, initialValue);
-  const [quantity, setQuantity] = useState(safeInitial);
+  const [internalQuantity, setInternalQuantity] = useState(safeInitial);
+  const quantity = value ?? internalQuantity;
 
-  const decrement = () => setQuantity((current) => Math.max(min, current - 1));
-  const increment = () => setQuantity((current) => current + 1);
+  const setQuantity = (nextQuantity: number) => {
+    const normalizedQuantity = Math.max(min, nextQuantity);
+    if (onChange) {
+      onChange(normalizedQuantity);
+      return;
+    }
+
+    setInternalQuantity(normalizedQuantity);
+  };
+
+  const decrement = () => setQuantity(quantity - 1);
+  const increment = () => setQuantity(quantity + 1);
 
   return (
     <div className="space-y-2">

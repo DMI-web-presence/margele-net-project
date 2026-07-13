@@ -285,7 +285,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                   const linePrice = unitPrice * item.quantity;
 
                   return (
-                    <li key={item.product.id} className="px-6 py-6 sm:px-8">
+                    <li key={`${item.product.id}-${item.product.selectedSize ?? 'default'}`} className="px-6 py-6 sm:px-8">
                       <div className="grid gap-5 lg:grid-cols-[7.5rem_minmax(0,1fr)_auto_auto] lg:items-start">
                         <Link
                           href={`/products/${item.product.id}`}
@@ -333,6 +333,12 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
 
                           <div className="flex flex-wrap gap-6 text-sm text-slate-600">
                             <p>Produs ID: {item.product.id}</p>
+                            {item.product.selectedSize ? (
+                              <p>
+                                <span className="font-semibold text-slate-900">Marime:</span>{' '}
+                                {item.product.selectedSize}
+                              </p>
+                            ) : null}
                             {item.product.description ? (
                               <p className="max-w-xl">Detalii: {item.product.description}</p>
                             ) : null}
@@ -347,14 +353,14 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                         </div>
 
                         <div className="lg:justify-self-end">
-                          <label className="sr-only" htmlFor={`quantity-${item.product.id}`}>
+                          <label className="sr-only" htmlFor={`quantity-${item.product.id}-${item.product.selectedSize ?? 'default'}`}>
                             Cantitate pentru {item.product.name}
                           </label>
                           <div className="flex items-center gap-2">
                             {item.quantity > 1 ? (
                               <button
                                 type="button"
-                                onClick={() => setCartQuantity(item.product.id, item.quantity - 1)}
+                                onClick={() => setCartQuantity(item.product.id, item.quantity - 1, item.product.selectedSize)}
                                 className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
                                 aria-label={`Scade cantitatea pentru ${item.product.name}`}
                               >
@@ -365,7 +371,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                             )}
 
                             <input
-                              id={`quantity-${item.product.id}`}
+                              id={`quantity-${item.product.id}-${item.product.selectedSize ?? 'default'}`}
                               type="number"
                               min={1}
                               max={999}
@@ -375,7 +381,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                                 if (!rawValue) return;
                                 const nextQuantity = Number(rawValue);
                                 if (!Number.isFinite(nextQuantity)) return;
-                                setCartQuantity(item.product.id, nextQuantity);
+                                setCartQuantity(item.product.id, nextQuantity, item.product.selectedSize);
                               }}
                               className="w-24 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-base text-slate-900 outline-none transition hover:border-slate-400 focus:border-slate-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
@@ -383,7 +389,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                             {item.quantity < 999 ? (
                               <button
                                 type="button"
-                                onClick={() => setCartQuantity(item.product.id, item.quantity + 1)}
+                                onClick={() => setCartQuantity(item.product.id, item.quantity + 1, item.product.selectedSize)}
                                 className="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 hover:text-slate-900"
                                 aria-label={`Creste cantitatea pentru ${item.product.name}`}
                               >
@@ -398,7 +404,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                         <div className="flex justify-end lg:pl-2">
                           <button
                             type="button"
-                            onClick={() => removeFromCart(item.product.id)}
+                            onClick={() => removeFromCart(item.product.id, item.product.selectedSize)}
                             className="inline-flex h-12 w-12 cursor-pointer items-center justify-center rounded-full border border-transparent text-slate-500 transition hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900"
                             aria-label={`Elimina ${item.product.name} din cos`}
                           >

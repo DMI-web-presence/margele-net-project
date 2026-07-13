@@ -36,7 +36,7 @@ export default function BasketPreviewCard({ items, totalCount }: BasketPreviewCa
         <div className="mt-3 space-y-4">
           <ul className="max-h-72 space-y-3 overflow-auto pr-1">
             {items.map((item) => (
-              <li key={item.product.id}>
+              <li key={`${item.product.id}-${item.product.selectedSize ?? 'default'}`}>
                 <div className="rounded-xl bg-slate-50 p-2">
                   <Link
                     href={`/products/${item.product.id}`}
@@ -57,13 +57,16 @@ export default function BasketPreviewCard({ items, totalCount }: BasketPreviewCa
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-900">{item.product.name}</p>
+                      {item.product.selectedSize ? (
+                        <p className="text-xs font-semibold text-indigo-700">Marime: {item.product.selectedSize}</p>
+                      ) : null}
                       <p className="text-xs text-slate-500">{numberFormatter.format(Number(item.product.price))}</p>
                     </div>
                   </Link>
                   <div className="mt-2 flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => decrementCartQuantity(item.product.id)}
+                      onClick={() => decrementCartQuantity(item.product.id, item.product.selectedSize)}
                       className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-slate-300 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
                       aria-label={`Scade cantitatea pentru ${item.product.name}`}
                     >
@@ -74,7 +77,7 @@ export default function BasketPreviewCard({ items, totalCount }: BasketPreviewCa
                     </span>
                     <button
                       type="button"
-                      onClick={() => incrementCartQuantity(item.product.id)}
+                      onClick={() => incrementCartQuantity(item.product.id, item.product.selectedSize)}
                       className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-slate-300 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
                       aria-label={`Creste cantitatea pentru ${item.product.name}`}
                     >
@@ -83,7 +86,7 @@ export default function BasketPreviewCard({ items, totalCount }: BasketPreviewCa
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeFromCart(item.product.id)}
+                    onClick={() => removeFromCart(item.product.id, item.product.selectedSize)}
                     className="mt-2 cursor-pointer text-xs font-semibold text-slate-600 transition hover:text-slate-900"
                   >
                     Elimina

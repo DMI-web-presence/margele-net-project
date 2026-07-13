@@ -5,13 +5,22 @@ import { Button } from '@/components/ui/button';
 
 type SizeSelectorProps = {
   sizes: string[];
+  value?: string | null;
+  onChange?: (size: string | null) => void;
 };
 
-export default function SizeSelector({ sizes }: SizeSelectorProps) {
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+export default function SizeSelector({ sizes, value, onChange }: SizeSelectorProps) {
+  const [internalSelectedSize, setInternalSelectedSize] = useState<string | null>(null);
+  const selectedSize = value !== undefined ? value : internalSelectedSize;
 
   const toggleSize = (size: string) => {
-    setSelectedSize((current) => (current === size ? null : size));
+    const nextSize = selectedSize === size ? null : size;
+    if (onChange) {
+      onChange(nextSize);
+      return;
+    }
+
+    setInternalSelectedSize(nextSize);
   };
 
   return (

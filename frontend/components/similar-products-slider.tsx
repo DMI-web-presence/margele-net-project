@@ -65,7 +65,7 @@ export default function SimilarProductsSlider({
                           src={item.imageUrl}
                           alt={item.name}
                           fill
-                          className="object-contain p-4"
+                          className="object-cover transition duration-300 hover:scale-105"
                           unoptimized
                         />
                       </div>
