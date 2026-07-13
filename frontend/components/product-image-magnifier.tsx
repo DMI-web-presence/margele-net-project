@@ -8,7 +8,6 @@ type ProductImageMagnifierProps = {
   alt: string;
   width?: number;
   height?: number;
-  zoom?: number;
 };
 
 export default function ProductImageMagnifier({
@@ -16,7 +15,6 @@ export default function ProductImageMagnifier({
   alt,
   width = 800,
   height = 800,
-  zoom = 3.8,
 }: ProductImageMagnifierProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isActive, setIsActive] = useState(false);
@@ -47,7 +45,7 @@ export default function ProductImageMagnifier({
         alt={alt}
         width={width}
         height={height}
-        className="max-h-full w-auto max-w-full object-contain"
+        className="h-full w-full object-cover"
         unoptimized
       />
 
@@ -60,7 +58,7 @@ export default function ProductImageMagnifier({
             top: `${position.y}%`,
             backgroundImage: `url(${src})`,
             backgroundRepeat: 'no-repeat',
-            backgroundSize: `${zoom * 100}%`,
+            backgroundSize: `cover`,
             backgroundPosition: `${position.x}% ${position.y}%`,
           }}
         />

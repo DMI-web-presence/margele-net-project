@@ -8,6 +8,7 @@ export type CartProduct = {
   name: string;
   price: string;
   imageUrl: string | null;
+  selectedSize?: string | null;
 };
 
 export type CartItem = {
@@ -22,12 +23,12 @@ type CartContextValue = {
   favoriteItems: CartItem[];
   favoriteCount: number;
   favoritePulseToken: number;
-  addToCart: (product: CartProduct, sourceElement: HTMLElement | null) => void;
+  addToCart: (product: CartProduct, sourceElement: HTMLElement | null, quantity?: number) => void;
   toggleFavorite: (product: CartProduct, sourceElement: HTMLElement | null) => void;
-  removeFromCart: (productId: number) => void;
-  incrementCartQuantity: (productId: number) => void;
-  decrementCartQuantity: (productId: number) => void;
-  setCartQuantity: (productId: number, quantity: number) => void;
+  removeFromCart: (productId: number, selectedSize?: string | null) => void;
+  incrementCartQuantity: (productId: number, selectedSize?: string | null) => void;
+  decrementCartQuantity: (productId: number, selectedSize?: string | null) => void;
+  setCartQuantity: (productId: number, quantity: number, selectedSize?: string | null) => void;
   clearCart: () => void;
   removeFromFavorites: (productId: number) => void;
   isFavorite: (productId: number) => boolean;
@@ -36,6 +37,14 @@ type CartContextValue = {
 const CartContext = createContext<CartContextValue | null>(null);
 const CART_STORAGE_KEY = 'margele_cart_items_v1';
 const FAVORITES_STORAGE_KEY = 'margele_favorite_items_v1';
+
+function isSameCartLine(
+  item: CartItem,
+  productId: number,
+  selectedSize?: string | null,
+) {
+  return item.product.id === productId && (item.product.selectedSize ?? null) === (selectedSize ?? null);
+}
 
 function playFlyToTarget(sourceElement: HTMLElement | null, targetId: string, color: string) {
   if (!sourceElement) return;
@@ -139,20 +148,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       favoriteItems,
       favoriteCount,
       favoritePulseToken,
-      addToCart: (product, sourceElement) => {
+      addToCart: (product, sourceElement, quantity = 1) => {
+        const safeQuantity = Math.max(1, Math.min(999, Math.floor(quantity)));
         setItems((currentItems) => {
           const existingIndex = currentItems.findIndex(
-            (item) => item.product.id === product.id,
+            (item) => isSameCartLine(item, product.id, product.selectedSize),
           );
 
           if (existingIndex === -1) {
-            return [{ product, quantity: 1 }, ...currentItems];
+            return [{ product, quantity: safeQuantity }, ...currentItems];
           }
 
           const existingItem = currentItems[existingIndex];
           const updatedItem: CartItem = {
             ...existingItem,
-            quantity: existingItem.quantity + 1,
+            product,
+            quantity: Math.min(999, existingItem.quantity + safeQuantity),
           };
 
           return [
@@ -186,36 +197,36 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           'linear-gradient(135deg, #f43f5e, #be123c)',
         );
       },
-      removeFromCart: (productId) => {
+      removeFromCart: (productId, selectedSize) => {
         setItems((currentItems) =>
-          currentItems.filter((item) => item.product.id !== productId),
+          currentItems.filter((item) => !isSameCartLine(item, productId, selectedSize)),
         );
       },
-      incrementCartQuantity: (productId) => {
+      incrementCartQuantity: (productId, selectedSize) => {
         setItems((currentItems) =>
           currentItems.map((item) =>
-            item.product.id === productId
+            isSameCartLine(item, productId, selectedSize)
               ? { ...item, quantity: item.quantity + 1 }
               : item,
           ),
         );
       },
-      decrementCartQuantity: (productId) => {
+      decrementCartQuantity: (productId, selectedSize) => {
         setItems((currentItems) =>
           currentItems
             .map((item) =>
-              item.product.id === productId
+              isSameCartLine(item, productId, selectedSize)
                 ? { ...item, quantity: item.quantity - 1 }
                 : item,
             )
             .filter((item) => item.quantity > 0),
         );
       },
-      setCartQuantity: (productId, quantity) => {
+      setCartQuantity: (productId, quantity, selectedSize) => {
         const normalizedQuantity = Math.max(1, Math.min(999, Math.floor(quantity)));
         setItems((currentItems) =>
           currentItems.map((item) =>
-            item.product.id === productId
+            isSameCartLine(item, productId, selectedSize)
               ? { ...item, quantity: normalizedQuantity }
               : item,
           ),

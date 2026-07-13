@@ -65,6 +65,17 @@ function EmptyFavoritesState() {
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-2">
+      <path d="M4 7h16" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M6 7l1 14h10l1-14" />
+      <path d="M9 7V4h6v3" />
+    </svg>
+  );
+}
+
 export default function FavoritesPageContent() {
   const { favoriteItems, favoriteCount, removeFromFavorites, addToCart } = useCart();
 
@@ -140,9 +151,10 @@ export default function FavoritesPageContent() {
                     <button
                       type="button"
                       onClick={() => removeFromFavorites(item.product.id)}
-                      className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-2xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                      aria-label={`Elimina ${item.product.name} din favorite`}
+                      className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-2xl border border-rose-200 bg-white text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
                     >
-                      Elimina
+                      <TrashIcon />
                     </button>
                   </div>
                 </div>

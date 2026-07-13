@@ -2,16 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import ProductAddToCartButton from '@/components/product-add-to-cart-button';
-import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
 import ProductHistoryRecorder from '@/components/product-history-recorder';
 import ProductImageMagnifier from '@/components/product-image-magnifier';
+import ProductPurchaseControls from '@/components/product-purchase-controls';
 import { ProductReviewsProvider } from '@/components/product-reviews-provider';
-import QuantitySelector from '@/components/quantity-selector';
 import ReviewsSection from '@/components/reviews-section';
 import ReviewsSummary from '@/components/reviews-summary';
 import SimilarProductsSlider from '@/components/similar-products-slider';
-import SizeSelector from '@/components/size-selector';
 import { mockProducts } from '@/lib/mock-products';
 
 type Product = {
@@ -193,30 +190,17 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                   <span className="font-semibold text-slate-900">Cod produs:</span> MGL-{String(product.id).padStart(4, '0')}
                 </p>
               </div>
-              <SizeSelector sizes={['6.5 mm', '8.5 mm', '10.5 mm', '12.5 mm', '14.5 mm']} />
-              <QuantitySelector />
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2">
-                <ProductAddToCartButton
-                  product={{
-                    id: product.id,
-                    name: product.name,
-                    price: product.price,
-                    imageUrl: product.imageUrl,
-                  }}
-                />
-                <ProductFavoriteIconButton
-                  product={{
-                    id: product.id,
-                    name: product.name,
-                    price: product.price,
-                    imageUrl: product.imageUrl,
-                  }}
-                />
-              </div>
-            </div>
+            <ProductPurchaseControls
+              product={{
+                id: product.id,
+                name: product.name,
+                price: product.price,
+                imageUrl: product.imageUrl,
+              }}
+              sizes={['6.5 mm', '8.5 mm', '10.5 mm', '12.5 mm', '14.5 mm']}
+            />
           </Card>
         </div>
 
