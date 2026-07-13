@@ -57,13 +57,24 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && requestUrl.pathname === '/products') {
-      await handleProductList(res);
+      await handleProductList(requestUrl, res);
       return;
     }
 
-    const productMatch = requestUrl.pathname.match(/^\/products\/(\d+)$/);
+    const productMatch = requestUrl.pathname.match(/^\/products\/([^/]+)$/);
     if (productMatch && req.method === 'GET') {
-      await handleProductDetails(res, Number(productMatch[1]));
+      await handleProductDetails(res, decodeURIComponent(productMatch[1]));
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/categories') {
+      await handleCategoryList(res);
+      return;
+    }
+
+    const categoryMatch = requestUrl.pathname.match(/^\/categories\/([^/]+)$/);
+    if (categoryMatch && req.method === 'GET') {
+      await handleCategoryDetails(res, decodeURIComponent(categoryMatch[1]));
       return;
     }
 
@@ -253,7 +264,7 @@ async function handleEmailExists(requestUrl, res) {
   sendJson(res, 200, { exists: result.rowCount > 0 });
 }
 
-async function handleProductList(res) {
+async function handleProductList(requestUrl, res) {
   if (!(await hasTable('products'))) {
     sendJson(res, 200, []);
     return;
@@ -265,7 +276,14 @@ async function handleProductList(res) {
     return;
   }
 
-  const result = await pool.query(`
+  const filters = buildProductFilters(requestUrl);
+  if (filters.error) {
+    sendJson(res, 400, { message: filters.error });
+    return;
+  }
+
+  const result = await pool.query(
+    `
     SELECT
       p.*,
       c.name AS category_name,
@@ -305,21 +323,26 @@ async function handleProductList(res) {
     ) primary_image ON true
     LEFT JOIN product_images pi ON pi.product_id = p.id
     LEFT JOIN product_attributes pa ON pa.product_id = p.id
-    WHERE COALESCE(p.status, 'active') = 'active'
+    WHERE ${filters.whereSql}
     GROUP BY p.id, c.id, primary_image.image_url
     ORDER BY p.created_at DESC, p.id DESC
-  `);
+  `,
+    filters.values,
+  );
   sendJson(res, 200, result.rows.map(productResponse));
 }
 
-async function handleProductDetails(res, productId) {
+async function handleProductDetails(res, productIdentifier) {
   if (!(await hasTable('products'))) {
     sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
     return;
   }
 
   if (!(await hasTable('categories')) || !(await hasTable('product_images')) || !(await hasTable('product_attributes'))) {
-    const result = await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1', [productId]);
+    const numericId = normalizeInteger(productIdentifier);
+    const result = numericId
+      ? await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1', [numericId])
+      : await pool.query('SELECT * FROM products WHERE slug = $1 LIMIT 1', [productIdentifier]);
     const product = result.rows[0];
     if (!product) {
       sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
@@ -330,6 +353,10 @@ async function handleProductDetails(res, productId) {
     return;
   }
 
+  const numericProductId = normalizeInteger(productIdentifier);
+  const productFilter = numericProductId
+    ? 'p.id = $1'
+    : 'p.slug = $1';
   const result = await pool.query(
     `
       SELECT
@@ -371,11 +398,11 @@ async function handleProductDetails(res, productId) {
       ) primary_image ON true
       LEFT JOIN product_images pi ON pi.product_id = p.id
       LEFT JOIN product_attributes pa ON pa.product_id = p.id
-      WHERE p.id = $1 AND COALESCE(p.status, 'active') = 'active'
+      WHERE ${productFilter} AND COALESCE(p.status, 'active') = 'active'
       GROUP BY p.id, c.id, primary_image.image_url
       LIMIT 1
     `,
-    [productId],
+    [numericProductId || productIdentifier],
   );
   const product = result.rows[0];
   if (!product) {
@@ -384,6 +411,62 @@ async function handleProductDetails(res, productId) {
   }
 
   sendJson(res, 200, productResponse(product));
+}
+
+async function handleCategoryList(res) {
+  if (!(await hasTable('categories'))) {
+    sendJson(res, 200, []);
+    return;
+  }
+
+  const result = await pool.query(`
+    SELECT
+      c.*,
+      parent.name AS parent_name,
+      parent.slug AS parent_slug,
+      COUNT(p.id)::int AS product_count
+    FROM categories c
+    LEFT JOIN categories parent ON parent.id = c.parent_id
+    LEFT JOIN products p ON p.category_id = c.id AND COALESCE(p.status, 'active') = 'active'
+    WHERE c.is_active = true
+    GROUP BY c.id, parent.id
+    ORDER BY c.sort_order ASC, c.name ASC
+  `);
+
+  sendJson(res, 200, result.rows.map(categoryResponse));
+}
+
+async function handleCategoryDetails(res, categoryIdentifier) {
+  if (!(await hasTable('categories'))) {
+    sendJson(res, 404, { message: 'Categoria nu a fost gasita.' });
+    return;
+  }
+
+  const numericId = normalizeInteger(categoryIdentifier);
+  const result = await pool.query(
+    `
+      SELECT
+        c.*,
+        parent.name AS parent_name,
+        parent.slug AS parent_slug,
+        COUNT(p.id)::int AS product_count
+      FROM categories c
+      LEFT JOIN categories parent ON parent.id = c.parent_id
+      LEFT JOIN products p ON p.category_id = c.id AND COALESCE(p.status, 'active') = 'active'
+      WHERE ${numericId ? 'c.id = $1' : 'c.slug = $1'} AND c.is_active = true
+      GROUP BY c.id, parent.id
+      LIMIT 1
+    `,
+    [numericId || categoryIdentifier],
+  );
+
+  const category = result.rows[0];
+  if (!category) {
+    sendJson(res, 404, { message: 'Categoria nu a fost gasita.' });
+    return;
+  }
+
+  sendJson(res, 200, categoryResponse(category));
 }
 
 async function handleGoogleStart(res) {
@@ -1201,6 +1284,7 @@ function orderItemResponse(item) {
 function productResponse(product) {
   const attributes = normalizeJsonArray(product.attributes);
   const images = normalizeJsonArray(product.images);
+  const options = productOptionsFromAttributes(attributes);
 
   return {
     id: product.id,
@@ -1227,12 +1311,88 @@ function productResponse(product) {
     status: product.status || 'active',
     material: product.material || null,
     attributes,
+    options,
     sizes: attributes
       .filter((attribute) => attribute.key === 'size')
       .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
       .map((attribute) => attribute.value),
     createdAt: product.created_at || product.createdAt || null,
   };
+}
+
+function categoryResponse(category) {
+  return {
+    id: category.id,
+    parentId: category.parent_id ?? null,
+    name: category.name || '',
+    slug: category.slug || '',
+    description: category.description || null,
+    sortOrder: Number(category.sort_order || 0),
+    isActive: Boolean(category.is_active),
+    productCount: Number(category.product_count || 0),
+    parent:
+      category.parent_id || category.parent_name || category.parent_slug
+        ? {
+            id: category.parent_id ?? null,
+            name: category.parent_name || '',
+            slug: category.parent_slug || '',
+          }
+        : null,
+    createdAt: category.created_at || null,
+  };
+}
+
+function buildProductFilters(requestUrl) {
+  const values = [];
+  const clauses = ["COALESCE(p.status, 'active') = 'active'"];
+  const categoryId = requestUrl.searchParams.get('categoryId');
+  const categorySlug = cleanOptionalValue(requestUrl.searchParams.get('categorySlug'));
+
+  if (categoryId) {
+    const parsedCategoryId = normalizeInteger(categoryId);
+    if (!parsedCategoryId) {
+      return { error: 'categoryId trebuie sa fie un numar valid.' };
+    }
+
+    values.push(parsedCategoryId);
+    clauses.push(`p.category_id = $${values.length}`);
+  }
+
+  if (categorySlug) {
+    values.push(categorySlug);
+    clauses.push(`c.slug = $${values.length}`);
+  }
+
+  return {
+    values,
+    whereSql: clauses.join(' AND '),
+  };
+}
+
+function productOptionsFromAttributes(attributes) {
+  const optionMap = new Map();
+
+  for (const attribute of attributes) {
+    const key = String(attribute.key || '').trim();
+    const value = String(attribute.value || '').trim();
+    if (!key || !value) continue;
+
+    if (!optionMap.has(key)) {
+      optionMap.set(key, []);
+    }
+
+    optionMap.get(key).push({
+      value,
+      sortOrder: Number(attribute.sortOrder || 0),
+    });
+  }
+
+  return Array.from(optionMap.entries()).map(([name, values]) => ({
+    name,
+    values: values
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((item) => item.value),
+  }));
 }
 
 function normalizeJsonArray(value) {
