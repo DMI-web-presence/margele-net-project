@@ -5,6 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "db:migrate": "node scripts/migrate.js",
+    "import:categories": "node scripts/import-categories.js",
     "dev": "node src/server.js",
     "start": "node src/server.js"
   },
