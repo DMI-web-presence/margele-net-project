@@ -1,4 +1,5 @@
 import ProductsPage from '@/components/products-page';
+import { mockProducts } from '@/lib/mock-products';
 
 type Product = {
   id: number;
@@ -38,7 +39,7 @@ export default async function CatalogPage() {
 
   return (
     <main className="px-10 py-8 sm:px-20 lg:px-32">
-      <ProductsPage products={products} />
+      <ProductsPage products={products.length > 0 ? products : mockProducts} />
     </main>
   );
 }

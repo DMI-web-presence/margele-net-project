@@ -277,7 +277,7 @@ export default function NavBar() {
           onMouseLeave={() => setIsFavoritePreviewOpen(false)}
         >
           <Link
-            href="#"
+            href="/favorites"
             aria-label="Favorite"
             id="favorite-icon-button"
             className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 ${
@@ -309,7 +309,7 @@ export default function NavBar() {
           onMouseLeave={() => setIsBasketPreviewOpen(false)}
         >
           <Link
-            href="#"
+            href="/basket"
             aria-label="Basket"
             id="basket-icon-button"
             className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${

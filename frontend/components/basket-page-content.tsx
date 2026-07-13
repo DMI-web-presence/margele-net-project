@@ -93,6 +93,95 @@ function PlusIcon() {
   );
 }
 
+function EmptyBasketIllustration() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 420 320"
+      className="h-auto w-full max-w-[360px]"
+    >
+      <rect x="42" y="220" width="336" height="18" rx="9" className="fill-slate-100" />
+      <path
+        d="M121 132h184l-18 78H139l-18-78Z"
+        className="fill-white stroke-slate-900"
+        strokeWidth="8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M152 132V97c0-35 27-61 61-61s61 26 61 61v35"
+        className="fill-none stroke-slate-900"
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M153 158h119M160 184h105"
+        className="stroke-slate-200"
+        strokeWidth="8"
+        strokeLinecap="round"
+      />
+      <circle cx="158" cy="238" r="16" className="fill-white stroke-slate-900" strokeWidth="7" />
+      <circle cx="270" cy="238" r="16" className="fill-white stroke-slate-900" strokeWidth="7" />
+      <path
+        d="M292 72c20 4 34 18 38 38M317 54c23 11 39 30 47 55"
+        className="fill-none stroke-[#7b4a75]"
+        strokeWidth="7"
+        strokeLinecap="round"
+      />
+      <path
+        d="M82 91c-18 6-29 19-33 38M61 70c-22 12-36 31-43 56"
+        className="fill-none stroke-[#7b4a75]"
+        strokeWidth="7"
+        strokeLinecap="round"
+      />
+      <circle cx="96" cy="63" r="8" className="fill-[#7b4a75]" />
+      <circle cx="335" cy="145" r="7" className="fill-[#7b4a75]" />
+      <circle cx="83" cy="178" r="6" className="fill-slate-300" />
+      <circle cx="343" cy="216" r="6" className="fill-slate-300" />
+    </svg>
+  );
+}
+
+function EmptyBasketState() {
+  return (
+    <main className="px-6 py-10 sm:px-10 lg:px-16">
+      <section className="mx-auto grid max-w-[1100px] items-center gap-10 rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-sm sm:px-10 lg:grid-cols-[minmax(0,1fr)_24rem] lg:py-14">
+        <div className="space-y-6">
+          <div className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700">
+            Cosul este gol
+          </div>
+          <div className="space-y-4">
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+              Cosul tau asteapta primele materiale
+            </h1>
+            <p className="max-w-xl text-base leading-7 text-slate-600 sm:text-lg">
+              Nu ai produse adaugate momentan. Alege margele, accesorii sau materiale creative,
+              iar produsele selectate vor aparea aici pentru verificare inainte de checkout.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/catalog"
+              className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-black"
+            >
+              Vezi catalogul
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-6 py-3 text-base font-semibold text-slate-900 transition hover:border-slate-400 hover:bg-slate-50"
+            >
+              Inapoi acasa
+            </Link>
+          </div>
+        </div>
+
+        <div className="flex justify-center rounded-[2rem] bg-slate-50 px-6 py-8">
+          <EmptyBasketIllustration />
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default function BasketPageContent({ products }: BasketPageContentProps) {
   const router = useRouter();
   const {
@@ -164,29 +253,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
   };
 
   if (enrichedItems.length === 0) {
-    return (
-      <main className="px-6 py-10 sm:px-10 lg:px-16">
-        <div className="mx-auto max-w-[1200px]">
-          <section className="rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-sm sm:px-8">
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-              Cosul tau
-            </h1>
-            <p className="mt-3 max-w-2xl text-base text-slate-600 sm:text-lg">
-              Nu ai produse adaugate momentan. Descopera colectia noastra si adauga
-              articolele preferate in cos.
-            </p>
-            <div className="mt-8">
-              <Link
-                href="/catalog"
-                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-900 bg-white px-6 py-3 text-base font-semibold text-slate-900 transition hover:bg-slate-50"
-              >
-                Continua cumparaturile
-              </Link>
-            </div>
-          </section>
-        </div>
-      </main>
-    );
+    return <EmptyBasketState />;
   }
 
   return (

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
+import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
 import {
   Carousel,
   CarouselContent,
@@ -66,23 +67,35 @@ export default function LandingProductCarousel({
           {products.map((product) => (
             <CarouselItem key={`${title}-${product.id}`} className="basis-[78%] sm:basis-1/2 lg:basis-1/4">
               <Card className="h-full overflow-hidden rounded-2xl border-slate-200 bg-white transition hover:-translate-y-1 hover:shadow-md">
-                <Link href={`/products/${product.id}`} className="block">
-                  {product.imageUrl ? (
-                    <div className="relative aspect-square bg-slate-100">
-                      <Image
-                        src={product.imageUrl}
-                        alt={product.name}
-                        fill
-                        className="object-contain p-4 transition duration-300 hover:scale-105"
-                        unoptimized
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex aspect-square items-center justify-center bg-slate-100 text-sm text-slate-500">
-                      Imagine indisponibila
-                    </div>
-                  )}
-                </Link>
+                <div className="relative">
+                  <Link href={`/products/${product.id}`} className="block">
+                    {product.imageUrl ? (
+                      <div className="relative aspect-square bg-slate-100">
+                        <Image
+                          src={product.imageUrl}
+                          alt={product.name}
+                          fill
+                          className="object-contain p-4 transition duration-300 hover:scale-105"
+                          unoptimized
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex aspect-square items-center justify-center bg-slate-100 text-sm text-slate-500">
+                        Imagine indisponibila
+                      </div>
+                    )}
+                  </Link>
+                  <div className="absolute right-3 top-3">
+                    <ProductFavoriteIconButton
+                      product={{
+                        id: product.id,
+                        name: product.name,
+                        price: product.price,
+                        imageUrl: product.imageUrl,
+                      }}
+                    />
+                  </div>
+                </div>
                 <div className="flex min-h-36 flex-col gap-2 p-4">
                   <Link
                     href={`/products/${product.id}`}

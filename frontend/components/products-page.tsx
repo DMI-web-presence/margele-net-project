@@ -472,14 +472,14 @@ export default function ProductsPage({ products }: ProductsPageProps) {
             <Card key={product.id} className="flex h-full w-full max-w-[16rem] flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
               <div className="relative">
                 <Link href={`/products/${product.id}`} className="group block">
-                  <div className="bg-slate-100">
+                  <div className="flex h-72 items-center justify-center bg-slate-100 sm:h-65">
                     {product.imageUrl ? (
                       <Image
                         src={product.imageUrl}
                         alt={product.name}
                         width={640}
                         height={640}
-                        className="h-auto w-full object-contain transition duration-300 group-hover:scale-105"
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                         unoptimized
                       />
                     ) : (
@@ -505,7 +505,7 @@ export default function ProductsPage({ products }: ProductsPageProps) {
                   }
                   className={`absolute right-2 top-2 z-10 inline-flex h-8 w-8 cursor-pointer items-center justify-center transition hover:scale-110 ${
                     favorited ? 'text-rose-600' : 'text-rose-500'
-                  }`}
+                  } rounded-2xl border border-slate-200 bg-white/95 shadow-sm hover:bg-white`}
                 >
                   <FavoriteButtonIcon filled={favorited} />
                 </button>
@@ -518,10 +518,6 @@ export default function ProductsPage({ products }: ProductsPageProps) {
                   >
                     {product.name}
                   </Link>
-                  <div className="flex items-center gap-1">
-                    <p className="text-xs font-medium text-slate-900">Material: </p>
-                    <p className="text-xs leading-5 text-slate-600">{product.description ?? 'High-quality craft material.'}</p>
-                  </div>
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-6">
