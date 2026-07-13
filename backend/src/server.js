@@ -259,7 +259,56 @@ async function handleProductList(res) {
     return;
   }
 
-  const result = await pool.query('SELECT * FROM products ORDER BY id DESC');
+  if (!(await hasTable('categories')) || !(await hasTable('product_images')) || !(await hasTable('product_attributes'))) {
+    const result = await pool.query('SELECT * FROM products ORDER BY id DESC');
+    sendJson(res, 200, result.rows.map(productResponse));
+    return;
+  }
+
+  const result = await pool.query(`
+    SELECT
+      p.*,
+      c.name AS category_name,
+      c.slug AS category_slug,
+      COALESCE(primary_image.image_url, p.image_url) AS primary_image_url,
+      COALESCE(
+        jsonb_agg(
+          DISTINCT jsonb_build_object(
+            'id', pi.id,
+            'imageUrl', pi.image_url,
+            'altText', pi.alt_text,
+            'sortOrder', pi.sort_order,
+            'isPrimary', pi.is_primary
+          )
+        ) FILTER (WHERE pi.id IS NOT NULL),
+        '[]'::jsonb
+      ) AS images,
+      COALESCE(
+        jsonb_agg(
+          DISTINCT jsonb_build_object(
+            'id', pa.id,
+            'key', pa.attribute_key,
+            'value', pa.attribute_value,
+            'sortOrder', pa.sort_order
+          )
+        ) FILTER (WHERE pa.id IS NOT NULL),
+        '[]'::jsonb
+      ) AS attributes
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN LATERAL (
+      SELECT image_url
+      FROM product_images
+      WHERE product_id = p.id
+      ORDER BY is_primary DESC, sort_order ASC, id ASC
+      LIMIT 1
+    ) primary_image ON true
+    LEFT JOIN product_images pi ON pi.product_id = p.id
+    LEFT JOIN product_attributes pa ON pa.product_id = p.id
+    WHERE COALESCE(p.status, 'active') = 'active'
+    GROUP BY p.id, c.id, primary_image.image_url
+    ORDER BY p.created_at DESC, p.id DESC
+  `);
   sendJson(res, 200, result.rows.map(productResponse));
 }
 
@@ -269,7 +318,65 @@ async function handleProductDetails(res, productId) {
     return;
   }
 
-  const result = await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1', [productId]);
+  if (!(await hasTable('categories')) || !(await hasTable('product_images')) || !(await hasTable('product_attributes'))) {
+    const result = await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1', [productId]);
+    const product = result.rows[0];
+    if (!product) {
+      sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+      return;
+    }
+
+    sendJson(res, 200, productResponse(product));
+    return;
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        p.*,
+        c.name AS category_name,
+        c.slug AS category_slug,
+        COALESCE(primary_image.image_url, p.image_url) AS primary_image_url,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', pi.id,
+              'imageUrl', pi.image_url,
+              'altText', pi.alt_text,
+              'sortOrder', pi.sort_order,
+              'isPrimary', pi.is_primary
+            )
+          ) FILTER (WHERE pi.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS images,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', pa.id,
+              'key', pa.attribute_key,
+              'value', pa.attribute_value,
+              'sortOrder', pa.sort_order
+            )
+          ) FILTER (WHERE pa.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS attributes
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      LEFT JOIN LATERAL (
+        SELECT image_url
+        FROM product_images
+        WHERE product_id = p.id
+        ORDER BY is_primary DESC, sort_order ASC, id ASC
+        LIMIT 1
+      ) primary_image ON true
+      LEFT JOIN product_images pi ON pi.product_id = p.id
+      LEFT JOIN product_attributes pa ON pa.product_id = p.id
+      WHERE p.id = $1 AND COALESCE(p.status, 'active') = 'active'
+      GROUP BY p.id, c.id, primary_image.image_url
+      LIMIT 1
+    `,
+    [productId],
+  );
   const product = result.rows[0];
   if (!product) {
     sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
@@ -1092,15 +1199,57 @@ function orderItemResponse(item) {
 }
 
 function productResponse(product) {
+  const attributes = normalizeJsonArray(product.attributes);
+  const images = normalizeJsonArray(product.images);
+
   return {
     id: product.id,
     name: product.name || '',
-    description: product.description || null,
+    slug: product.slug || null,
+    description: product.description || product.short_description || null,
+    shortDescription: product.short_description || null,
     price: String(product.price || '0'),
-    imageUrl: product.image_url || product.imageUrl || product.image || null,
+    compareAtPrice: product.compare_at_price ? String(product.compare_at_price) : null,
+    currency: product.currency || 'RON',
+    imageUrl: product.primary_image_url || product.image_url || product.imageUrl || product.image || null,
+    images,
     categoryId: product.category_id ?? product.categoryId ?? null,
+    category:
+      product.category_id || product.category_name || product.category_slug
+        ? {
+            id: product.category_id ?? null,
+            name: product.category_name || '',
+            slug: product.category_slug || '',
+          }
+        : null,
+    sku: product.sku || null,
+    stockQuantity: Number(product.stock_quantity || 0),
+    status: product.status || 'active',
+    material: product.material || null,
+    attributes,
+    sizes: attributes
+      .filter((attribute) => attribute.key === 'size')
+      .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
+      .map((attribute) => attribute.value),
     createdAt: product.created_at || product.createdAt || null,
   };
+}
+
+function normalizeJsonArray(value) {
+  if (Array.isArray(value)) return value;
+
+  if (!value) return [];
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
 }
 
 function publicUser(user) {
