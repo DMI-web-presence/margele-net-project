@@ -4,19 +4,40 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const infoLinks = ['Transport', 'Conditii Retur', 'Cum cumpar', 'Despre noi', 'GDPR'];
-const storeLinks = ['Margele.net', 'Degetar.ro', 'Comunitatea Facebook'];
-const miscLinks = ['Marci', 'Vouchere', 'Promotii', 'Retururi'];
+const infoLinks = [
+  { label: 'Transport', href: '#' },
+  { label: 'Conditii Retur', href: '#' },
+  { label: 'Cum cumpar', href: '#' },
+  { label: 'Despre noi', href: '#' },
+  { label: 'GDPR', href: '/gdpr' },
+];
+const storeLinks = [
+  { label: 'Margele.net', href: '#' },
+  { label: 'Degetar.ro', href: '#' },
+  { label: 'Comunitatea Facebook', href: '#' },
+];
+const miscLinks = [
+  { label: 'Marci', href: '#' },
+  { label: 'Vouchere', href: '#' },
+  { label: 'Promotii', href: '#' },
+  { label: 'Retururi', href: '#' },
+];
 
-function FooterColumn({ title, links }: { title: string; links: string[] }) {
+function FooterColumn({
+  title,
+  links,
+}: {
+  title: string;
+  links: { label: string; href: string }[];
+}) {
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/90">{title}</h3>
       <ul className="flex flex-col gap-2 text-sm text-white/75">
         {links.map((item) => (
-          <li key={item}>
-            <Link href="#" className="transition hover:text-white">
-              {item}
+          <li key={item.label}>
+            <Link href={item.href} className="transition hover:text-white">
+              {item.label}
             </Link>
           </li>
         ))}
@@ -58,9 +79,9 @@ export default function Footer() {
             <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/90">Diverse</h3>
             <ul className="flex flex-col gap-2 text-sm text-white/75">
               {miscLinks.map((item) => (
-                <li key={item}>
-                  <Link href="#" className="transition hover:text-white">
-                    {item}
+                <li key={item.label}>
+                  <Link href={item.href} className="transition hover:text-white">
+                    {item.label}
                   </Link>
                 </li>
               ))}
