@@ -343,7 +343,7 @@ function ensureUniqueSkus(products) {
 
 function legacyImageUrl(value) {
   const image = String(value || '').replace(/^\/+/, '').trim();
-  return image ? `/legacy-images/${image}` : null;
+  return image ? `/images/${image}` : null;
 }
 
 function cleanOptionalText(value) {
