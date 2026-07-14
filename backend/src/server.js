@@ -270,7 +270,10 @@ async function handleProductList(requestUrl, res) {
     return;
   }
 
-  if (!(await hasTable('categories')) || !(await hasTable('product_images')) || !(await hasTable('product_attributes'))) {
+  if (
+    !(await hasTable('categories')) ||
+    !(await hasTable('product_images'))
+  ) {
     const result = await pool.query('SELECT * FROM products ORDER BY id DESC');
     sendJson(res, 200, result.rows.map(productResponse));
     return;
@@ -300,18 +303,7 @@ async function handleProductList(requestUrl, res) {
           )
         ) FILTER (WHERE pi.id IS NOT NULL),
         '[]'::jsonb
-      ) AS images,
-      COALESCE(
-        jsonb_agg(
-          DISTINCT jsonb_build_object(
-            'id', pa.id,
-            'key', pa.attribute_key,
-            'value', pa.attribute_value,
-            'sortOrder', pa.sort_order
-          )
-        ) FILTER (WHERE pa.id IS NOT NULL),
-        '[]'::jsonb
-      ) AS attributes
+      ) AS images
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN LATERAL (
@@ -322,7 +314,6 @@ async function handleProductList(requestUrl, res) {
       LIMIT 1
     ) primary_image ON true
     LEFT JOIN product_images pi ON pi.product_id = p.id
-    LEFT JOIN product_attributes pa ON pa.product_id = p.id
     WHERE ${filters.whereSql}
     GROUP BY p.id, c.id, primary_image.image_url
     ORDER BY p.created_at DESC, p.id DESC
@@ -338,7 +329,12 @@ async function handleProductDetails(res, productIdentifier) {
     return;
   }
 
-  if (!(await hasTable('categories')) || !(await hasTable('product_images')) || !(await hasTable('product_attributes'))) {
+  if (
+    !(await hasTable('categories')) ||
+    !(await hasTable('product_images')) ||
+    !(await hasTable('product_attributes')) ||
+    !(await hasTable('product_option_values'))
+  ) {
     const numericId = normalizeInteger(productIdentifier);
     const result = numericId
       ? await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1', [numericId])
@@ -386,7 +382,27 @@ async function handleProductDetails(res, productIdentifier) {
             )
           ) FILTER (WHERE pa.id IS NOT NULL),
           '[]'::jsonb
-        ) AS attributes
+        ) AS attributes,
+        COALESCE(
+          jsonb_agg(
+            DISTINCT jsonb_build_object(
+              'id', pov.id,
+              'optionName', pov.option_name,
+              'optionValue', pov.option_value,
+              'legacyOptionId', pov.legacy_option_id,
+              'legacyOptionValueId', pov.legacy_option_value_id,
+              'combinationId', pov.combination_id,
+              'model', pov.model,
+              'sku', pov.sku,
+              'quantity', pov.quantity,
+              'priceDelta', pov.price_delta,
+              'pricePrefix', pov.price_prefix,
+              'imageUrl', pov.image_url,
+              'sortOrder', pov.sort_order
+            )
+          ) FILTER (WHERE pov.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS variants
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
       LEFT JOIN LATERAL (
@@ -398,6 +414,7 @@ async function handleProductDetails(res, productIdentifier) {
       ) primary_image ON true
       LEFT JOIN product_images pi ON pi.product_id = p.id
       LEFT JOIN product_attributes pa ON pa.product_id = p.id
+      LEFT JOIN product_option_values pov ON pov.product_id = p.id
       WHERE ${productFilter} AND COALESCE(p.status, 'active') = 'active'
       GROUP BY p.id, c.id, primary_image.image_url
       LIMIT 1
@@ -1284,7 +1301,8 @@ function orderItemResponse(item) {
 function productResponse(product) {
   const attributes = normalizeJsonArray(product.attributes);
   const images = normalizeJsonArray(product.images);
-  const options = productOptionsFromAttributes(attributes);
+  const variants = normalizeJsonArray(product.variants);
+  const options = productOptionsFromVariants(variants, attributes);
 
   return {
     id: product.id,
@@ -1312,10 +1330,10 @@ function productResponse(product) {
     material: product.material || null,
     attributes,
     options,
-    sizes: attributes
-      .filter((attribute) => attribute.key === 'size')
-      .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0))
-      .map((attribute) => attribute.value),
+    variants,
+    sizes: options
+      .filter((option) => option.name === 'size')
+      .flatMap((option) => option.values),
     createdAt: product.created_at || product.createdAt || null,
   };
 }
@@ -1393,6 +1411,81 @@ function productOptionsFromAttributes(attributes) {
       .sort((left, right) => left.sortOrder - right.sortOrder)
       .map((item) => item.value),
   }));
+}
+
+function productOptionsFromVariants(variants, attributes) {
+  if (!variants.length) {
+    return productOptionsFromAttributes(attributes);
+  }
+
+  const optionMap = new Map();
+
+  for (const variant of variants) {
+    const name = String(variant.optionName || '').trim();
+    const value = String(variant.optionValue || '').trim();
+    if (!name || !value) continue;
+
+    if (!optionMap.has(name)) {
+      optionMap.set(name, new Map());
+    }
+
+    const values = optionMap.get(name);
+    const current = values.get(value);
+    const candidate = {
+      value,
+      imageUrl: variant.imageUrl || null,
+      swatchColor: swatchColorForValue(value),
+      quantity: Number(variant.quantity || 0),
+      sortOrder: Number(variant.sortOrder || 0),
+      legacyOptionValueId: variant.legacyOptionValueId ?? null,
+    };
+
+    if (!current || (!current.imageUrl && candidate.imageUrl)) {
+      values.set(value, candidate);
+    }
+  }
+
+  return Array.from(optionMap.entries()).map(([name, values]) => {
+    const valueDetails = Array.from(values.values()).sort(
+      (left, right) => left.sortOrder - right.sortOrder,
+    );
+
+    return {
+      name,
+      values: valueDetails.map((item) => item.value),
+      valueDetails,
+    };
+  });
+}
+
+function swatchColorForValue(value) {
+  const normalized = String(value || '').toLowerCase();
+  const matches = [
+    ['argintiu', '#c0c7d2'],
+    ['auriu', '#d8a923'],
+    ['antique gold', '#b08a3c'],
+    ['bronz', '#9a6334'],
+    ['cupru', '#b46a3c'],
+    ['nickel', '#9aa3a8'],
+    ['negru', '#151515'],
+    ['alb', '#f8fafc'],
+    ['rosu', '#dc2626'],
+    ['roz', '#f472b6'],
+    ['mov', '#8b5cf6'],
+    ['lavanda', '#b794f4'],
+    ['albastru', '#2563eb'],
+    ['turquaz', '#14b8a6'],
+    ['verde', '#16a34a'],
+    ['olive', '#708238'],
+    ['galben', '#facc15'],
+    ['portocaliu', '#f97316'],
+    ['maro', '#7c4a2d'],
+    ['bej', '#d6bd91'],
+    ['gri', '#94a3b8'],
+    ['transparent', 'transparent'],
+  ];
+
+  return matches.find(([name]) => normalized.includes(name))?.[1] || null;
 }
 
 function normalizeJsonArray(value) {

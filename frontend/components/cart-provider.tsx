@@ -168,7 +168,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
           return [
             updatedItem,
-            ...currentItems.filter((item) => item.product.id !== product.id),
+            ...currentItems.filter((_, index) => index !== existingIndex),
           ];
         });
         setBasketPulseToken((current) => current + 1);
