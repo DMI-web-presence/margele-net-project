@@ -2,3 +2,7 @@ node_modules
 .env
 backend/.env
 frontend/.env
+
+# Local legacy imports / media assets
+margele_oc.mysql.sql
+frontend/public/images/catalog/
