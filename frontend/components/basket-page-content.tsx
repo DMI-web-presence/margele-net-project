@@ -12,6 +12,7 @@ type Product = {
   description: string | null;
   price: string;
   imageUrl: string | null;
+  sku?: string | null;
   categoryId: number | null;
   createdAt: string;
 };
@@ -209,6 +210,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
             name: product?.name ?? item.product.name,
             imageUrl: product?.imageUrl ?? item.product.imageUrl,
             price: product?.price ?? item.product.price,
+            sku: item.product.sku ?? product?.sku ?? null,
             description: product?.description ?? null,
           },
         };
@@ -308,19 +310,12 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                         </Link>
 
                         <div className="space-y-3">
-                          <div className="space-y-1">
-                            <Link
-                              href={`/products/${item.product.id}`}
-                              className="text-xl font-semibold leading-7 text-slate-900 transition hover:text-slate-700"
-                            >
-                              {item.product.name}
-                            </Link>
-                            {item.product.description ? (
-                              <p className="text-sm leading-6 text-slate-600">
-                                {item.product.description}
-                              </p>
-                            ) : null}
-                          </div>
+                          <Link
+                            href={`/products/${item.product.id}`}
+                            className="text-xl font-semibold leading-7 text-slate-900 transition hover:text-slate-700"
+                          >
+                            {item.product.name}
+                          </Link>
 
                           <div className="space-y-1">
                             <p className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -332,12 +327,9 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                           </div>
 
                           <div className="flex flex-wrap gap-6 text-sm text-slate-600">
-                            <p>Produs ID: {item.product.id}</p>
+                            {item.product.sku ? <p>SKU: {item.product.sku}</p> : null}
                             {item.product.selectedSize ? (
                               <p className="font-semibold text-indigo-700">{item.product.selectedSize}</p>
-                            ) : null}
-                            {item.product.description ? (
-                              <p className="max-w-xl">Detalii: {item.product.description}</p>
                             ) : null}
                           </div>
 

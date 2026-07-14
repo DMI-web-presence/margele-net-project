@@ -26,6 +26,7 @@ type ProductPurchaseControlsProps = {
     name: string;
     price: string;
     imageUrl: string | null;
+    sku?: string | null;
   };
   productDetails?: {
     material: string;
@@ -358,6 +359,7 @@ export default function ProductPurchaseControls({
               {
                 ...product,
                 price: currentPrice.toFixed(2),
+                sku: currentSku || product.sku || null,
                 selectedSize: cartOption || null,
               },
               event.currentTarget,
