@@ -59,7 +59,7 @@ function ChevronDownIcon({ open = false }: { open?: boolean }) {
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
+      className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
     >
       <path
         d="M6 9l6 6 6-6"
@@ -98,11 +98,36 @@ export default function NavBar() {
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUser, setAuthUser] = useState<{ name?: string; email?: string } | null>(null);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const [isNavCompact, setIsNavCompact] = useState(false);
+  const [isHiddenOnMobile, setIsHiddenOnMobile] = useState(false);
 
   useEffect(() => {
+    let lastScrollY = window.scrollY;
+    let accumulatedDownScroll = 0;
+
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 24);
+      const currentScrollY = window.scrollY;
+      const delta = currentScrollY - lastScrollY;
+      const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+
+      setIsNavCompact(currentScrollY > 72);
+
+      if (isDesktop) {
+        setIsHiddenOnMobile(false);
+      } else if (currentScrollY < 32) {
+        accumulatedDownScroll = 0;
+        setIsHiddenOnMobile(false);
+      } else if (delta < -4) {
+        accumulatedDownScroll = 0;
+        setIsHiddenOnMobile(false);
+      } else if (delta > 0 && currentScrollY > 120) {
+        accumulatedDownScroll += delta;
+        if (accumulatedDownScroll > 96) {
+          setIsHiddenOnMobile(true);
+        }
+      }
+
+      lastScrollY = currentScrollY;
     };
 
     handleScroll();
@@ -164,10 +189,14 @@ export default function NavBar() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur transition-shadow duration-300 data-[scrolled=true]:shadow-sm" data-scrolled={isScrolled}>
+    <header
+      className={`sticky top-0 z-40 border-b bg-white/95 backdrop-blur transition-[box-shadow,background-color,border-color,transform] duration-500 ease-out lg:translate-y-0 ${
+        isNavCompact ? 'border-slate-200 shadow-md' : 'border-slate-200 shadow-none'
+      } ${isHiddenOnMobile ? '-translate-y-full' : 'translate-y-0'}`}
+    >
       <div
-        className={`mx-auto grid w-full max-w-[1400px] grid-cols-[auto_1fr_auto] items-center gap-4 px-6 transition-all duration-300 sm:px-10 lg:px-16 ${
-          isScrolled ? 'py-2' : 'py-4'
+        className={`mx-auto grid w-full max-w-[1400px] grid-cols-[auto_1fr_auto] items-center px-6 transition-[height,gap] duration-500 ease-out sm:px-10 lg:px-16 ${
+          isNavCompact ? 'h-14 gap-3' : 'h-20 gap-4'
         }`}
       >
         <Link href="/" className="inline-flex items-center" aria-label="Margele.net">
@@ -176,14 +205,19 @@ export default function NavBar() {
             alt="Margele.net"
             width={430}
             height={430}
-            className={`h-auto transition-all duration-300 ${
-              isScrolled ? 'w-[42px] sm:w-[48px]' : 'w-[56px] sm:w-[64px]'
+            className={`h-auto transition-[width] duration-500 ease-out ${
+              isNavCompact ? 'w-[42px] sm:w-[46px]' : 'w-[56px] sm:w-[64px]'
             }`}
             unoptimized
           />
         </Link>
 
-        <nav className="hidden items-center justify-center gap-2 md:flex" aria-label="Categorii produse">
+        <nav
+          className={`hidden items-center justify-center transition-[gap] duration-500 ease-out md:flex ${
+            isNavCompact ? 'gap-1' : 'gap-2'
+          }`}
+          aria-label="Categorii produse"
+        >
           <div
             className="relative"
             onMouseEnter={() => setIsCategoryMenuOpen(true)}
@@ -191,8 +225,8 @@ export default function NavBar() {
           >
             <button
               type="button"
-              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
-                isScrolled ? 'h-9' : 'h-10'
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isNavCompact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-[13px]'
               }`}
               aria-expanded={isCategoryMenuOpen}
               onClick={() => setIsCategoryMenuOpen((current) => !current)}
@@ -223,8 +257,8 @@ export default function NavBar() {
             <Link
               key={category.href}
               href={category.href}
-              className={`rounded-full px-3 text-sm font-semibold text-slate-600 transition-all duration-300 hover:bg-slate-100 hover:text-slate-900 ${
-                isScrolled ? 'py-1.5' : 'py-2'
+              className={`rounded-full font-semibold text-slate-600 transition-[padding,font-size,background-color,color] duration-500 ease-out hover:bg-slate-100 hover:text-slate-900 ${
+                isNavCompact ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'
               }`}
             >
               {category.label}
@@ -242,19 +276,21 @@ export default function NavBar() {
             <Link
               href="/cont"
               aria-label="Cont utilizator"
-              className={`inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
-                isScrolled ? 'h-9' : 'h-10'
+              className={`inline-flex max-w-[15rem] items-center gap-2 overflow-hidden whitespace-nowrap rounded-full border border-slate-200 font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isNavCompact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-sm'
               }`}
             >
-              <span>Bine ai revenit, {getFirstName(authUser?.name, authUser?.email)} 👋</span>
+              <span className="min-w-0 truncate whitespace-nowrap">
+                Bine ai revenit, {getFirstName(authUser?.name, authUser?.email)} 👋
+              </span>
               <ChevronDownIcon open={isAccountPreviewOpen} />
             </Link>
           ) : (
             <Link
               href="/autentificare"
               aria-label="Account"
-              className={`inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
-                isScrolled ? 'h-9 w-9' : 'h-10 w-10'
+              className={`inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
               }`}
             >
               <AccountIcon />
@@ -281,8 +317,8 @@ export default function NavBar() {
             href="/favorites"
             aria-label="Favorite"
             id="favorite-icon-button"
-            className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 ${
-              isScrolled ? 'h-9 w-9' : 'h-10 w-10'
+            className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 transition-[height,width,background-color,border-color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 ${
+              isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
             } ${
               isFavoritePulsing ? 'animate-[favorite-bump_400ms_ease-out]' : ''
             }`}
@@ -313,8 +349,8 @@ export default function NavBar() {
             href="/basket"
             aria-label="Basket"
             id="basket-icon-button"
-            className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-all duration-300 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
-              isScrolled ? 'h-9 w-9' : 'h-10 w-10'
+            className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+              isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
             } ${
               isBasketPulsing ? 'animate-[basket-bump_400ms_ease-out]' : ''
             }`}
