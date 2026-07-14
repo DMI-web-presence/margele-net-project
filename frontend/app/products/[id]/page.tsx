@@ -9,6 +9,7 @@ import { ProductReviewsProvider } from '@/components/product-reviews-provider';
 import ReviewsSection from '@/components/reviews-section';
 import ReviewsSummary from '@/components/reviews-summary';
 import SimilarProductsSlider from '@/components/similar-products-slider';
+import { formatCategoryLabel } from '@/lib/format-category-label';
 import { mockProducts } from '@/lib/mock-products';
 
 type Product = {
@@ -223,7 +224,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const similarProducts =
     (similarByCategory.length > 0 ? similarByCategory : similarFallback).slice(0, 9);
   const purchaseOptionGroups = getPurchaseOptionGroups(product);
-  const categoryLabel = product.category?.name || getCategoryLabel(product.categoryId);
+  const categoryLabel = formatCategoryLabel(product.category?.name || getCategoryLabel(product.categoryId));
   const availabilityLabel =
     product.stockQuantity === undefined || product.stockQuantity > 0 ? 'In stoc' : 'Stoc epuizat';
   const productCode = product.sku || `MGL-${String(product.id).padStart(4, '0')}`;
@@ -241,9 +242,6 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       <div className="mx-auto mb-8 flex w-full max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Detalii produs</p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-            {product.name}
-          </h1>
         </div>
         <Link
           href="/"
@@ -256,22 +254,24 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       <ProductReviewsProvider productId={product.id}>
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <div className="grid items-start gap-8 xl:grid-cols-[0.8fr_1.2fr]">
-          <Card className="relative h-[32rem] overflow-hidden bg-slate-950 text-white shadow-xl sm:h-[36rem] xl:h-[45rem]">
-            {product.imageUrl ? (
-              <div className="w-full h-full flex items-center justify-center">
-                <ProductImageMagnifier
-                  src={product.imageUrl}
-                  alt={product.name}
-                  width={800}
-                  height={800}
-                />
-              </div>
-            ) : (
-              <div className="flex h-[12rem] items-center justify-center bg-slate-900 text-slate-300 sm:h-[14rem] lg:h-[16rem]">
-                Imagine indisponibila
-              </div>
-            )}
-          </Card>
+          <div className="xl:sticky xl:top-28">
+            <Card className="relative aspect-square max-h-[34rem] overflow-hidden bg-white text-white shadow-xl">
+              {product.imageUrl ? (
+                <div className="flex h-full w-full items-end justify-center">
+                  <ProductImageMagnifier
+                    src={product.imageUrl}
+                    alt={product.name}
+                    width={800}
+                    height={800}
+                  />
+                </div>
+              ) : (
+                <div className="flex h-[12rem] items-center justify-center bg-slate-900 text-slate-300 sm:h-[14rem] lg:h-[16rem]">
+                  Imagine indisponibila
+                </div>
+              )}
+            </Card>
+          </div>
 
           <Card className="space-y-6 p-8">
             <div className="space-y-3">
@@ -290,7 +290,6 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                 <p className="text-3xl font-semibold tracking-tight text-slate-900">{product.name}</p>
               </div>
             </div>
-
             <ProductPurchaseControls
               product={{
                 id: product.id,

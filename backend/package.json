@@ -9,6 +9,7 @@
     "import:product-images": "node scripts/import-product-images.js",
     "import:product-options": "node scripts/import-product-options.js",
     "import:products": "node scripts/import-products.js",
+    "apply:curated-categories": "node scripts/apply-curated-categories.js",
     "dev": "node src/server.js",
     "start": "node src/server.js"
   },

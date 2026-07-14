@@ -60,7 +60,7 @@ export default function ProductImageMagnifier({
         alt={alt}
         width={width}
         height={height}
-        className="h-full w-full object-cover"
+        className="h-full w-full object-contain object-bottom"
         unoptimized
       />
 

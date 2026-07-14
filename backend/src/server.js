@@ -303,7 +303,24 @@ async function handleProductList(requestUrl, res) {
           )
         ) FILTER (WHERE pi.id IS NOT NULL),
         '[]'::jsonb
-      ) AS images
+      ) AS images,
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'id', linked_category.id,
+              'name', linked_category.name,
+              'slug', linked_category.slug,
+              'isPrimary', product_category.is_primary
+            )
+            ORDER BY product_category.is_primary DESC, linked_category.sort_order ASC, linked_category.name ASC
+          )
+          FROM product_categories product_category
+          JOIN categories linked_category ON linked_category.id = product_category.category_id
+          WHERE product_category.product_id = p.id
+        ),
+        '[]'::jsonb
+      ) AS categories
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN LATERAL (
@@ -402,7 +419,24 @@ async function handleProductDetails(res, productIdentifier) {
             )
           ) FILTER (WHERE pov.id IS NOT NULL),
           '[]'::jsonb
-        ) AS variants
+        ) AS variants,
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', linked_category.id,
+                'name', linked_category.name,
+                'slug', linked_category.slug,
+                'isPrimary', product_category.is_primary
+              )
+              ORDER BY product_category.is_primary DESC, linked_category.sort_order ASC, linked_category.name ASC
+            )
+            FROM product_categories product_category
+            JOIN categories linked_category ON linked_category.id = product_category.category_id
+            WHERE product_category.product_id = p.id
+          ),
+          '[]'::jsonb
+        ) AS categories
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
       LEFT JOIN LATERAL (
@@ -441,10 +475,11 @@ async function handleCategoryList(res) {
       c.*,
       parent.name AS parent_name,
       parent.slug AS parent_slug,
-      COUNT(p.id)::int AS product_count
+      COUNT(DISTINCT p.id)::int AS product_count
     FROM categories c
     LEFT JOIN categories parent ON parent.id = c.parent_id
-    LEFT JOIN products p ON p.category_id = c.id AND COALESCE(p.status, 'active') = 'active'
+    LEFT JOIN product_categories pc ON pc.category_id = c.id
+    LEFT JOIN products p ON p.id = pc.product_id AND COALESCE(p.status, 'active') = 'active'
     WHERE c.is_active = true
     GROUP BY c.id, parent.id
     ORDER BY c.sort_order ASC, c.name ASC
@@ -466,10 +501,11 @@ async function handleCategoryDetails(res, categoryIdentifier) {
         c.*,
         parent.name AS parent_name,
         parent.slug AS parent_slug,
-        COUNT(p.id)::int AS product_count
+        COUNT(DISTINCT p.id)::int AS product_count
       FROM categories c
       LEFT JOIN categories parent ON parent.id = c.parent_id
-      LEFT JOIN products p ON p.category_id = c.id AND COALESCE(p.status, 'active') = 'active'
+      LEFT JOIN product_categories pc ON pc.category_id = c.id
+      LEFT JOIN products p ON p.id = pc.product_id AND COALESCE(p.status, 'active') = 'active'
       WHERE ${numericId ? 'c.id = $1' : 'c.slug = $1'} AND c.is_active = true
       GROUP BY c.id, parent.id
       LIMIT 1
@@ -1302,6 +1338,7 @@ function productResponse(product) {
   const attributes = normalizeJsonArray(product.attributes);
   const images = normalizeJsonArray(product.images);
   const variants = normalizeJsonArray(product.variants);
+  const categories = normalizeJsonArray(product.categories);
   const options = productOptionsFromVariants(variants, attributes);
 
   return {
@@ -1324,6 +1361,7 @@ function productResponse(product) {
             slug: product.category_slug || '',
           }
         : null,
+    categories,
     sku: product.sku || null,
     stockQuantity: Number(product.stock_quantity || 0),
     status: product.status || 'active',
@@ -1373,12 +1411,25 @@ function buildProductFilters(requestUrl) {
     }
 
     values.push(parsedCategoryId);
-    clauses.push(`p.category_id = $${values.length}`);
+    clauses.push(
+      `EXISTS (
+        SELECT 1
+        FROM product_categories pc_filter
+        WHERE pc_filter.product_id = p.id AND pc_filter.category_id = $${values.length}
+      )`,
+    );
   }
 
   if (categorySlug) {
     values.push(categorySlug);
-    clauses.push(`c.slug = $${values.length}`);
+    clauses.push(
+      `EXISTS (
+        SELECT 1
+        FROM product_categories pc_filter
+        JOIN categories c_filter ON c_filter.id = pc_filter.category_id
+        WHERE pc_filter.product_id = p.id AND c_filter.slug = $${values.length}
+      )`,
+    );
   }
 
   return {

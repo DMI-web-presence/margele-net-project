@@ -36,15 +36,16 @@ export default function SizeSelector({
   const [internalSelectedSize, setInternalSelectedSize] = useState<string | null>(null);
   const [canCollapse, setCanCollapse] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [collapsedMaxHeight, setCollapsedMaxHeight] = useState<number | null>(null);
   const optionsListRef = useRef<HTMLDivElement | null>(null);
   const selectedSize = value !== undefined ? value : internalSelectedSize;
-  const hasImageOptions = sizes.some((size) => size.imageUrl);
 
   useEffect(() => {
     const optionsList = optionsListRef.current;
-    if (!optionsList || !hasImageOptions) {
+    if (!optionsList) {
       setCanCollapse(false);
       setIsExpanded(false);
+      setCollapsedMaxHeight(null);
       return;
     }
 
@@ -54,12 +55,16 @@ export default function SizeSelector({
       if (!firstItem) {
         setCanCollapse(false);
         setIsExpanded(false);
+        setCollapsedMaxHeight(null);
         return;
       }
 
       const firstRowTop = firstItem.offsetTop;
       const wrapsToAnotherRow = items.some((item) => item.offsetTop > firstRowTop + 1);
+      const firstRowItems = items.filter((item) => Math.abs(item.offsetTop - firstRowTop) <= 1);
+      const firstRowHeight = Math.max(...firstRowItems.map((item) => item.offsetHeight));
       setCanCollapse(wrapsToAnotherRow);
+      setCollapsedMaxHeight(firstRowHeight);
 
       if (!wrapsToAnotherRow) {
         setIsExpanded(false);
@@ -82,7 +87,7 @@ export default function SizeSelector({
       resizeObserver.disconnect();
       window.removeEventListener('resize', measureWrap);
     };
-  }, [hasImageOptions, selectedSize, sizes.length]);
+  }, [selectedSize, sizes.length]);
 
   const toggleSize = (size: string) => {
     if (disabled || disabledValues.includes(size)) return;
@@ -105,8 +110,13 @@ export default function SizeSelector({
       <div
         ref={optionsListRef}
         className={`flex flex-wrap gap-2 transition-[max-height] duration-200 ${
-          hasImageOptions && canCollapse && !isExpanded ? 'max-h-[5.25rem] overflow-hidden' : ''
+          canCollapse && !isExpanded ? 'overflow-hidden' : ''
         }`}
+        style={
+          canCollapse && !isExpanded && collapsedMaxHeight
+            ? { maxHeight: `${collapsedMaxHeight}px` }
+            : undefined
+        }
       >
         {sizes.map((size) => {
           const isSelected = selectedSize === size.value;
@@ -183,7 +193,7 @@ export default function SizeSelector({
           );
         })}
       </div>
-      {hasImageOptions && canCollapse ? (
+      {canCollapse ? (
         <button
           type="button"
           onClick={() => setIsExpanded((current) => !current)}
