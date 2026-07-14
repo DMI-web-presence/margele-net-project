@@ -334,10 +334,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                           <div className="flex flex-wrap gap-6 text-sm text-slate-600">
                             <p>Produs ID: {item.product.id}</p>
                             {item.product.selectedSize ? (
-                              <p>
-                                <span className="font-semibold text-slate-900">Marime:</span>{' '}
-                                {item.product.selectedSize}
-                              </p>
+                              <p className="font-semibold text-indigo-700">{item.product.selectedSize}</p>
                             ) : null}
                             {item.product.description ? (
                               <p className="max-w-xl">Detalii: {item.product.description}</p>

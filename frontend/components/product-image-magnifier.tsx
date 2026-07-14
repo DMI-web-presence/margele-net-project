@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type ProductImageMagnifierProps = {
   src: string;
@@ -17,8 +17,23 @@ export default function ProductImageMagnifier({
   height = 800,
 }: ProductImageMagnifierProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [activeSrc, setActiveSrc] = useState(src);
   const [isActive, setIsActive] = useState(false);
   const [position, setPosition] = useState({ x: 50, y: 50 });
+
+  useEffect(() => {
+    setActiveSrc(src);
+  }, [src]);
+
+  useEffect(() => {
+    const handleOptionImageChange = (event: Event) => {
+      const nextSrc = (event as CustomEvent<{ src?: string | null }>).detail?.src;
+      setActiveSrc(nextSrc || src);
+    };
+
+    window.addEventListener('product-option-image-change', handleOptionImageChange);
+    return () => window.removeEventListener('product-option-image-change', handleOptionImageChange);
+  }, [src]);
 
   const handleMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
@@ -41,7 +56,7 @@ export default function ProductImageMagnifier({
       className="relative flex h-full w-full items-center justify-center overflow-hidden"
     >
       <Image
-        src={src}
+        src={activeSrc}
         alt={alt}
         width={width}
         height={height}
@@ -56,7 +71,7 @@ export default function ProductImageMagnifier({
           style={{
             left: `${position.x}%`,
             top: `${position.y}%`,
-            backgroundImage: `url(${src})`,
+            backgroundImage: `url(${activeSrc})`,
             backgroundRepeat: 'no-repeat',
             backgroundSize: `cover`,
             backgroundPosition: `${position.x}% ${position.y}%`,

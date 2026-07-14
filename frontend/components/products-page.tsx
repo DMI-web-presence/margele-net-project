@@ -15,7 +15,28 @@ type Product = {
   price: string;
   imageUrl: string | null;
   categoryId: number | null;
+  attributes?: ProductAttribute[];
+  options?: ProductOption[] | ProductOption;
+  sizes?: string[];
   createdAt: string;
+};
+
+type ProductAttribute = {
+  key: string;
+  value: string;
+  sortOrder?: number;
+};
+
+type ProductOption = {
+  name: string;
+  values: string[];
+  valueDetails?: ProductOptionValue[];
+};
+
+type ProductOptionValue = {
+  value: string;
+  imageUrl?: string | null;
+  swatchColor?: string | null;
 };
 
 type ProductsPageProps = {
@@ -49,12 +70,69 @@ const categoryGroups = [
 ] as const;
 
 const colorOptions = ['Toate culorile', 'Alb', 'Rosu', 'Verde', 'Auriu', 'Argintiu', 'Natural'];
-const dimensionOptions = ['Toate dimensiunile', '6.5 mm', '8.5 mm', '10.5 mm', '12.5 mm', '14.5 mm'];
 const producerOptions = ['Toti producatorii', 'Margele.net', 'Degetar', 'Import'];
 const priceStep = 0.5;
 const pageSizeOptions = [12, 24, 35, 48];
 
 const roundToPriceStep = (value: number) => Math.round(value / priceStep) * priceStep;
+
+const preferredDimensionNames = ['dimensiune', 'marime', 'diametru', 'ambalaj'];
+
+const normalizeProductOptions = (product: Product): ProductOption[] => {
+  const apiOptions = Array.isArray(product.options)
+    ? product.options
+    : product.options
+      ? [product.options]
+      : [];
+  const options = apiOptions
+    .map((option) => {
+      const name = String(option.name || 'Optiune').trim();
+      const valueDetails = option.valueDetails || [];
+      const isColorOption = name.toLowerCase().includes('culoare');
+      const visibleValueDetails =
+        isColorOption && valueDetails.some((value) => value.imageUrl)
+          ? valueDetails.filter((value) => value.imageUrl)
+          : isColorOption
+            ? []
+            : valueDetails;
+
+      return {
+        name,
+        values: Array.from(
+          new Set(
+            visibleValueDetails.length > 0
+              ? visibleValueDetails.map((value) => String(value.value || '').trim()).filter(Boolean)
+              : [],
+          ),
+        ),
+      };
+    })
+    .filter((option) => option.name && option.values.length > 0);
+
+  if (options.length > 0) {
+    return options;
+  }
+
+  return [];
+};
+
+const getProductOptionTags = (product: Product) =>
+  normalizeProductOptions(product)
+    .flatMap((option) => option.values.map((value) => `${option.name}: ${value}`))
+    .slice(0, 4);
+
+const getDimensionValues = (products: Product[]) =>
+  Array.from(
+    new Set(
+      products.flatMap((product) =>
+        normalizeProductOptions(product)
+          .filter((option) =>
+            preferredDimensionNames.some((name) => option.name.toLowerCase().includes(name)),
+          )
+          .flatMap((option) => option.values),
+      ),
+    ),
+  ).slice(0, 30);
 
 function FilterGroup({
   title,
@@ -129,6 +207,7 @@ export default function ProductsPage({ products }: ProductsPageProps) {
       max: Math.ceil(Math.max(...prices)),
     };
   }, [products]);
+  const dimensionOptions = useMemo(() => getDimensionValues(products), [products]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Toate');
   const [subcategory, setSubcategory] = useState('Toate');
@@ -191,7 +270,8 @@ export default function ProductsPage({ products }: ProductsPageProps) {
   const filteredProducts = useMemo(() => {
     return products
       .filter((product) => {
-        const text = `${product.name} ${product.description ?? ''}`.toLowerCase();
+        const optionText = getProductOptionTags(product).join(' ');
+        const text = `${product.name} ${product.description ?? ''} ${optionText}`.toLowerCase();
         return text.includes(search.toLowerCase());
       })
       .filter((product) => {
@@ -214,7 +294,8 @@ export default function ProductsPage({ products }: ProductsPageProps) {
         return price >= minPrice && price <= maxPrice;
       })
       .filter((product) => {
-        const text = `${product.name} ${product.description ?? ''}`.toLowerCase();
+        const optionText = getProductOptionTags(product).join(' ');
+        const text = `${product.name} ${product.description ?? ''} ${optionText}`.toLowerCase();
         const matchesColor =
           selectedColors.length === 0 ||
           selectedColors.some((value) => text.includes(value.toLowerCase()));
@@ -357,7 +438,7 @@ export default function ProductsPage({ products }: ProductsPageProps) {
 
             <FilterGroup
               title="Dimensiune"
-              options={dimensionOptions.slice(1)}
+              options={dimensionOptions}
               selectedValues={selectedDimensions}
               onToggle={(value) => toggleSelectedValue(value, selectedDimensions, setSelectedDimensions)}
             />
@@ -468,6 +549,7 @@ export default function ProductsPage({ products }: ProductsPageProps) {
         <div className="mt-6 grid items-stretch justify-items-center gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {paginatedProducts.map((product) => {
             const favorited = isFavorite(product.id);
+            const optionTags = getProductOptionTags(product);
             return (
             <Card key={product.id} className="flex h-full w-full max-w-[16rem] flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
               <div className="relative">
@@ -518,6 +600,18 @@ export default function ProductsPage({ products }: ProductsPageProps) {
                   >
                     {product.name}
                   </Link>
+                  {optionTags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {optionTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="line-clamp-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-6">

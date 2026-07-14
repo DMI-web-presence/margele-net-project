@@ -58,7 +58,7 @@ export default function BasketPreviewCard({ items, totalCount }: BasketPreviewCa
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-900">{item.product.name}</p>
                       {item.product.selectedSize ? (
-                        <p className="text-xs font-semibold text-indigo-700">Marime: {item.product.selectedSize}</p>
+                        <p className="text-xs font-semibold text-indigo-700">{item.product.selectedSize}</p>
                       ) : null}
                       <p className="text-xs text-slate-500">{numberFormatter.format(Number(item.product.price))}</p>
                     </div>
