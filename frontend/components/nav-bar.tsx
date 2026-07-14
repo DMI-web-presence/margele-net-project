@@ -14,9 +14,10 @@ const backendUrl =
 
 const categoryLinks = [
   { label: 'Toate', href: '/catalog' },
-  { label: 'Evenimente', href: '/catalog?category=event' },
-  { label: 'Craciun', href: '/catalog?category=1' },
-  { label: 'Pandantive', href: '/catalog?category=2' },
+  { label: 'Margele', href: '/catalog?category=margele' },
+  { label: 'Accesorii', href: '/catalog?category=accesorii-bijuterii' },
+  { label: 'Evenimente', href: '/catalog?category=decoratiuni-si-evenimente' },
+  { label: 'Reduceri', href: '/catalog?category=reduceri-lichidare-stoc' },
 ];
 
 function AccountIcon() {

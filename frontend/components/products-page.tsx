@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/components/cart-provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { formatCategoryLabel } from '@/lib/format-category-label';
 
 type Product = {
   id: number;
@@ -15,10 +16,40 @@ type Product = {
   price: string;
   imageUrl: string | null;
   categoryId: number | null;
+  category?: ProductCategory | null;
+  categories?: ProductCategory[];
   attributes?: ProductAttribute[];
   options?: ProductOption[] | ProductOption;
   sizes?: string[];
   createdAt: string;
+};
+
+type ProductCategory = {
+  id: number;
+  name: string;
+  slug: string;
+  isPrimary?: boolean;
+};
+
+type Category = {
+  id: number;
+  parentId: number | null;
+  name: string;
+  slug: string;
+  productCount?: number;
+};
+
+type CategoryGroup = {
+  id: string;
+  label: string;
+  categoryIds: number[];
+  categorySlugs: string[];
+  children: {
+    id: string;
+    label: string;
+    categoryIds: number[];
+    categorySlugs: string[];
+  }[];
 };
 
 type ProductAttribute = {
@@ -41,6 +72,7 @@ type ProductOptionValue = {
 
 type ProductsPageProps = {
   products: Product[];
+  categories?: Category[];
 };
 
 const numberFormatter = new Intl.NumberFormat('ro-RO', {
@@ -49,25 +81,107 @@ const numberFormatter = new Intl.NumberFormat('ro-RO', {
   currencyDisplay: 'narrowSymbol',
 });
 
-const categoryDefinitions: Record<number, { label: string; parentId?: string }> = {
-  1: { label: 'Craciun', parentId: 'event' },
-  2: { label: 'pandandive' },
+const curatedRootSlugs = [
+  'margele',
+  'accesorii-bijuterii',
+  'pandantive-si-charm-uri',
+  'fire-snururi-si-elastice',
+  'materiale-handmade',
+  'decoratiuni-si-evenimente',
+  'unelte',
+  'seturi-si-mixuri',
+  'reduceri-lichidare-stoc',
+];
+
+const curatedCategoryChildrenByRootSlug: Record<string, string[]> = {
+  margele: [
+    'margele-toho',
+    'margele-miyuki',
+    'margele-de-sticla',
+    'margele-fatetate',
+    'margele-acrilice',
+    'margele-lemn',
+    'margele-metalice',
+    'margele-shamballa',
+    'margele-cu-litere',
+    'mixuri-margele',
+  ],
+  'accesorii-bijuterii': [
+    'incuietori',
+    'tortite-cercei',
+    'zale-si-inele',
+    'ace-si-tije',
+    'capacele-margele',
+    'distantieri',
+    'conectori',
+    'baze-brose',
+    'baze-inele',
+    'lanturi',
+  ],
+  'pandantive-si-charm-uri': [
+    'pandantive-metalice',
+    'charm-uri-tematice',
+    'charm-uri-inimioare',
+    'charm-uri-stele-flori',
+    'pandantive-sticla',
+    'pandantive-lemn',
+    'medalioane',
+  ],
+  'fire-snururi-si-elastice': [
+    'ata-elastica',
+    'fir-siliconic',
+    'snur-cerat',
+    'snur-piele-ecologic',
+    'sarma-modelaj',
+    'fir-nylon',
+    'accesorii-pentru-insirat',
+  ],
+  'materiale-handmade': [
+    'pasta-modelatoare',
+    'fetru',
+    'paiete',
+    'panglici',
+    'pompoane',
+    'nasturi-decorativi',
+    'elemente-textile',
+    'adezivi-si-lacuri',
+  ],
+  'decoratiuni-si-evenimente': [
+    'craciun',
+    'martisor-si-ziua-femeii',
+    'paste',
+    'nunta-si-botez',
+    'decoratiuni-festive',
+    'ambalaje-cadou',
+    'accesorii-coronite',
+  ],
+  unelte: ['clesti-bijuterii', 'foarfeci', 'ace', 'pensete', 'organizatoare', 'matrite-si-sabloane'],
+  'seturi-si-mixuri': [
+    'seturi-bijuterii',
+    'mixuri-accesorii',
+    'mixuri-margele-seturi',
+    'kituri-handmade',
+    'pachete-tematice',
+  ],
+  'reduceri-lichidare-stoc': ['produse-reduse', 'ultimele-bucati', 'stoc-limitat'],
 };
 
-const parentCategoryLabels: Record<string, string> = {
-  event: 'Articole pentru evenimente',
-};
-
-const categoryGroups = [
-  { id: 'Toate', label: 'Toate categoriile', children: [] },
+const fallbackCategoryGroups: CategoryGroup[] = [
   {
-    id: 'event',
-    label: parentCategoryLabels.event,
-    children: [{ id: 1, label: 'Craciun' }],
+    id: 'Toate',
+    label: 'Toate categoriile',
+    categoryIds: [],
+    categorySlugs: [],
+    children: [],
   },
-  { id: '2', label: categoryDefinitions[2].label, children: [] },
-  { id: 'uncategorized', label: 'Uncategorized', children: [] },
-] as const;
+  {
+    id: 'uncategorized',
+    label: 'Uncategorized',
+    categoryIds: [],
+    categorySlugs: [],
+    children: [],
+  },
+];
 
 const colorOptions = ['Toate culorile', 'Alb', 'Rosu', 'Verde', 'Auriu', 'Argintiu', 'Natural'];
 const producerOptions = ['Toti producatorii', 'Margele.net', 'Degetar', 'Import'];
@@ -134,6 +248,90 @@ const getDimensionValues = (products: Product[]) =>
     ),
   ).slice(0, 30);
 
+const buildCategoryGroups = (categories: Category[] = []): CategoryGroup[] => {
+  if (categories.length === 0) {
+    return fallbackCategoryGroups;
+  }
+
+  const childrenByParentId = new Map<number, Category[]>();
+  for (const category of categories) {
+    if (!category.parentId) continue;
+    const children = childrenByParentId.get(category.parentId) || [];
+    children.push(category);
+    childrenByParentId.set(category.parentId, children);
+  }
+
+  const curatedRoots = curatedRootSlugs
+    .map((slug) => categories.find((category) => category.slug === slug))
+    .filter(Boolean) as Category[];
+
+  const dynamicGroups = curatedRoots.map((root) => {
+    const childOrder = curatedCategoryChildrenByRootSlug[root.slug] || [];
+    const allowedChildSlugs = new Set(childOrder);
+    const children = (childrenByParentId.get(root.id) || [])
+      .filter((child) => allowedChildSlugs.has(child.slug) && (child.productCount ?? 0) > 0)
+      .sort((left, right) => childOrder.indexOf(left.slug) - childOrder.indexOf(right.slug))
+      .map((child) => ({
+        id: child.slug || String(child.id),
+        label: formatCategoryLabel(child.name),
+        categoryIds: [child.id],
+        categorySlugs: [child.slug],
+      }));
+
+    return {
+      id: root.slug || String(root.id),
+      label: formatCategoryLabel(root.name),
+      categoryIds: [root.id],
+      categorySlugs: [root.slug],
+      children,
+    };
+  });
+
+  return [fallbackCategoryGroups[0], ...dynamicGroups, fallbackCategoryGroups[1]];
+};
+
+const productCategoryIdentity = (product: Product) => {
+  const categories = product.categories || [];
+
+  return {
+    ids: new Set([
+      ...(product.categoryId ? [product.categoryId] : []),
+      ...categories.map((category) => category.id),
+      ...(product.category?.id ? [product.category.id] : []),
+    ]),
+    slugs: new Set([
+      ...categories.map((category) => category.slug).filter(Boolean),
+      ...(product.category?.slug ? [product.category.slug] : []),
+    ]),
+  };
+};
+
+const productMatchesCategoryGroup = (
+  product: Product,
+  group: CategoryGroup,
+  selectedSubcategory: string,
+) => {
+  const identity = productCategoryIdentity(product);
+
+  if (selectedSubcategory !== 'Toate') {
+    const child = group.children.find((item) => item.id === selectedSubcategory);
+    if (!child) return false;
+
+    return (
+      child.categoryIds.some((id) => identity.ids.has(id)) ||
+      child.categorySlugs.some((slug) => identity.slugs.has(slug))
+    );
+  }
+
+  const candidates = group.children.length > 0 ? group.children : [group];
+
+  return candidates.some(
+    (candidate) =>
+      candidate.categoryIds.some((id) => identity.ids.has(id)) ||
+      candidate.categorySlugs.some((slug) => identity.slugs.has(slug)),
+  );
+};
+
 function FilterGroup({
   title,
   options,
@@ -193,9 +391,10 @@ function FavoriteButtonIcon({ filled = false }: { filled?: boolean }) {
   );
 }
 
-export default function ProductsPage({ products }: ProductsPageProps) {
+export default function ProductsPage({ products, categories = [] }: ProductsPageProps) {
   const { addToCart, toggleFavorite, isFavorite } = useCart();
   const searchParams = useSearchParams();
+  const categoryGroups = useMemo(() => buildCategoryGroups(categories), [categories]);
   const priceBounds = useMemo(() => {
     const prices = products.map((product) => Number(product.price)).filter(Number.isFinite);
     if (prices.length === 0) {
@@ -252,20 +451,24 @@ export default function ProductsPage({ products }: ProductsPageProps) {
         return;
       }
 
-      if (categoryParam === '1') {
-        setCategory('event');
-        setSubcategory('1');
+      const selectedMainGroup = categoryGroups.find((group) => group.id === categoryParam);
+      if (selectedMainGroup) {
+        setCategory(selectedMainGroup.id);
+        setSubcategory('Toate');
         return;
       }
 
-      if (categoryParam === 'event' || categoryParam === '2' || categoryParam === 'uncategorized') {
-        setCategory(categoryParam);
-        setSubcategory('Toate');
+      const selectedChildGroup = categoryGroups.find((group) =>
+        group.children.some((child) => child.id === categoryParam),
+      );
+      if (selectedChildGroup) {
+        setCategory(selectedChildGroup.id);
+        setSubcategory(categoryParam);
       }
     }, 0);
 
     return () => window.clearTimeout(timeout);
-  }, [searchParams]);
+  }, [categoryGroups, searchParams]);
 
   const filteredProducts = useMemo(() => {
     return products
@@ -278,16 +481,7 @@ export default function ProductsPage({ products }: ProductsPageProps) {
         if (category === 'Toate') return true;
         if (category === 'uncategorized') return product.categoryId == null;
 
-        const productCategoryId = product.categoryId ?? 0;
-
-        if (selectedGroup.children.length > 0) {
-          if (subcategory === 'Toate') {
-            return selectedGroup.children.some((child) => child.id === productCategoryId);
-          }
-          return productCategoryId === Number(subcategory);
-        }
-
-        return String(productCategoryId) === category;
+        return productMatchesCategoryGroup(product, selectedGroup, subcategory);
       })
       .filter((product) => {
         const price = Number(product.price);
@@ -525,7 +719,7 @@ export default function ProductsPage({ products }: ProductsPageProps) {
         <div>
           <div className="flex items-center justify-between gap-4 sm:flex-row sm:gap-0">
             <div>
-              <p className="text-sm font-medium text-slate-500">{filteredProducts.length} produse afisate</p>
+              <p className="text-sm font-medium text-slate-500">{filteredProducts.length} produse in total</p>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <label htmlFor="products-per-page" className="font-medium">

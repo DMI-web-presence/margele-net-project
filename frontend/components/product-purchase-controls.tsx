@@ -218,142 +218,136 @@ export default function ProductPurchaseControls({
           return hints;
         }, {})
       : {};
+  const optionSelectors = groups.map((group) => {
+    if (group.options.length === 0) return null;
 
-  return (
-    <div className="space-y-5">
-      <div className="space-y-2">
-        <p className="text-4xl font-extrabold leading-tight text-indigo-700">{currentPriceText}</p>
-        {productDetails ? (
-          <div className="space-y-1 text-sm text-slate-700">
-            <p>
-              <span className="font-semibold text-slate-900">Material:</span> {productDetails.material}
-              {productDetails.tag ? (
-                <span className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                  {productDetails.tag}
-                </span>
-              ) : null}
-            </p>
-            <p>
-              <span className="font-semibold text-slate-900">Disponibilitate:</span> {productDetails.availability}
-            </p>
-            {productDetails.code ? (
-              <p>
-                <span className="font-semibold text-slate-900">Cod produs:</span> {productDetails.code}
-              </p>
-            ) : null}
-            {currentSku ? (
-              <p>
-                <span className="font-semibold text-slate-900">SKU:</span> {currentSku}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        {children}
-      </div>
+    const isImageOptionGroup = group.options.some((option) => option.imageUrl);
+    const shouldWaitForImageOption = !isImageOptionGroup && hasImageOptionGroups && !hasSelectedImageOption;
 
-      {groups.map((group) => {
-        if (group.options.length === 0) return null;
+    return (
+      <SizeSelector
+        key={group.name}
+        sizes={group.options}
+        label={group.name}
+        helperText={
+          shouldWaitForImageOption
+            ? 'Selecteaza o culoare pentru a vedea dimensiunile disponibile.'
+            : undefined
+        }
+        disabled={shouldWaitForImageOption}
+        allowDeselect={!isImageOptionGroup}
+        valueHints={
+          !isImageOptionGroup && selectedImageValueId
+            ? Object.fromEntries(
+                group.options
+                  .filter((option) => option.legacyOptionValueId)
+                  .map((option) => [
+                    option.value,
+                    priceHintsByOptionValue[String(option.legacyOptionValueId)] ?? '',
+                  ])
+                  .filter(([, hint]) => hint),
+              )
+            : {}
+        }
+        disabledValues={
+          !isImageOptionGroup && selectedImageValueId
+            ? group.options
+                .filter((option) => {
+                  const optionValueId = option.legacyOptionValueId;
+                  if (!optionValueId) return false;
 
-        const isImageOptionGroup = group.options.some((option) => option.imageUrl);
-        const shouldWaitForImageOption = !isImageOptionGroup && hasImageOptionGroups && !hasSelectedImageOption;
-
-        return (
-          <SizeSelector
-            key={group.name}
-            sizes={group.options}
-            label={group.name}
-            helperText={
-              shouldWaitForImageOption
-                ? 'Selecteaza o culoare pentru a vedea dimensiunile disponibile.'
-                : undefined
-            }
-            disabled={shouldWaitForImageOption}
-            allowDeselect={!isImageOptionGroup}
-            valueHints={
-              !isImageOptionGroup && selectedImageValueId
-                ? Object.fromEntries(
-                    group.options
-                      .filter((option) => option.legacyOptionValueId)
-                      .map((option) => [
-                        option.value,
-                        priceHintsByOptionValue[String(option.legacyOptionValueId)] ?? '',
-                      ])
-                      .filter(([, hint]) => hint),
-                  )
-                : {}
-            }
-            disabledValues={
-              !isImageOptionGroup && selectedImageValueId
-                ? group.options
-                    .filter((option) => {
-                      const optionValueId = option.legacyOptionValueId;
-                      if (!optionValueId) return false;
-
-                      return !variants.some(
-                        (variant) =>
-                          variant.legacyOptionValueId === optionValueId &&
-                          variant.combinationId
-                            ?.split('-')
-                            .map((part) => Number(part))
-                            .includes(selectedImageValueId),
-                      );
-                    })
-                    .map((option) => option.value)
-                : []
-            }
-            value={selectedOptions[group.name] ?? null}
-            onChange={(value) => {
-              const selectedOption = group.options.find((option) => option.value === value);
-              const isImageOptionGroup = group.options.some((option) => option.imageUrl);
-              if (isImageOptionGroup) {
-                window.dispatchEvent(
-                  new CustomEvent('product-option-image-change', {
-                    detail: { src: selectedOption?.imageUrl ?? null },
-                  }),
-                );
-              }
-
-              setSelectedOptions((current) => {
-                const nextOptions = {
-                  ...current,
-                  [group.name]: value,
-                };
-
-                if (!isImageOptionGroup) {
-                  return nextOptions;
-                }
-
-                const selectedImageValueId = selectedOption?.legacyOptionValueId;
-                for (const dependentGroup of groups.filter(
-                  (item) => !item.options.some((option) => option.imageUrl),
-                )) {
-                  const currentDependentOption = dependentGroup.options.find(
-                    (option) => option.value === current[dependentGroup.name],
+                  return !variants.some(
+                    (variant) =>
+                      variant.legacyOptionValueId === optionValueId &&
+                      variant.combinationId
+                        ?.split('-')
+                        .map((part) => Number(part))
+                        .includes(selectedImageValueId),
                   );
+                })
+                .map((option) => option.value)
+            : []
+        }
+        value={selectedOptions[group.name] ?? null}
+        onChange={(value) => {
+          const selectedOption = group.options.find((option) => option.value === value);
+          const isImageOptionGroup = group.options.some((option) => option.imageUrl);
+          if (isImageOptionGroup) {
+            window.dispatchEvent(
+              new CustomEvent('product-option-image-change', {
+                detail: { src: selectedOption?.imageUrl ?? null },
+              }),
+            );
+          }
 
-                  const isStillAvailable =
-                    selectedImageValueId &&
-                    currentDependentOption?.legacyOptionValueId &&
-                    variants.some(
-                      (variant) =>
-                        variant.legacyOptionValueId === currentDependentOption.legacyOptionValueId &&
-                        variant.combinationId
-                          ?.split('-')
-                          .map((part) => Number(part))
-                          .includes(selectedImageValueId),
-                    );
+          setSelectedOptions((current) => {
+            const nextOptions = {
+              ...current,
+              [group.name]: value,
+            };
 
-                  nextOptions[dependentGroup.name] = isStillAvailable
-                    ? currentDependentOption.value
-                    : null;
-                }
+            if (!isImageOptionGroup) {
+              return nextOptions;
+            }
 
-                return nextOptions;
-              });
-            }}
-          />
-        );
-      })}
+            const selectedImageValueId = selectedOption?.legacyOptionValueId;
+            for (const dependentGroup of groups.filter(
+              (item) => !item.options.some((option) => option.imageUrl),
+            )) {
+              const currentDependentOption = dependentGroup.options.find(
+                (option) => option.value === current[dependentGroup.name],
+              );
+
+              const isStillAvailable =
+                selectedImageValueId &&
+                currentDependentOption?.legacyOptionValueId &&
+                variants.some(
+                  (variant) =>
+                    variant.legacyOptionValueId === currentDependentOption.legacyOptionValueId &&
+                    variant.combinationId
+                      ?.split('-')
+                      .map((part) => Number(part))
+                      .includes(selectedImageValueId),
+                );
+
+              nextOptions[dependentGroup.name] = isStillAvailable
+                ? currentDependentOption.value
+                : null;
+            }
+
+            return nextOptions;
+          });
+        }}
+      />
+    );
+  });
+  const metadata = productDetails ? (
+    <div className="space-y-1 text-sm text-slate-700">
+      <p>
+        <span className="font-semibold text-slate-900">Material:</span> {productDetails.material}
+        {productDetails.tag ? (
+          <span className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+            {productDetails.tag}
+          </span>
+        ) : null}
+      </p>
+      <p>
+        <span className="font-semibold text-slate-900">Disponibilitate:</span> {productDetails.availability}
+      </p>
+      {productDetails.code ? (
+        <p>
+          <span className="font-semibold text-slate-900">Cod produs:</span> {productDetails.code}
+        </p>
+      ) : null}
+      {currentSku ? (
+        <p>
+          <span className="font-semibold text-slate-900">SKU:</span> {currentSku}
+        </p>
+      ) : null}
+    </div>
+  ) : null;
+  const actions = (
+    <>
       <QuantitySelector value={quantity} onChange={setQuantity} />
 
       <div className="flex items-center gap-2">
@@ -375,6 +369,19 @@ export default function ProductPurchaseControls({
         </Button>
         <ProductFavoriteIconButton product={product} />
       </div>
+    </>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <p className="text-4xl font-extrabold leading-tight text-indigo-700">{currentPriceText}</p>
+        {metadata}
+        {children}
+      </div>
+
+      {optionSelectors}
+      {actions}
     </div>
   );
 }

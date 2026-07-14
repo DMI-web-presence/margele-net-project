@@ -53,6 +53,7 @@ async function main() {
           product.id,
         ),
         categoryId: chooseCategoryId(productCategories.get(product.id) || [], existingCategoryIds),
+        categoryIds: chooseCategoryIds(productCategories.get(product.id) || [], existingCategoryIds),
       };
     })
     .filter(Boolean);
@@ -113,6 +114,20 @@ async function main() {
           product.dateModified,
         ],
       );
+
+      await client.query('DELETE FROM product_categories WHERE product_id = $1', [product.id]);
+
+      for (const categoryId of product.categoryIds) {
+        await client.query(
+          `
+            INSERT INTO product_categories (product_id, category_id, is_primary)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (product_id, category_id) DO UPDATE
+            SET is_primary = EXCLUDED.is_primary
+          `,
+          [product.id, categoryId, categoryId === product.categoryId],
+        );
+      }
     }
 
     await client.query(`
@@ -154,9 +169,13 @@ function groupProductCategories(rows) {
 }
 
 function chooseCategoryId(categoryIds, existingCategoryIds) {
-  const existingIds = categoryIds.filter((categoryId) => existingCategoryIds.has(categoryId));
+  const existingIds = chooseCategoryIds(categoryIds, existingCategoryIds);
   if (existingIds.length === 0) return null;
   return existingIds[existingIds.length - 1];
+}
+
+function chooseCategoryIds(categoryIds, existingCategoryIds) {
+  return [...new Set(categoryIds.filter((categoryId) => existingCategoryIds.has(categoryId)))];
 }
 
 function parseTableRows(sql, tableName) {
