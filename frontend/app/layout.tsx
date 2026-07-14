@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CartProvider } from "@/components/cart-provider";
+import CookieConsent from "@/components/cookie-consent";
 import Footer from "@/components/footer";
 import { Geist, Geist_Mono } from "next/font/google";
 import NavigationHistory from "@/components/navigation-history";
@@ -42,6 +43,7 @@ export default function RootLayout({
           <div className="flex-1">{children}</div>
           <NavigationHistory />
           <Footer />
+          <CookieConsent />
         </CartProvider>
       </body>
     </html>
