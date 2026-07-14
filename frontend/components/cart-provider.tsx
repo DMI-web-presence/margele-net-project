@@ -8,6 +8,7 @@ export type CartProduct = {
   name: string;
   price: string;
   imageUrl: string | null;
+  sku?: string | null;
   selectedSize?: string | null;
 };
 

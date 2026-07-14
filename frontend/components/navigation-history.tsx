@@ -77,10 +77,10 @@ export default function NavigationHistory() {
             <Link
               key={item.href}
               href={item.href}
-              className="group flex min-w-[9rem] max-w-[11rem] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 hover:shadow-sm"
+              className="group flex h-[13.75rem] w-[9rem] shrink-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-950 hover:shadow-sm"
             >
               {item.imageUrl ? (
-                <div className="relative aspect-square bg-slate-100">
+                <div className="relative h-[8.5rem] shrink-0 bg-slate-100">
                   <Image
                     src={item.imageUrl}
                     alt={item.label}
@@ -90,7 +90,7 @@ export default function NavigationHistory() {
                   />
                 </div>
               ) : null}
-              <span className="line-clamp-2 px-3 py-2">{item.label}</span>
+              <span className="line-clamp-3 min-h-0 px-3 py-2 leading-5">{item.label}</span>
             </Link>
           ))}
         </div>
