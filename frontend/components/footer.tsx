@@ -8,7 +8,7 @@ const infoLinks = [
   { label: 'Transport', href: '#' },
   { label: 'Conditii Retur', href: '#' },
   { label: 'Cum cumpar', href: '#' },
-  { label: 'Despre noi', href: '#' },
+  { label: 'Despre noi', href: '/despre-noi' },
   { label: 'GDPR', href: '/gdpr' },
 ];
 const storeLinks = [
