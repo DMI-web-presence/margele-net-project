@@ -16,7 +16,7 @@ const categoryLinks = [
   { label: 'Toate', href: '/catalog' },
   { label: 'Margele', href: '/catalog?category=margele' },
   { label: 'Accesorii', href: '/catalog?category=accesorii-bijuterii' },
-  { label: 'Evenimente', href: '/catalog?category=decoratiuni-si-evenimente' },
+  { label: 'Despre noi', href: '/despre-noi' },
   { label: 'Reduceri', href: '/catalog?category=reduceri-lichidare-stoc' },
 ];
 

@@ -73,10 +73,10 @@ export default function LandingPage({ products }: LandingPageProps) {
                 Vezi produsele
               </Link>
               <Link
-                href="/catalog?category=event"
+                href="/despre-noi"
                 className="inline-flex items-center rounded-full border border-slate-300 bg-white/80 px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-white"
               >
-                Articole evenimente
+                Despre noi
               </Link>
             </div>
           </div>
