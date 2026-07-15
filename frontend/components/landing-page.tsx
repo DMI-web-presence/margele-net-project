@@ -1,12 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import BenefitsStrip from '@/components/benefits-strip';
 import CampaignSection from '@/components/campaign-section';
-import CategoryHighlights from '@/components/category-highlights';
 import FeaturedProductsSection from '@/components/featured-products-section';
 import NewArrivalsSection from '@/components/new-arrivals-section';
 import FeaturedProductsOrbit from '@/components/featured-products-orbit';
 import LandingProductCarousel from '@/components/landing-product-carousel';
+import ProductRangeSection from '@/components/product-range-section';
+import ValuesSection from '@/components/values-section';
 
 type Product = {
   id: number;
@@ -153,8 +153,8 @@ export default function LandingPage({ products }: LandingPageProps) {
         </div>
       </section>
 
-      <BenefitsStrip />
-      <CategoryHighlights />
+      <ProductRangeSection />
+      <ValuesSection />
       <CampaignSection />
       <FeaturedProductsSection products={featuredProducts} />
       <NewArrivalsSection />
