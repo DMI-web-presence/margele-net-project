@@ -26,6 +26,7 @@ type LandingProductCarouselProps = {
   products: Product[];
   eyebrow?: string;
   description?: string;
+  sectionId?: string;
   variant?: 'recommended' | 'fresh' | 'popular';
   accentLabel?: string;
   ctaLabel?: string;
@@ -59,6 +60,7 @@ export default function LandingProductCarousel({
   products,
   eyebrow,
   description,
+  sectionId,
   variant = 'recommended',
   accentLabel,
   ctaLabel = 'Vezi toate',
@@ -88,6 +90,7 @@ export default function LandingProductCarousel({
 
   return (
     <section
+      id={sectionId}
       className={[
         'mb-14 p-6',
         isPopular

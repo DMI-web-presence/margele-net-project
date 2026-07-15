@@ -167,6 +167,7 @@ export default function LandingPage({ products }: LandingPageProps) {
         title="Ultimele produse adaugate"
         eyebrow="Noutati"
         description="Produse proaspat intrate in catalog, utile cand vrei sa descoperi rapid ce a aparut nou in magazin."
+        sectionId="noutati"
         products={newestProducts}
         variant="fresh"
         ctaLabel="Vezi noutatile"
