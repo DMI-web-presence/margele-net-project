@@ -37,7 +37,7 @@ const values = [
 
 export default function ValuesSection() {
   return (
-    <section className="bg-white px-4 py-3 sm:px-6 lg:px-8">
+    <section className="bg-white mb-14">
       <div className="mx-auto max-w-[1370px] overflow-hidden rounded-[1.35rem] bg-[linear-gradient(105deg,#02081f_0%,#11103a_48%,#3a1470_100%)] px-8 py-7 text-white shadow-[0_18px_45px_rgba(17,16,58,0.22)] sm:px-10">
         <div className="text-center">
           <p className="text-xs font-bold uppercase tracking-[0.38em] text-white/65">

@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
 import { Card } from '@/components/ui/card';
@@ -50,27 +49,25 @@ export default function SimilarProductsSlider({
         }}
         className="w-full"
       >
-        <CarouselContent>
+        <CarouselContent className="items-stretch">
           {products.map((item) => (
             <CarouselItem
               key={item.id}
-              className="basis-full sm:basis-1/2 lg:basis-1/3"
+              className="flex basis-full sm:basis-1/2 lg:basis-1/3"
             >
-              <Card className="h-full overflow-hidden rounded-3xl border-slate-200">
+              <Card className="flex h-full w-full flex-col overflow-hidden rounded-3xl border-slate-200">
                 <div className="relative">
                   <Link href={`/products/${item.id}`} className="block">
                     {item.imageUrl ? (
-                      <div className="relative aspect-square bg-slate-100">
-                        <Image
+                      <div className="h-64 w-full overflow-hidden bg-white">
+                        <img
                           src={item.imageUrl}
                           alt={item.name}
-                          fill
-                          className="object-cover transition duration-300 hover:scale-105"
-                          unoptimized
+                          className="block h-full w-full object-cover object-center transition duration-300 hover:scale-[1.02]"
                         />
                       </div>
                     ) : (
-                      <div className="flex aspect-square items-center justify-center bg-slate-100 text-sm text-slate-500">
+                      <div className="flex h-64 items-center justify-center bg-slate-100 text-sm text-slate-500">
                         Imagine indisponibila
                       </div>
                     )}
@@ -87,7 +84,7 @@ export default function SimilarProductsSlider({
                   </div>
                 </div>
 
-                <div className="space-y-2 p-4">
+                <div className="flex flex-1 flex-col gap-2 p-4">
                   <Link
                     href={`/products/${item.id}`}
                     className="line-clamp-2 text-base font-semibold text-slate-900 transition hover:text-indigo-600"
@@ -97,7 +94,7 @@ export default function SimilarProductsSlider({
                   <p className="line-clamp-2 text-sm text-slate-600">
                     {item.description ?? 'Material premium'}
                   </p>
-                  <p className="text-base font-semibold text-slate-900">
+                  <p className="mt-auto text-base font-semibold text-slate-900">
                     {priceFormatter.format(Number(item.price))}
                   </p>
                 </div>
@@ -105,8 +102,8 @@ export default function SimilarProductsSlider({
             </CarouselItem>
           ))}
         </CarouselContent>
-        <CarouselPrevious />
-        <CarouselNext />
+        <CarouselPrevious className="left-0 top-[40%] z-10 -translate-x-1/2 -translate-y-1/2" />
+        <CarouselNext className="right-0 top-[40%] z-10 translate-x-1/2 -translate-y-1/2" />
       </Carousel>
     </section>
   );

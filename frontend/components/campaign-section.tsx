@@ -46,7 +46,7 @@ const campaigns = [
 
 export default function CampaignSection() {
   return (
-    <section className="bg-white px-4 py-3 sm:px-6 lg:px-8">
+    <section className="bg-white sm:px-6 lg:mb-14">
       <div className="mx-auto max-w-[1370px] rounded-[1.45rem] border border-slate-200 bg-slate-50 p-5 shadow-[0_10px_35px_rgba(15,23,42,0.05)] sm:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>

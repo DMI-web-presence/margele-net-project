@@ -54,7 +54,7 @@ export default function Footer() {
     return null;
   }
   return (
-    <footer className="mt-14 border-t border-[#a6669f] bg-gradient-to-b from-[#94608d] to-[#7b4a75] text-white">
+    <footer className="border-t border-[#a6669f] bg-gradient-to-b from-[#94608d] to-[#7b4a75] text-white">
       <div className="mx-auto w-full max-w-[1400px] px-6 py-12 sm:px-10 lg:px-16">
         <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr_1fr_1fr_1.2fr]">
           <div className="space-y-4">
