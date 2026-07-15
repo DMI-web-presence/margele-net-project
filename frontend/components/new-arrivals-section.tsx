@@ -52,7 +52,7 @@ const priceFormatter = new Intl.NumberFormat('ro-RO', {
 
 export default function NewArrivalsSection() {
   return (
-    <section className="bg-white">
+    <section className="bg-white p-6">
       <div className="mx-auto w-full max-w-[1400px] px-6 py-12 sm:px-10 lg:px-16">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>

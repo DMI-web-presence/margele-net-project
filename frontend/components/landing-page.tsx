@@ -1,9 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import CampaignSection from '@/components/campaign-section';
-import FeaturedProductsSection from '@/components/featured-products-section';
-import NewArrivalsSection from '@/components/new-arrivals-section';
-import FeaturedProductsOrbit from '@/components/featured-products-orbit';
 import LandingProductCarousel from '@/components/landing-product-carousel';
 import ProductRangeSection from '@/components/product-range-section';
 import ValuesSection from '@/components/values-section';
@@ -68,14 +65,12 @@ const heroBenefits = [
 
 export default function LandingPage({ products }: LandingPageProps) {
   const newestProducts = [...products].sort((a, b) => b.id - a.id);
-  const promotionProducts = products;
   const recommendedProducts = [...products].sort((a, b) => a.id - b.id);
   const bestSellingProducts = [...products].sort((a, b) => Number(b.price) - Number(a.price));
-  const featuredProducts = [...products].sort((a, b) => Number(b.price) - Number(a.price));
 
   return (
     <>
-      <section className="bg-white px-4 py-5 sm:px-6 lg:px-8">
+      <section className="bg-white mb-14 mt-6">
         <div className="mx-auto max-w-[1370px]">
           <div className="relative overflow-hidden rounded-[1.45rem] border border-slate-200 bg-white shadow-[0_14px_45px_rgba(15,23,42,0.08)]">
             <div
@@ -103,7 +98,7 @@ export default function LandingPage({ products }: LandingPageProps) {
                     Materiale pentru idei care prind forma.
                   </h1>
                   <p className="mt-5 max-w-[430px] text-[0.95rem] font-medium leading-7 text-slate-700">
-                    La PAMIL gasesti o gama variata de margele, accesorii, materiale creative si
+                    Aici gasesti o gama variata de margele, accesorii, materiale creative si
                     produse pentru proiecte handmade.
                   </p>
                   <p className="mt-2 max-w-[430px] text-[0.95rem] font-medium leading-7 text-slate-700">
@@ -113,10 +108,14 @@ export default function LandingPage({ products }: LandingPageProps) {
 
                   <Link
                     href="/catalog"
-                    className="mt-6 inline-flex h-12 items-center gap-3 rounded-full bg-[#6437f3] px-6 text-sm font-bold text-white shadow-[0_12px_25px_rgba(100,55,243,0.25)] transition hover:bg-[#542ce1]"
+                    className="group mt-6 inline-flex h-12 items-center gap-3 rounded-full bg-[#6437f3] px-6 text-sm font-bold text-white shadow-[0_12px_25px_rgba(100,55,243,0.25)] transition hover:bg-[#542ce1]"
                   >
                     Descopera produsele
-                    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4 transition-transform duration-200 ease-out group-hover:translate-x-1"
+                    >
                       <path d="M5 12h14M13 6l6 6-6 6" className="fill-none stroke-current stroke-2" />
                     </svg>
                   </Link>
@@ -155,16 +154,32 @@ export default function LandingPage({ products }: LandingPageProps) {
 
       <ProductRangeSection />
       <ValuesSection />
+      <LandingProductCarousel
+        title="Recomandari pentru creatii handmade"
+        eyebrow="Produse recomandate"
+        description="O selectie curata de materiale si accesorii potrivite pentru proiecte rapide, cadouri si piese lucrate manual."
+        products={recommendedProducts}
+        variant="recommended"
+        ctaLabel="Vezi toate produsele"
+      />
       <CampaignSection />
-      <FeaturedProductsSection products={featuredProducts} />
-      <NewArrivalsSection />
-
-      <section className="mx-auto flex w-full max-w-[1400px] flex-col gap-12 px-6 py-12 sm:px-10 lg:px-16">
-        <FeaturedProductsOrbit title="Promotie de Paste" products={promotionProducts} />
-        <LandingProductCarousel title="Ultimele produse adaugate" products={newestProducts} />
-        <LandingProductCarousel title="Recomandari" products={recommendedProducts} />
-        <LandingProductCarousel title="Cele mai bine vandute" products={bestSellingProducts} />
-      </section>
+      <LandingProductCarousel
+        title="Ultimele produse adaugate"
+        eyebrow="Noutati"
+        description="Produse proaspat intrate in catalog, utile cand vrei sa descoperi rapid ce a aparut nou in magazin."
+        products={newestProducts}
+        variant="fresh"
+        ctaLabel="Vezi noutatile"
+      />
+      <LandingProductCarousel
+        title="Cele mai bine vandute"
+        eyebrow="Top clienti"
+        description="Produse cautate frecvent, bune pentru stocul de baza si pentru proiecte unde vrei alegeri deja validate."
+        products={bestSellingProducts}
+        variant="popular"
+        ctaLabel="Vezi top produse"
+        showRanking
+      />
     </>
   );
 }
