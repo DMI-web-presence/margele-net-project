@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const infoLinks = [
-  { label: 'Transport', href: '#' },
+  { label: 'Transport', href: '/transport' },
   { label: 'Conditii Retur', href: '#' },
   { label: 'Cum cumpar', href: '/cum-cumpar' },
   { label: 'Despre noi', href: '/despre-noi' },
