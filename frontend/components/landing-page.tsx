@@ -44,11 +44,17 @@ export default function LandingPage({ products }: LandingPageProps) {
         />
         <div className="relative mx-auto flex min-h-[72svh] w-full max-w-[1400px] items-center px-6 py-16 sm:px-10 lg:px-16">
           <div className="max-w-xl">
-            <p
+            {/* <p
               className="animate-hero-item text-sm font-semibold uppercase tracking-[0.34em] text-[#7b4a75]"
               style={{ animationDelay: '260ms' }}
             >
               Margele.net
+            </p> */}
+            <p
+              className="animate-hero-item text-sm font-semibold uppercase tracking-[0.34em] text-[#7b4a75]"
+              style={{ animationDelay: '260ms' }}
+            >
+              Oferim inspiratie din 2005
             </p>
             <h1
               className="animate-hero-item mt-5 text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl lg:text-7xl"
