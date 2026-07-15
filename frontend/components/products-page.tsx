@@ -444,7 +444,10 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
 
   useEffect(() => {
     const categoryParam = searchParams.get('category');
+    const searchParam = searchParams.get('search');
     const timeout = window.setTimeout(() => {
+      setSearch(searchParam ?? '');
+
       if (!categoryParam) {
         setCategory('Toate');
         setSubcategory('Toate');
