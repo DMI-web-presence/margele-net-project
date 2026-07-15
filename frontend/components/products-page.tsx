@@ -183,14 +183,36 @@ const fallbackCategoryGroups: CategoryGroup[] = [
   },
 ];
 
-const colorOptions = ['Toate culorile', 'Alb', 'Rosu', 'Verde', 'Auriu', 'Argintiu', 'Natural'];
-const producerOptions = ['Toti producatorii', 'Margele.net', 'Degetar', 'Import'];
 const priceStep = 0.5;
 const pageSizeOptions = [12, 24, 35, 48];
 
 const roundToPriceStep = (value: number) => Math.round(value / priceStep) * priceStep;
 
-const preferredDimensionNames = ['dimensiune', 'marime', 'diametru', 'ambalaj'];
+const colorOptionNames = ['culoare', 'color'];
+const preferredDimensionNames = ['dimensiune', 'marime', 'diametru'];
+const packageOptionNames = ['ambalaj', 'pachet', 'set'];
+const textColorOptions = [
+  { label: 'Alb', terms: ['alb', 'alba', 'albe', 'albi'] },
+  { label: 'Negru', terms: ['negru', 'neagra', 'negre', 'negri'] },
+  { label: 'Rosu', terms: ['rosu', 'rosie', 'rosii'] },
+  { label: 'Verde', terms: ['verde', 'verzi'] },
+  { label: 'Albastru', terms: ['albastru', 'albastra', 'albastre'] },
+  { label: 'Galben', terms: ['galben', 'galbena', 'galbene'] },
+  { label: 'Portocaliu', terms: ['portocaliu', 'portocalie', 'portocalii'] },
+  { label: 'Mov', terms: ['mov', 'violet'] },
+  { label: 'Roz', terms: ['roz'] },
+  { label: 'Maro', terms: ['maro'] },
+  { label: 'Bej', terms: ['bej'] },
+  { label: 'Crem', terms: ['crem'] },
+  { label: 'Gri', terms: ['gri'] },
+  { label: 'Auriu', terms: ['auriu', 'aurie', 'aurii'] },
+  { label: 'Argintiu', terms: ['argintiu', 'argintie', 'argintii'] },
+  { label: 'Bronz', terms: ['bronz'] },
+  { label: 'Cupru', terms: ['cupru'] },
+  { label: 'Transparent', terms: ['transparent', 'transparente'] },
+  { label: 'Natural', terms: ['natural', 'natur'] },
+  { label: 'Multicolor', terms: ['multicolor', 'mix'] },
+];
 
 const normalizeProductOptions = (product: Product): ProductOption[] => {
   const apiOptions = Array.isArray(product.options)
@@ -202,21 +224,16 @@ const normalizeProductOptions = (product: Product): ProductOption[] => {
     .map((option) => {
       const name = String(option.name || 'Optiune').trim();
       const valueDetails = option.valueDetails || [];
-      const isColorOption = name.toLowerCase().includes('culoare');
-      const visibleValueDetails =
-        isColorOption && valueDetails.some((value) => value.imageUrl)
-          ? valueDetails.filter((value) => value.imageUrl)
-          : isColorOption
-            ? []
-            : valueDetails;
+      const values = option.values || [];
 
       return {
         name,
         values: Array.from(
           new Set(
-            visibleValueDetails.length > 0
-              ? visibleValueDetails.map((value) => String(value.value || '').trim()).filter(Boolean)
-              : [],
+            [
+              ...values.map((value) => String(value || '').trim()),
+              ...valueDetails.map((value) => String(value.value || '').trim()),
+            ].filter(Boolean),
           ),
         ),
       };
@@ -235,18 +252,91 @@ const getProductOptionTags = (product: Product) =>
     .flatMap((option) => option.values.map((value) => `${option.name}: ${value}`))
     .slice(0, 4);
 
-const getDimensionValues = (products: Product[]) =>
+const getAllProductOptionTags = (product: Product) =>
+  normalizeProductOptions(product).flatMap((option) =>
+    option.values.map((value) => `${option.name}: ${value}`),
+  );
+
+const productSearchText = (product: Product) =>
+  `${product.name} ${product.description ?? ''} ${getAllProductOptionTags(product).join(' ')} ${(product.attributes || [])
+    .map((attribute) => `${attribute.key}: ${attribute.value}`)
+    .join(' ')}`.toLowerCase();
+
+const textMatchesTerm = (text: string, term: string) =>
+  new RegExp(`(^|[^a-z0-9])${term}([^a-z0-9]|$)`, 'i').test(text);
+
+const getTextColorValues = (product: Product) =>
+  textColorOptions
+    .filter((color) => color.terms.some((term) => textMatchesTerm(productSearchText(product), term)))
+    .map((color) => color.label);
+
+const getTextDimensionValues = (product: Product) =>
   Array.from(
     new Set(
-      products.flatMap((product) =>
-        normalizeProductOptions(product)
-          .filter((option) =>
-            preferredDimensionNames.some((name) => option.name.toLowerCase().includes(name)),
-          )
-          .flatMap((option) => option.values),
+      Array.from(productSearchText(product).matchAll(/\b\d+(?:[.,]\d+)?\s?(?:mm|cm|m)\b/gi)).map(
+        ([value]) => value.replace(/\s+/g, '').replace(',', '.'),
       ),
     ),
-  ).slice(0, 30);
+  );
+
+const getTextPackageValues = (product: Product) =>
+  Array.from(
+    new Set(
+      Array.from(
+        productSearchText(product).matchAll(/\b\d+(?:[.,]\d+)?\s?(?:kg|g|gr|gram|grame)\b/gi),
+      ).map(([value]) =>
+        value
+          .replace(/\s+/g, '')
+          .replace(',', '.')
+          .replace(/grame?$/i, 'g')
+          .replace(/gr$/i, 'g')
+          .toLowerCase(),
+      ),
+    ),
+  );
+
+const getProductFacetValues = (product: Product, preferredNames: string[]) => {
+  const structuredValues = [
+    ...normalizeProductOptions(product)
+      .filter((option) =>
+        preferredNames.some((name) => option.name.toLowerCase().includes(name)),
+      )
+      .flatMap((option) => option.values),
+    ...(product.attributes || [])
+      .filter((attribute) =>
+        preferredNames.some((name) => attribute.key.toLowerCase().includes(name)),
+      )
+      .map((attribute) => attribute.value),
+  ];
+  const textValues =
+    preferredNames === colorOptionNames
+      ? getTextColorValues(product)
+      : preferredNames === preferredDimensionNames
+        ? getTextDimensionValues(product)
+        : preferredNames === packageOptionNames
+          ? getTextPackageValues(product)
+        : [];
+
+  return Array.from(new Set([...structuredValues, ...textValues]))
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
+};
+
+const getOptionValuesByName = (products: Product[], preferredNames: string[]) =>
+  Array.from(
+    new Set(products.flatMap((product) => getProductFacetValues(product, preferredNames))),
+  ).sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
+
+const productMatchesFacetValues = (
+  product: Product,
+  selectedValues: string[],
+  preferredNames: string[],
+) => {
+  if (selectedValues.length === 0) return true;
+
+  const productValues = new Set(getProductFacetValues(product, preferredNames));
+  return selectedValues.some((value) => productValues.has(value));
+};
 
 const buildCategoryGroups = (categories: Category[] = []): CategoryGroup[] => {
   if (categories.length === 0) {
@@ -345,6 +435,10 @@ function FilterGroup({
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
+  if (options.length === 0) {
+    return null;
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50">
       <button
@@ -406,25 +500,44 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
       max: Math.ceil(Math.max(...prices)),
     };
   }, [products]);
-  const dimensionOptions = useMemo(() => getDimensionValues(products), [products]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Toate');
   const [subcategory, setSubcategory] = useState('Toate');
   const [sort, setSort] = useState('featured');
   const [selectedColors, setSelectedColors] = useState<string[]>([]);
   const [selectedDimensions, setSelectedDimensions] = useState<string[]>([]);
-  const [selectedProducers, setSelectedProducers] = useState<string[]>([]);
+  const [selectedPackages, setSelectedPackages] = useState<string[]>([]);
   const [minPrice, setMinPrice] = useState(priceBounds.min);
   const [maxPrice, setMaxPrice] = useState(priceBounds.max);
   const [currentPage, setCurrentPage] = useState(1);
   const [productsPerPage, setProductsPerPage] = useState(35);
 
   const selectedGroup = categoryGroups.find((group) => group.id === category) ?? categoryGroups[0];
+  const categoryScopedProducts = useMemo(() => {
+    return products.filter((product) => {
+        if (category === 'Toate') return true;
+        if (category === 'uncategorized') return product.categoryId == null;
+
+        return productMatchesCategoryGroup(product, selectedGroup, subcategory);
+      });
+  }, [products, category, subcategory, selectedGroup]);
+  const colorOptions = useMemo(
+    () => getOptionValuesByName(categoryScopedProducts, colorOptionNames),
+    [categoryScopedProducts],
+  );
+  const dimensionOptions = useMemo(
+    () => getOptionValuesByName(categoryScopedProducts, preferredDimensionNames),
+    [categoryScopedProducts],
+  );
+  const packageOptions = useMemo(
+    () => getOptionValuesByName(categoryScopedProducts, packageOptionNames),
+    [categoryScopedProducts],
+  );
 
   const resetSideFilters = () => {
     setSelectedColors([]);
     setSelectedDimensions([]);
-    setSelectedProducers([]);
+    setSelectedPackages([]);
     setMinPrice(priceBounds.min);
     setMaxPrice(priceBounds.max);
   };
@@ -476,9 +589,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
   const filteredProducts = useMemo(() => {
     return products
       .filter((product) => {
-        const optionText = getProductOptionTags(product).join(' ');
-        const text = `${product.name} ${product.description ?? ''} ${optionText}`.toLowerCase();
-        return text.includes(search.toLowerCase());
+        return productSearchText(product).includes(search.toLowerCase());
       })
       .filter((product) => {
         if (category === 'Toate') return true;
@@ -491,19 +602,11 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
         return price >= minPrice && price <= maxPrice;
       })
       .filter((product) => {
-        const optionText = getProductOptionTags(product).join(' ');
-        const text = `${product.name} ${product.description ?? ''} ${optionText}`.toLowerCase();
-        const matchesColor =
-          selectedColors.length === 0 ||
-          selectedColors.some((value) => text.includes(value.toLowerCase()));
-        const matchesDimension =
-          selectedDimensions.length === 0 ||
-          selectedDimensions.some((value) => text.includes(value.toLowerCase()));
-        const matchesProducer =
-          selectedProducers.length === 0 ||
-          selectedProducers.some((value) => text.includes(value.toLowerCase()));
-
-        return matchesColor && matchesDimension && matchesProducer;
+        return (
+          productMatchesFacetValues(product, selectedColors, colorOptionNames) &&
+          productMatchesFacetValues(product, selectedDimensions, preferredDimensionNames) &&
+          productMatchesFacetValues(product, selectedPackages, packageOptionNames)
+        );
       })
       .sort((a, b) => {
         if (sort === 'price-asc') {
@@ -514,7 +617,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
         }
         return a.id - b.id;
       });
-  }, [products, search, category, subcategory, sort, selectedGroup, minPrice, maxPrice, selectedColors, selectedDimensions, selectedProducers]);
+  }, [products, search, category, subcategory, sort, selectedGroup, minPrice, maxPrice, selectedColors, selectedDimensions, selectedPackages]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / productsPerPage));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -531,7 +634,17 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
   useEffect(() => {
     const timeout = window.setTimeout(() => setCurrentPage(1), 0);
     return () => window.clearTimeout(timeout);
-  }, [search, category, subcategory, sort, minPrice, maxPrice, selectedColors, selectedDimensions, selectedProducers, productsPerPage]);
+  }, [search, category, subcategory, sort, minPrice, maxPrice, selectedColors, selectedDimensions, selectedPackages, productsPerPage]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setSelectedColors((current) => current.filter((value) => colorOptions.includes(value)));
+      setSelectedDimensions((current) => current.filter((value) => dimensionOptions.includes(value)));
+      setSelectedPackages((current) => current.filter((value) => packageOptions.includes(value)));
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [colorOptions, dimensionOptions, packageOptions]);
 
   useEffect(() => {
     if (currentPage <= totalPages) return;
@@ -628,7 +741,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
           <div className="mt-5 flex flex-col gap-4">
             <FilterGroup
               title="Culoare"
-              options={colorOptions.slice(1)}
+              options={colorOptions}
               selectedValues={selectedColors}
               onToggle={(value) => toggleSelectedValue(value, selectedColors, setSelectedColors)}
             />
@@ -641,10 +754,10 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
             />
 
             <FilterGroup
-              title="Producator"
-              options={producerOptions.slice(1)}
-              selectedValues={selectedProducers}
-              onToggle={(value) => toggleSelectedValue(value, selectedProducers, setSelectedProducers)}
+              title="Ambalaj"
+              options={packageOptions}
+              selectedValues={selectedPackages}
+              onToggle={(value) => toggleSelectedValue(value, selectedPackages, setSelectedPackages)}
             />
 
             <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
@@ -743,12 +856,12 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
             </div>
           </div>
 
-        <div className="mt-6 grid items-stretch justify-items-center gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-6 grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
           {paginatedProducts.map((product) => {
             const favorited = isFavorite(product.id);
             const optionTags = getProductOptionTags(product);
             return (
-            <Card key={product.id} className="flex h-full w-full max-w-[16rem] flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
+            <Card key={product.id} className="flex h-full w-full flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
               <div className="relative">
                 <Link href={`/products/${product.id}`} className="group block">
                   <div className="flex h-72 items-center justify-center bg-slate-100 sm:h-65">

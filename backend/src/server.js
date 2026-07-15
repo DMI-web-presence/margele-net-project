@@ -279,6 +279,8 @@ async function handleProductList(requestUrl, res) {
     return;
   }
 
+  const hasProductOptions =
+    (await hasTable('product_attributes')) && (await hasTable('product_option_values'));
   const filters = buildProductFilters(requestUrl);
   if (filters.error) {
     sendJson(res, 400, { message: filters.error });
@@ -320,7 +322,18 @@ async function handleProductList(requestUrl, res) {
           WHERE product_category.product_id = p.id
         ),
         '[]'::jsonb
-      ) AS categories
+      ) AS categories,
+      ${
+        hasProductOptions
+          ? `
+      COALESCE(product_attributes_data.attributes, '[]'::jsonb) AS attributes,
+      COALESCE(product_variants_data.variants, '[]'::jsonb) AS variants
+      `
+          : `
+      '[]'::jsonb AS attributes,
+      '[]'::jsonb AS variants
+      `
+      }
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN LATERAL (
@@ -330,9 +343,51 @@ async function handleProductList(requestUrl, res) {
       ORDER BY is_primary DESC, sort_order ASC, id ASC
       LIMIT 1
     ) primary_image ON true
+    ${
+      hasProductOptions
+        ? `
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', pa.id,
+          'key', pa.attribute_key,
+          'value', pa.attribute_value,
+          'sortOrder', pa.sort_order
+        )
+        ORDER BY pa.sort_order ASC, pa.id ASC
+      ) AS attributes
+      FROM product_attributes pa
+      WHERE pa.product_id = p.id
+    ) product_attributes_data ON true
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', pov.id,
+          'optionName', pov.option_name,
+          'optionValue', pov.option_value,
+          'legacyOptionId', pov.legacy_option_id,
+          'legacyOptionValueId', pov.legacy_option_value_id,
+          'combinationId', pov.combination_id,
+          'model', pov.model,
+          'sku', pov.sku,
+          'quantity', pov.quantity,
+          'priceDelta', pov.price_delta,
+          'pricePrefix', pov.price_prefix,
+          'imageUrl', pov.image_url,
+          'sortOrder', pov.sort_order
+        )
+        ORDER BY pov.sort_order ASC, pov.id ASC
+      ) AS variants
+      FROM product_option_values pov
+      WHERE pov.product_id = p.id
+    ) product_variants_data ON true
+    `
+        : ''
+    }
     LEFT JOIN product_images pi ON pi.product_id = p.id
     WHERE ${filters.whereSql}
     GROUP BY p.id, c.id, primary_image.image_url
+      ${hasProductOptions ? ', product_attributes_data.attributes, product_variants_data.variants' : ''}
     ORDER BY p.created_at DESC, p.id DESC
   `,
     filters.values,
