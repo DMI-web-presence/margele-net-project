@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 const infoLinks = [
   { label: 'Transport', href: '#' },
   { label: 'Conditii Retur', href: '#' },
-  { label: 'Cum cumpar', href: '#' },
+  { label: 'Cum cumpar', href: '/cum-cumpar' },
   { label: 'Despre noi', href: '/despre-noi' },
   { label: 'GDPR', href: '/gdpr' },
 ];
