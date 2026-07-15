@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AccountPreviewCard from '@/components/account-preview-card';
 import BasketPreviewCard from '@/components/basket-preview-card';
@@ -15,8 +15,13 @@ const backendUrl =
 const categoryLinks = [
   { label: 'Toate', href: '/catalog' },
   { label: 'Margele', href: '/catalog?category=margele' },
-  { label: 'Accesorii', href: '/catalog?category=accesorii-bijuterii' },
-  { label: 'Despre noi', href: '/despre-noi' },
+  { label: 'Accesorii bijuterii', href: '/catalog?category=accesorii-bijuterii' },
+  { label: 'Pandantive si charm-uri', href: '/catalog?category=pandantive-si-charm-uri' },
+  { label: 'Fire, snururi si elastice', href: '/catalog?category=fire-snururi-si-elastice' },
+  { label: 'Materiale', href: '/catalog?category=materiale-handmade' },
+  { label: 'Decoratiuni si evenimente', href: '/catalog?category=decoratiuni-si-evenimente' },
+  { label: 'Unelte', href: '/catalog?category=unelte' },
+  { label: 'Seturi si mixuri', href: '/catalog?category=seturi-si-mixuri' },
   { label: 'Reduceri', href: '/catalog?category=reduceri-lichidare-stoc' },
 ];
 
@@ -69,19 +74,34 @@ function ChevronDownIcon({ open = false }: { open?: boolean }) {
   );
 }
 
-function getFirstName(fullName: string | null | undefined, email: string | null | undefined) {
-  if (fullName && fullName.trim()) {
-    const parts = fullName.trim().split(/\s+/);
-    return parts[0];
+function SearchIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+      <circle cx="11" cy="11" r="6" />
+      <path d="m20 20-4.2-4.2" />
+    </svg>
+  );
+}
+
+function getAccountInitials(fullName?: string, email?: string) {
+  const trimmedName = String(fullName || '').trim();
+  if (trimmedName) {
+    const parts = trimmedName.split(/\s+/).filter(Boolean);
+    const initials = parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('');
+    if (initials) return initials;
   }
-  if (email && email.includes('@')) {
-    return email.split('@')[0];
+
+  const trimmedEmail = String(email || '').trim();
+  if (trimmedEmail) {
+    return trimmedEmail.slice(0, 2).toUpperCase();
   }
-  return 'utilizator';
+
+  return 'CT';
 }
 
 export default function NavBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const {
     count,
     items,
@@ -96,6 +116,8 @@ export default function NavBar() {
   const [isBasketPreviewOpen, setIsBasketPreviewOpen] = useState(false);
   const [isFavoritePreviewOpen, setIsFavoritePreviewOpen] = useState(false);
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authUser, setAuthUser] = useState<{ name?: string; email?: string } | null>(null);
   const [isNavCompact, setIsNavCompact] = useState(false);
@@ -188,6 +210,14 @@ export default function NavBar() {
     return null;
   }
 
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    router.push(query ? `/catalog?search=${encodeURIComponent(query)}` : '/catalog');
+    setSearchQuery('');
+    setIsSearchOpen(false);
+  };
+
   return (
     <header
       className={`sticky top-0 z-40 border-b bg-white/95 backdrop-blur transition-[box-shadow,background-color,border-color,transform] duration-500 ease-out lg:translate-y-0 ${
@@ -216,7 +246,7 @@ export default function NavBar() {
           className={`hidden items-center justify-center transition-[gap] duration-500 ease-out md:flex ${
             isNavCompact ? 'gap-1' : 'gap-2'
           }`}
-          aria-label="Categorii produse"
+          aria-label="Navigatie principala"
         >
           <div
             className="relative"
@@ -253,124 +283,149 @@ export default function NavBar() {
             ) : null}
           </div>
 
-          {categoryLinks.slice(1).map((category) => (
-            <Link
-              key={category.href}
-              href={category.href}
-              className={`rounded-full font-semibold text-slate-600 transition-[padding,font-size,background-color,color] duration-500 ease-out hover:bg-slate-100 hover:text-slate-900 ${
-                isNavCompact ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm'
+          <Link
+            href="/#noutati"
+            className={`inline-flex items-center rounded-full border border-slate-200 bg-white font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+              isNavCompact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-[13px]'
+            }`}
+          >
+            Noutati
+          </Link>
+
+          <form
+            onSubmit={handleSearchSubmit}
+            className={`flex items-center overflow-hidden rounded-full border border-slate-200 bg-white text-slate-600 transition-[width,background-color,border-color,box-shadow] duration-300 ease-out hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus-within:border-slate-300 focus-within:bg-slate-50 focus-within:text-slate-900 ${
+              isSearchOpen ? 'w-[18.5rem] shadow-sm' : isNavCompact ? 'w-[5.5rem]' : 'w-[6.25rem]'
+            } ${isNavCompact ? 'h-9' : 'h-10'}`}
+            onMouseEnter={() => setIsSearchOpen(true)}
+            onMouseLeave={() => setIsSearchOpen(false)}
+            onFocusCapture={() => setIsSearchOpen(true)}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setIsSearchOpen(false);
+              }
+            }}
+          >
+            <button
+              type="submit"
+              aria-label="Cauta"
+              className={`inline-flex shrink-0 items-center gap-2 font-semibold transition-[padding,font-size,color] duration-300 ${
+                isNavCompact ? 'px-2.5 text-xs' : 'px-3 text-sm'
               }`}
             >
-              {category.label}
-            </Link>
-          ))}
+              <SearchIcon />
+              <span
+                className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ${
+                  isSearchOpen ? 'max-w-0 opacity-0' : 'max-w-[4rem] opacity-100'
+                }`}
+              >
+                Cauta
+              </span>
+            </button>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Cauta in colectia noastra..."
+              className={`min-w-0 flex-1 bg-transparent pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 transition-[opacity,transform] duration-300 ${
+                isSearchOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+              }`}
+            />
+          </form>
         </nav>
 
         <div className="flex items-center justify-end gap-2">
-        <div
-          className="relative"
-          onMouseEnter={() => setIsAccountPreviewOpen(true)}
-          onMouseLeave={() => setIsAccountPreviewOpen(false)}
-        >
-          {isAuthenticated ? (
+          <div
+            className="relative"
+            onMouseEnter={() => setIsAccountPreviewOpen(true)}
+            onMouseLeave={() => setIsAccountPreviewOpen(false)}
+          >
             <Link
-              href="/cont"
-              aria-label="Cont utilizator"
-              className={`inline-flex max-w-[15rem] items-center gap-2 overflow-hidden whitespace-nowrap rounded-full border border-slate-200 font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
-                isNavCompact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-sm'
-              }`}
-            >
-              <span className="min-w-0 truncate whitespace-nowrap">
-                Bine ai revenit, {getFirstName(authUser?.name, authUser?.email)} 👋
-              </span>
-              <ChevronDownIcon open={isAccountPreviewOpen} />
-            </Link>
-          ) : (
-            <Link
-              href="/autentificare"
-              aria-label="Account"
-              className={`inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
-                isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
+              href={isAuthenticated ? '/cont' : '/autentificare'}
+              aria-label="Cont"
+              className={`inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isNavCompact ? 'h-9 text-xs' : 'h-10 text-sm'
               }`}
             >
               <AccountIcon />
+              <span>{isAuthenticated ? getAccountInitials(authUser?.name, authUser?.email) : 'Cont'}</span>
+              {isAuthenticated ? <ChevronDownIcon open={isAccountPreviewOpen} /> : null}
             </Link>
-          )}
 
-          {isAccountPreviewOpen ? (
-            <div className="absolute right-0 top-full z-30 pt-3">
-              <AccountPreviewCard
-                isAuthenticated={isAuthenticated}
-                onClose={() => setIsAccountPreviewOpen(false)}
-                onLoggedOut={() => setIsAuthenticated(false)}
-              />
-            </div>
-          ) : null}
-        </div>
-
-        <div
-          className="relative"
-          onMouseEnter={() => setIsFavoritePreviewOpen(true)}
-          onMouseLeave={() => setIsFavoritePreviewOpen(false)}
-        >
-          <Link
-            href="/favorites"
-            aria-label="Favorite"
-            id="favorite-icon-button"
-            className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 transition-[height,width,background-color,border-color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 ${
-              isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
-            } ${
-              isFavoritePulsing ? 'animate-[favorite-bump_400ms_ease-out]' : ''
-            }`}
-          >
-            <span className={favoriteCount > 0 ? 'text-rose-600' : 'text-slate-700'}>
-              <FavoriteIcon filled={favoriteCount > 0} />
-            </span>
-            {favoriteCount > 0 ? (
-              <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[11px] font-semibold leading-none text-white">
-                {favoriteCount}
-              </span>
+            {isAuthenticated && isAccountPreviewOpen ? (
+              <div className="absolute right-0 top-full z-30 pt-3">
+                <AccountPreviewCard
+                  isAuthenticated={isAuthenticated}
+                  onClose={() => setIsAccountPreviewOpen(false)}
+                  onLoggedOut={() => setIsAuthenticated(false)}
+                />
+              </div>
             ) : null}
-          </Link>
+          </div>
 
-          {isFavoritePreviewOpen ? (
-            <div className="absolute right-0 top-full z-30 pt-3">
-              <FavoritePreviewCard items={favoriteItems} totalCount={favoriteCount} />
-            </div>
-          ) : null}
-        </div>
-
-        <div
-          className="relative"
-          onMouseEnter={() => setIsBasketPreviewOpen(true)}
-          onMouseLeave={() => setIsBasketPreviewOpen(false)}
-        >
-          <Link
-            href="/basket"
-            aria-label="Basket"
-            id="basket-icon-button"
-            className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
-              isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
-            } ${
-              isBasketPulsing ? 'animate-[basket-bump_400ms_ease-out]' : ''
-            }`}
+          <div
+            className="relative"
+            onMouseEnter={() => setIsFavoritePreviewOpen(true)}
+            onMouseLeave={() => setIsFavoritePreviewOpen(false)}
           >
-            <span className={count > 0 ? 'text-indigo-600' : 'text-slate-700'}>
-              <BasketIcon filled={count > 0} />
-            </span>
-            {count > 0 ? (
-              <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1 text-[11px] font-semibold leading-none text-white">
-                {count}
+            <Link
+              href="/favorites"
+              aria-label="Favorite"
+              id="favorite-icon-button"
+              className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 transition-[height,width,background-color,border-color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 ${
+                isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
+              } ${
+                isFavoritePulsing ? 'animate-[favorite-bump_400ms_ease-out]' : ''
+              }`}
+            >
+              <span className={favoriteCount > 0 ? 'text-rose-600' : 'text-slate-700'}>
+                <FavoriteIcon filled={favoriteCount > 0} />
               </span>
-            ) : null}
-          </Link>
+              {favoriteCount > 0 ? (
+                <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[11px] font-semibold leading-none text-white">
+                  {favoriteCount}
+                </span>
+              ) : null}
+            </Link>
 
-          {isBasketPreviewOpen ? (
-            <div className="absolute right-0 top-full z-30 pt-3">
-              <BasketPreviewCard items={items} totalCount={count} />
-            </div>
-          ) : null}
-        </div>
+            {isFavoritePreviewOpen ? (
+              <div className="absolute right-0 top-full z-30 pt-3">
+                <FavoritePreviewCard items={favoriteItems} totalCount={favoriteCount} />
+              </div>
+            ) : null}
+          </div>
+
+          <div
+            className="relative"
+            onMouseEnter={() => setIsBasketPreviewOpen(true)}
+            onMouseLeave={() => setIsBasketPreviewOpen(false)}
+          >
+            <Link
+              href="/basket"
+              aria-label="Cos"
+              id="basket-icon-button"
+              className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+                isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
+              } ${
+                isBasketPulsing ? 'animate-[basket-bump_400ms_ease-out]' : ''
+              }`}
+            >
+              <span className={count > 0 ? 'text-indigo-600' : 'text-slate-700'}>
+                <BasketIcon filled={count > 0} />
+              </span>
+              {count > 0 ? (
+                <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1 text-[11px] font-semibold leading-none text-white">
+                  {count}
+                </span>
+              ) : null}
+            </Link>
+
+            {isBasketPreviewOpen ? (
+              <div className="absolute right-0 top-full z-30 pt-3">
+                <BasketPreviewCard items={items} totalCount={count} />
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </header>
