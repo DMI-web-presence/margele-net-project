@@ -231,13 +231,13 @@ export default function LandingProductCarousel({
           </CarouselContent>
           <CarouselPrevious
             className={[
-              'left-0 top-[35%] z-10 hidden h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-xl sm:inline-flex',
+              'left-0 top-[45%] z-10 hidden h-12 w-12 -translate-x-1/2 -translate-y-1/2 text-xl sm:inline-flex',
               isPopular ? 'border-[#e2cfbb] bg-white text-[#7d5835] hover:bg-[#f4e4d2]' : '',
             ].join(' ')}
           />
           <CarouselNext
             className={[
-              'right-0 top-[35%] z-10 hidden h-12 w-12 translate-x-1/2 -translate-y-1/2 text-xl sm:inline-flex',
+              'right-0 top-[45%] z-10 hidden h-12 w-12 translate-x-1/2 -translate-y-1/2 text-xl sm:inline-flex',
               isPopular ? 'border-[#e2cfbb] bg-white text-[#7d5835] hover:bg-[#f4e4d2]' : '',
             ].join(' ')}
           />
