@@ -14,6 +14,8 @@ type SizeSelectorProps = {
   sizes: SizeOption[];
   label?: string;
   helperText?: string;
+  required?: boolean;
+  showRequiredHint?: boolean;
   disabled?: boolean;
   disabledValues?: string[];
   allowDeselect?: boolean;
@@ -26,6 +28,8 @@ export default function SizeSelector({
   sizes,
   label = 'Marime',
   helperText,
+  required = false,
+  showRequiredHint = false,
   disabled = false,
   disabledValues = [],
   allowDeselect = true,
@@ -102,14 +106,25 @@ export default function SizeSelector({
   };
 
   return (
-    <div className="space-y-2">
+    <div
+      className={`space-y-2 rounded-2xl transition ${
+        showRequiredHint ? 'bg-amber-50/60 p-3 ring-1 ring-amber-200' : ''
+      }`}
+    >
       <div className="space-y-1">
-        <p className="text-sm font-semibold text-slate-900">{label}</p>
-        {helperText ? <p className="text-xs font-medium text-slate-500">{helperText}</p> : null}
+        <p className="text-sm font-semibold text-slate-900">
+          {label}
+          {required ? <span className="ml-1 text-amber-600">*</span> : null}
+        </p>
+        {helperText ? (
+          <p className={`text-xs font-medium ${showRequiredHint ? 'text-amber-700' : 'text-slate-500'}`}>
+            {helperText}
+          </p>
+        ) : null}
       </div>
       <div
         ref={optionsListRef}
-        className={`flex flex-wrap gap-2 transition-[max-height] duration-200 ${
+        className={`flex flex-wrap gap-2 px-1 py-1 transition-[max-height] duration-200 ${
           canCollapse && !isExpanded ? 'overflow-hidden' : ''
         }`}
         style={
@@ -129,50 +144,52 @@ export default function SizeSelector({
             <div
               key={size.value}
               data-option-value={size.value}
-              className={isImageOption || valueHint ? 'flex flex-col items-center gap-1' : undefined}
+              className={isImageOption || valueHint ? 'flex flex-col items-center gap-1 mt-0.5' : undefined}
             >
-              <Button
-                type="button"
-                variant={isSelected ? 'primary' : 'secondary'}
-                aria-pressed={isSelected}
-                disabled={isDisabled}
-                title={isUnavailableValue ? 'Indisponibil pentru culoarea selectata' : size.value}
-                onClick={() => toggleSize(size.value)}
-                className={`relative h-9 min-w-12 rounded-xl px-3 ${
-                  isImageOption ? '!h-14 !w-16 !min-w-16 overflow-hidden !p-0' : ''
-                } ${
-                  !isImageOption && size.swatchColor ? 'w-10 overflow-hidden p-1' : ''
-                } ${
-                  isDisabled ? 'cursor-not-allowed disabled:cursor-not-allowed opacity-45 hover:bg-slate-100' : ''
-                } ${
-                  isImageOption && isSelected
-                    ? 'ring-2 ring-indigo-600 ring-offset-2 ring-offset-white shadow-md shadow-indigo-100'
-                    : ''
-                } ${
-                  isUnavailableValue
-                    ? 'overflow-hidden text-slate-400 after:absolute after:left-2 after:right-2 after:top-1/2 after:h-px after:-rotate-12 after:bg-slate-500 after:content-[""]'
-                    : ''
-                }`}
-              >
-                {size.imageUrl ? (
-                  <span className="relative block h-full w-full overflow-hidden rounded-[inherit]">
-                    <Image
-                      src={size.imageUrl}
-                      alt={size.value}
-                      fill
-                      className="object-cover"
-                      unoptimized
+              <span className={isImageOption ? 'rounded-[14px] p-[3px]' : undefined}>
+                <Button
+                  type="button"
+                  variant={isSelected ? 'primary' : 'secondary'}
+                  aria-pressed={isSelected}
+                  disabled={isDisabled}
+                  title={isUnavailableValue ? 'Indisponibil pentru culoarea selectata' : size.value}
+                  onClick={() => toggleSize(size.value)}
+                  className={`relative h-9 min-w-12 rounded-xl px-3 ${
+                    isImageOption ? '!h-14 !w-16 !min-w-16 overflow-hidden !p-0' : ''
+                  } ${
+                    !isImageOption && size.swatchColor ? 'w-10 overflow-hidden p-1' : ''
+                  } ${
+                    isDisabled ? 'cursor-not-allowed disabled:cursor-not-allowed opacity-45 hover:bg-slate-100' : ''
+                  } ${
+                    isImageOption && isSelected
+                      ? 'ring-2 ring-indigo-600 ring-offset-2 ring-offset-white shadow-md shadow-indigo-100'
+                      : ''
+                  } ${
+                    isUnavailableValue
+                      ? 'overflow-hidden text-slate-400 after:absolute after:left-2 after:right-2 after:top-1/2 after:h-px after:-rotate-12 after:bg-slate-500 after:content-[""]'
+                      : ''
+                  }`}
+                >
+                  {size.imageUrl ? (
+                    <span className="relative block h-full w-full overflow-hidden rounded-[inherit]">
+                      <Image
+                        src={size.imageUrl}
+                        alt={size.value}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </span>
+                  ) : size.swatchColor ? (
+                    <span
+                      className="block h-7 w-7 rounded-full border border-slate-300"
+                      style={{ backgroundColor: size.swatchColor }}
                     />
-                  </span>
-                ) : size.swatchColor ? (
-                  <span
-                    className="block h-7 w-7 rounded-full border border-slate-300"
-                    style={{ backgroundColor: size.swatchColor }}
-                  />
-                ) : (
-                  size.value
-                )}
-              </Button>
+                  ) : (
+                    size.value
+                  )}
+                </Button>
+              </span>
               {isImageOption ? (
                 <span className="flex w-full flex-col items-center text-center text-[11px] font-semibold leading-tight text-slate-600">
                   {size.value.split(/\s+/).map((word) => (

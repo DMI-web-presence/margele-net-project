@@ -24,6 +24,9 @@ const config = {
   cookieName: 'auth_token',
 };
 
+const dbSearchSchemas = ['catalog', 'auth', 'commerce', 'content', 'public'];
+const dbSearchPath = dbSearchSchemas.join(',');
+
 if (!config.databaseUrl) {
   throw new Error('DATABASE_URL is required. Add it to backend/.env.');
 }
@@ -34,6 +37,7 @@ if (!config.jwtSecret) {
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
+  options: `-c search_path=${dbSearchPath}`,
 });
 
 let userColumnsCache = null;
@@ -1101,9 +1105,10 @@ async function getColumns(tableName) {
     `
       SELECT column_name
       FROM information_schema.columns
-      WHERE table_schema = 'public' AND table_name = $1
+      WHERE table_schema = ANY($1::text[]) AND table_name = $2
+      ORDER BY array_position($1::text[], table_schema)
     `,
-    [tableName],
+    [dbSearchSchemas, tableName],
   );
 
   return new Set(result.rows.map((row) => row.column_name));
@@ -1114,10 +1119,10 @@ async function hasTable(tableName) {
     `
       SELECT 1
       FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name = $1
+      WHERE table_schema = ANY($1::text[]) AND table_name = $2
       LIMIT 1
     `,
-    [tableName],
+    [dbSearchSchemas, tableName],
   );
 
   return result.rowCount > 0;

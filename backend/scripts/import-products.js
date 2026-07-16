@@ -8,12 +8,15 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required in backend/.env');
 }
 
+const dbSearchPath = 'catalog,auth,commerce,content,public';
+
 const dumpPath = path.resolve(
   process.argv[2] || path.join(__dirname, '..', '..', 'margele_oc.mysql.sql'),
 );
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  options: `-c search_path=${dbSearchPath}`,
 });
 
 async function main() {

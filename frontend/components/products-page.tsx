@@ -16,10 +16,12 @@ type Product = {
   price: string;
   imageUrl: string | null;
   categoryId: number | null;
+  sku?: string | null;
   category?: ProductCategory | null;
   categories?: ProductCategory[];
   attributes?: ProductAttribute[];
   options?: ProductOption[] | ProductOption;
+  variants?: ProductVariant[];
   sizes?: string[];
   createdAt: string;
 };
@@ -68,6 +70,15 @@ type ProductOptionValue = {
   value: string;
   imageUrl?: string | null;
   swatchColor?: string | null;
+};
+
+type ProductVariant = {
+  combinationId?: string | null;
+  model?: string | null;
+  sku?: string | null;
+  priceDelta?: number | string | null;
+  pricePrefix?: string | null;
+  quantity?: number | null;
 };
 
 type ProductsPageProps = {
@@ -188,8 +199,43 @@ const pageSizeOptions = [12, 24, 35, 48];
 
 const roundToPriceStep = (value: number) => Math.round(value / priceStep) * priceStep;
 
+const applyVariantPrice = (basePrice: number, variant?: ProductVariant) => {
+  const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
+  if (!variant) return safeBasePrice;
+
+  const priceDelta = Number(variant.priceDelta ?? 0);
+  if (!Number.isFinite(priceDelta)) return safeBasePrice;
+
+  if ((variant.combinationId || variant.sku || variant.model) && priceDelta > 0) {
+    return priceDelta;
+  }
+
+  if (variant.pricePrefix === '-') {
+    return Math.max(0, safeBasePrice - priceDelta);
+  }
+
+  return safeBasePrice + priceDelta;
+};
+
+const variantHasPrice = (variant: ProductVariant) => Number.isFinite(Number(variant.priceDelta));
+
+const variantIsAvailable = (variant: ProductVariant) =>
+  variant.quantity === undefined || variant.quantity === null || variant.quantity > 0;
+
+const variantHasFinalPrice = (variant: ProductVariant) =>
+  Boolean(variant.combinationId || variant.sku || variant.model) && Number(variant.priceDelta ?? 0) > 0;
+
+const getBuyablePricedVariants = (variants: ProductVariant[] = []) => {
+  const pricedVariants = variants.filter(variantHasPrice);
+  const availablePricedVariants = pricedVariants.filter(variantIsAvailable);
+  const candidateVariants = availablePricedVariants.length > 0 ? availablePricedVariants : pricedVariants;
+  const finalPricedVariants = candidateVariants.filter(variantHasFinalPrice);
+
+  return finalPricedVariants.length > 0 ? finalPricedVariants : candidateVariants;
+};
+
 const colorOptionNames = ['culoare', 'color'];
-const preferredDimensionNames = ['dimensiune', 'marime', 'diametru'];
+const preferredDimensionNames = ['dimensiune', 'marime', 'diametru', 'size'];
 const packageOptionNames = ['ambalaj', 'pachet', 'set'];
 const textColorOptions = [
   { label: 'Alb', terms: ['alb', 'alba', 'albe', 'albi'] },
@@ -247,6 +293,50 @@ const normalizeProductOptions = (product: Product): ProductOption[] => {
   return [];
 };
 
+const optionMatchesNames = (option: ProductOption, preferredNames: string[]) =>
+  preferredNames.some((name) => option.name.toLowerCase().includes(name));
+
+const getPurchaseOptionValueCounts = (product: Product) =>
+  normalizeProductOptions(product).map((option) => option.values.length);
+
+const getUniqueVariantSkus = (product: Product) =>
+  Array.from(
+    new Set(
+      getBuyablePricedVariants(product.variants)
+        .map((variant) => String(variant.sku || '').trim())
+        .filter(Boolean),
+    ),
+  );
+
+const hasSelectablePurchaseVariations = (product: Product) => {
+  const hasMultipleOptionChoices = getPurchaseOptionValueCounts(product).some((count) => count > 1);
+  const hasMultipleVariantSkus = getUniqueVariantSkus(product).length > 1;
+
+  return hasMultipleOptionChoices || hasMultipleVariantSkus;
+};
+
+const getAutomaticCartSku = (product: Product) => getUniqueVariantSkus(product)[0] ?? product.sku ?? null;
+
+const getCatalogPriceInfo = (product: Product) => {
+  const basePrice = Number(product.price);
+  const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
+  const variantPrices = getBuyablePricedVariants(product.variants)
+    .map((variant) => applyVariantPrice(safeBasePrice, variant))
+    .filter(Number.isFinite);
+
+  if (variantPrices.length === 0) {
+    return {
+      amount: safeBasePrice,
+      hasFromLabel: false,
+    };
+  }
+
+  return {
+    amount: Math.min(...variantPrices),
+    hasFromLabel: hasSelectablePurchaseVariations(product),
+  };
+};
+
 const getAllProductOptionTags = (product: Product) =>
   normalizeProductOptions(product).flatMap((option) =>
     option.values.map((value) => `${option.name}: ${value}`),
@@ -293,9 +383,7 @@ const getTextPackageValues = (product: Product) =>
 const getProductFacetValues = (product: Product, preferredNames: string[]) => {
   const structuredValues = [
     ...normalizeProductOptions(product)
-      .filter((option) =>
-        preferredNames.some((name) => option.name.toLowerCase().includes(name)),
-      )
+      .filter((option) => optionMatchesNames(option, preferredNames))
       .flatMap((option) => option.values),
     ...(product.attributes || [])
       .filter((attribute) =>
@@ -485,7 +573,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
   const searchParams = useSearchParams();
   const categoryGroups = useMemo(() => buildCategoryGroups(categories), [categories]);
   const priceBounds = useMemo(() => {
-    const prices = products.map((product) => Number(product.price)).filter(Number.isFinite);
+    const prices = products.map((product) => getCatalogPriceInfo(product).amount).filter(Number.isFinite);
     if (prices.length === 0) {
       return { min: 0, max: 100 };
     }
@@ -593,7 +681,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
         return productMatchesCategoryGroup(product, selectedGroup, subcategory);
       })
       .filter((product) => {
-        const price = Number(product.price);
+        const price = getCatalogPriceInfo(product).amount;
         return price >= minPrice && price <= maxPrice;
       })
       .filter((product) => {
@@ -605,10 +693,10 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
       })
       .sort((a, b) => {
         if (sort === 'price-asc') {
-          return Number(a.price) - Number(b.price);
+          return getCatalogPriceInfo(a).amount - getCatalogPriceInfo(b).amount;
         }
         if (sort === 'price-desc') {
-          return Number(b.price) - Number(a.price);
+          return getCatalogPriceInfo(b).amount - getCatalogPriceInfo(a).amount;
         }
         return a.id - b.id;
       });
@@ -854,6 +942,9 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
         <div className="mt-6 grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
           {paginatedProducts.map((product) => {
             const favorited = isFavorite(product.id);
+            const priceInfo = getCatalogPriceInfo(product);
+            const shouldSelectVariations = hasSelectablePurchaseVariations(product);
+            const cartSku = getAutomaticCartSku(product);
             return (
             <Card key={product.id} className="flex h-full w-full flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
               <div className="relative">
@@ -907,23 +998,42 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-6">
-                <p className="text-2xl font-semibold text-slate-900">{numberFormatter.format(Number(product.price))}</p>
-                <Button
-                  className="h-9 rounded-xl px-4 text-xs"
-                  onClick={(event) =>
-                    addToCart(
-                      {
-                        id: product.id,
-                        name: product.name,
-                        price: product.price,
-                        imageUrl: product.imageUrl,
-                      },
-                      event.currentTarget,
-                    )
-                  }
-                >
-                  Adauga in cos
-                </Button>
+                <div className="flex min-w-0 flex-col">
+                  {priceInfo.hasFromLabel ? (
+                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      De la
+                    </span>
+                  ) : null}
+                  <p className="text-2xl font-semibold leading-tight text-slate-900">
+                    {numberFormatter.format(priceInfo.amount)}
+                  </p>
+                </div>
+                {shouldSelectVariations ? (
+                  <Link
+                    href={`/products/${product.id}`}
+                    className="inline-flex h-9 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-indigo-600 px-4 text-xs font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                  >
+                    Vezi produsul
+                  </Link>
+                ) : (
+                  <Button
+                    className="h-9 shrink-0 rounded-xl px-4 text-xs"
+                    onClick={(event) =>
+                      addToCart(
+                        {
+                          id: product.id,
+                          name: product.name,
+                          price: priceInfo.amount.toFixed(2),
+                          imageUrl: product.imageUrl,
+                          sku: cartSku,
+                        },
+                        event.currentTarget,
+                      )
+                    }
+                  >
+                    Adauga in cos
+                  </Button>
+                )}
               </div>
             </Card>
             );
