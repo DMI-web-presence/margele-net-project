@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import CampaignSection from '@/components/campaign-section';
+import HomepageReviewStrip from '@/components/homepage-review-strip';
 import LandingProductCarousel from '@/components/landing-product-carousel';
 import ProductRangeSection from '@/components/product-range-section';
 import ValuesSection from '@/components/values-section';
@@ -98,8 +99,7 @@ export default function LandingPage({ products }: LandingPageProps) {
                     Materiale pentru idei care prind forma.
                   </h1>
                   <p className="mt-5 max-w-[430px] text-[0.95rem] font-medium leading-7 text-slate-700">
-                    Aici gasesti o gama variata de margele, accesorii, materiale creative si
-                    produse pentru proiecte handmade.
+                    Descoperă peste 750 de produse unice și mii de variante de culori, dimensiuni și finisaje pentru proiectele tale creative.
                   </p>
                   <p className="mt-2 max-w-[430px] text-[0.95rem] font-medium leading-7 text-slate-700">
                     Suntem aici sa inspiram creativitatea si sa fim alaturi de tine in fiecare
@@ -154,6 +154,7 @@ export default function LandingPage({ products }: LandingPageProps) {
 
       <ProductRangeSection />
       <ValuesSection />
+      <HomepageReviewStrip />
       <LandingProductCarousel
         title="Recomandari pentru creatii handmade"
         eyebrow="Produse recomandate"

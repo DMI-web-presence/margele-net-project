@@ -15,7 +15,7 @@ const infoLinks = [
 
 const socialLinks = [
   { label: 'Instagram', href: '#', icon: 'instagram' },
-  { label: 'Facebook', href: '#', icon: 'facebook' },
+  { label: 'Facebook', href: 'https://www.facebook.com/margeleoradea', icon: 'facebook' },
   { label: 'TikTok', href: '#', icon: 'tiktok' },
 ] as const;
 
