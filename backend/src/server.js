@@ -4,6 +4,7 @@ const http = require('http');
 const path = require('path');
 const { URL } = require('url');
 const { Pool } = require('pg');
+const { createBrevoMailer } = require('./services/brevo-mail');
 
 loadEnv(path.join(__dirname, '..', '.env'));
 loadEnv(path.join(__dirname, '..', '..', 'frontend', '.env'), false, [
@@ -29,6 +30,13 @@ const config = {
   netopiaNotifyToken: process.env.NETOPIA_NOTIFY_TOKEN,
   netopiaEmailTemplate: process.env.NETOPIA_EMAIL_TEMPLATE || '',
   netopiaLanguage: process.env.NETOPIA_LANGUAGE || 'ro',
+  brevoEnabled: String(process.env.BREVO_ENABLED || '').toLowerCase() === 'true',
+  brevoApiKey: process.env.BREVO_API_KEY || '',
+  brevoSenderEmail: process.env.BREVO_SENDER_EMAIL || '',
+  brevoSenderName: process.env.BREVO_SENDER_NAME || 'Margele.net',
+  brevoReplyToEmail: process.env.BREVO_REPLY_TO_EMAIL || '',
+  brevoReplyToName: process.env.BREVO_REPLY_TO_NAME || '',
+  brevoAdminEmail: process.env.BREVO_ADMIN_EMAIL || '',
   cookieName: 'auth_token',
 };
 
@@ -46,6 +54,16 @@ if (!config.jwtSecret) {
 const pool = new Pool({
   connectionString: config.databaseUrl,
   options: `-c search_path=${dbSearchPath}`,
+});
+
+const brevoMailer = createBrevoMailer({
+  enabled: config.brevoEnabled,
+  apiKey: config.brevoApiKey,
+  senderEmail: config.brevoSenderEmail,
+  senderName: config.brevoSenderName,
+  replyToEmail: config.brevoReplyToEmail,
+  replyToName: config.brevoReplyToName,
+  adminEmail: config.brevoAdminEmail,
 });
 
 let userColumnsCache = null;
@@ -159,6 +177,16 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && requestUrl.pathname === '/auth/orders') {
       await handleOrderCreate(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/returns') {
+      await handleReturnRequest(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/contact-messages') {
+      await handleContactMessage(req, res);
       return;
     }
 
@@ -717,6 +745,7 @@ async function handleRegister(req, res) {
   });
 
   setAuthCookie(res, signToken({ sub: insertedUser.id, email: insertedUser.email }));
+  void bestEffortEmail('welcome email', () => brevoMailer.sendWelcomeEmail(insertedUser));
   sendJson(res, 201, { user: publicUser(insertedUser) });
 }
 
@@ -1060,7 +1089,9 @@ async function handleOrderCreate(req, res) {
     }
 
     await client.query('COMMIT');
-    sendJson(res, 201, orderResponse(order, insertedItems));
+    const responsePayload = orderResponse(order, insertedItems);
+    void sendOrderEmails({ user, order: responsePayload, items: insertedItems });
+    sendJson(res, 201, responsePayload);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1195,9 +1226,11 @@ async function handleNetopiaPaymentStart(req, res) {
       paid_at: paymentState.paymentStatus === 'paid' ? new Date() : null,
       payment_error: paymentState.errorMessage || null,
     });
+    const responseOrder = orderResponse(updatedOrder || order, insertedItems);
+    void sendOrderEmails({ user, order: responseOrder, items: insertedItems });
 
     sendJson(res, 201, {
-      order: orderResponse(updatedOrder || order, insertedItems),
+      order: responseOrder,
       payment: {
         provider: 'netopia',
         status: paymentState.paymentStatus,
@@ -2384,6 +2417,153 @@ function normalizeJsonArray(value) {
   }
 
   return [];
+}
+
+async function bestEffortEmail(label, action) {
+  try {
+    return await action();
+  } catch (error) {
+    console.error(`[brevo] ${label} failed`, error);
+    return null;
+  }
+}
+
+async function handleReturnRequest(req, res) {
+  const body = await readJson(req);
+  const returnRequest = {
+    fullName: String(body.fullName || '').trim(),
+    email: normalizeEmail(body.email),
+    phone: String(body.phone || '').trim(),
+    orderNumber: String(body.orderNumber || '').trim(),
+    productName: String(body.productName || '').trim(),
+    sku: String(body.sku || '').trim(),
+    reason: String(body.reason || '').trim(),
+    outcome: String(body.outcome || '').trim(),
+    details: String(body.details || '').trim(),
+  };
+
+  if (!returnRequest.fullName) {
+    sendJson(res, 400, { message: 'Numele complet este obligatoriu.' });
+    return;
+  }
+
+  if (!returnRequest.email || !isEmail(returnRequest.email)) {
+    sendJson(res, 400, { message: 'Emailul nu este valid.' });
+    return;
+  }
+
+  if (!returnRequest.phone) {
+    sendJson(res, 400, { message: 'Telefonul este obligatoriu.' });
+    return;
+  }
+
+  if (!returnRequest.orderNumber) {
+    sendJson(res, 400, { message: 'Numarul comenzii este obligatoriu.' });
+    return;
+  }
+
+  if (!returnRequest.productName) {
+    sendJson(res, 400, { message: 'Produsul returnat este obligatoriu.' });
+    return;
+  }
+
+  if (!returnRequest.reason) {
+    sendJson(res, 400, { message: 'Selecteaza motivul returului.' });
+    return;
+  }
+
+  if (!returnRequest.outcome) {
+    sendJson(res, 400, { message: 'Selecteaza ce iti doresti mai departe.' });
+    return;
+  }
+
+  const emailResults = await Promise.allSettled([
+    bestEffortEmail('return request admin alert', () =>
+      brevoMailer.sendReturnRequestAdminAlert(returnRequest),
+    ),
+    bestEffortEmail('return request customer confirmation', () =>
+      brevoMailer.sendReturnRequestCustomerConfirmation(returnRequest),
+    ),
+  ]);
+
+  const deliveredCount = emailResults.filter(
+    (result) => result.status === 'fulfilled' && result.value && result.value.skipped !== true,
+  ).length;
+
+  if (deliveredCount === 0) {
+    sendJson(res, 503, {
+      message:
+        'Cererea nu a putut fi trimisa momentan. Verifica setarile de email si incearca din nou.',
+    });
+    return;
+  }
+
+  sendJson(res, 201, {
+    ok: true,
+    message: 'Cererea de retur a fost trimisa. Revenim cat mai curand.',
+  });
+}
+
+async function handleContactMessage(req, res) {
+  const body = await readJson(req);
+  const message = {
+    name: String(body.name || '').trim(),
+    contactDetail: String(body.contactDetail || '').trim(),
+    topic: String(body.topic || '').trim(),
+    message: String(body.message || '').trim(),
+  };
+
+  if (!message.name) {
+    sendJson(res, 400, { message: 'Numele este obligatoriu.' });
+    return;
+  }
+
+  if (!message.contactDetail) {
+    sendJson(res, 400, { message: 'Emailul sau telefonul este obligatoriu.' });
+    return;
+  }
+
+  if (!message.message) {
+    sendJson(res, 400, { message: 'Mesajul este obligatoriu.' });
+    return;
+  }
+
+  const emailResults = await Promise.allSettled([
+    bestEffortEmail('contact admin alert', () =>
+      brevoMailer.sendContactMessageAdminAlert(message),
+    ),
+    bestEffortEmail('contact customer confirmation', () =>
+      brevoMailer.sendContactMessageCustomerConfirmation(message),
+    ),
+  ]);
+
+  const deliveredCount = emailResults.filter(
+    (result) => result.status === 'fulfilled' && result.value && result.value.skipped !== true,
+  ).length;
+
+  if (deliveredCount === 0) {
+    sendJson(res, 503, {
+      message:
+        'Mesajul nu a putut fi trimis momentan. Verifica setarile de email si incearca din nou.',
+    });
+    return;
+  }
+
+  sendJson(res, 201, {
+    ok: true,
+    message: 'Mesajul a fost trimis. Revenim cat mai curand.',
+  });
+}
+
+async function sendOrderEmails({ user, order, items }) {
+  await Promise.allSettled([
+    bestEffortEmail('order confirmation', () =>
+      brevoMailer.sendOrderConfirmationEmail({ user, order, items }),
+    ),
+    bestEffortEmail('admin order alert', () =>
+      brevoMailer.sendNewOrderAdminAlert({ user, order, items }),
+    ),
+  ]);
 }
 
 function publicUser(user) {

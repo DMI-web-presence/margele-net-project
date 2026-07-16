@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
 const inquiryTopics = [
   'Intrebare produs',
   'Comanda mai mare',
@@ -16,44 +18,67 @@ const inquiryTopics = [
   'Alt subiect',
 ];
 
-function encodeMailto(value: string) {
-  return encodeURIComponent(value);
-}
-
 export default function ContactPageContent() {
   const [name, setName] = useState('');
   const [contactDetail, setContactDetail] = useState('');
   const [topic, setTopic] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitAnimationVisible, setIsSubmitAnimationVisible] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const trimmedName = name.trim();
-    const trimmedContact = contactDetail.trim();
-    const trimmedMessage = message.trim();
-    const trimmedTopic = topic.trim();
+    const payload = {
+      name: name.trim(),
+      contactDetail: contactDetail.trim(),
+      topic: topic.trim(),
+      message: message.trim(),
+    };
 
-    if (!trimmedName || !trimmedContact || !trimmedMessage) {
+    if (!payload.name || !payload.contactDetail || !payload.message) {
+      setSuccess('');
       setError('Completeaza numele, un mod de contact si mesajul.');
       return;
     }
 
+    setIsSubmitting(true);
+    setIsSubmitAnimationVisible(true);
     setError('');
+    setSuccess('');
 
-    const subject = trimmedTopic ? `Margele.net - ${trimmedTopic}` : 'Margele.net - Mesaj nou';
-    const body = [
-      `Nume: ${trimmedName}`,
-      `Email sau telefon: ${trimmedContact}`,
-      trimmedTopic ? `Subiect: ${trimmedTopic}` : null,
-      '',
-      trimmedMessage,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    try {
+      const response = await fetch(`${backendUrl}/contact-messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
 
-    window.location.href = `mailto:degetarmargele@gmail.com?subject=${encodeMailto(subject)}&body=${encodeMailto(body)}`;
+      const result = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) {
+        throw new Error(result?.message || 'Nu am putut trimite mesajul.');
+      }
+
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 1200);
+      });
+
+      setName('');
+      setContactDetail('');
+      setTopic('');
+      setMessage('');
+      setSuccess(result?.message || 'Mesajul a fost trimis cu succes.');
+    } catch (submitError) {
+      setSuccess('');
+      setError(submitError instanceof Error ? submitError.message : 'Nu am putut trimite mesajul.');
+    } finally {
+      setIsSubmitting(false);
+      setIsSubmitAnimationVisible(false);
+    }
   };
 
   return (
@@ -73,8 +98,7 @@ export default function ContactPageContent() {
                   </h1>
                   <p className="max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
                     Daca ai intrebari despre produse, comenzi mai mari, disponibilitate sau vrei
-                    pur si simplu o recomandare rapida, scrie-ne aici si pregatim mesajul pentru
-                    email.
+                    pur si simplu o recomandare rapida, scrie-ne aici si ne ocupam noi de restul.
                   </p>
                 </div>
 
@@ -147,8 +171,7 @@ export default function ContactPageContent() {
                 Mesajul tau
               </h2>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                Completeaza cateva campuri simple, iar butonul va deschide emailul pregatit cu toate
-                detaliile completate.
+                Completeaza cateva campuri simple si trimite mesajul direct catre echipa noastra.
               </p>
             </div>
 
@@ -198,18 +221,30 @@ export default function ContactPageContent() {
               </div>
 
               {error ? <p className="text-sm font-semibold text-red-600">{error}</p> : null}
+              {isSubmitAnimationVisible ? (
+                <div className="flex items-center gap-3 text-sm font-semibold text-indigo-700">
+                  <span className="inline-flex h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+                  <span>Trimitem mesajul...</span>
+                </div>
+              ) : null}
+              {success && !isSubmitAnimationVisible ? (
+                <p className="text-sm font-semibold text-emerald-700">{success}</p>
+              ) : null}
 
               <div className="flex flex-wrap items-center gap-3">
-                <Button type="submit">Trimite mesaj</Button>
+                <Button type="submit" disabled={isSubmitting}>Trimite mesaj</Button>
                 <Button
                   type="button"
                   variant="secondary"
+                  disabled={isSubmitting}
                   onClick={() => {
                     setName('');
                     setContactDetail('');
                     setTopic('');
                     setMessage('');
                     setError('');
+                    setSuccess('');
+                    setIsSubmitAnimationVisible(false);
                   }}
                 >
                   Reseteaza
