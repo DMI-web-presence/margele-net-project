@@ -31,7 +31,6 @@ type LandingProductCarouselProps = {
   accentLabel?: string;
   ctaLabel?: string;
   ctaHref?: string;
-  showRanking?: boolean;
 };
 
 const priceFormatter = new Intl.NumberFormat('ro-RO', {
@@ -65,7 +64,6 @@ export default function LandingProductCarousel({
   accentLabel,
   ctaLabel = 'Vezi toate',
   ctaHref = '/catalog',
-  showRanking = false,
 }: LandingProductCarouselProps) {
   const [api, setApi] = useState<CarouselApi>();
   const motion = carouselMotion[variant];
@@ -168,7 +166,7 @@ export default function LandingProductCarousel({
           className="w-full max-w-[1280px] self-center"
         >
           <CarouselContent className="items-stretch">
-            {products.map((product, index) => (
+            {products.map((product) => (
               <CarouselItem
                 key={`${title}-${product.id}`}
                 className="flex basis-[78%] sm:basis-1/2 lg:basis-1/4"
@@ -195,11 +193,6 @@ export default function LandingProductCarousel({
                         </div>
                       )}
                     </Link>
-                    {showRanking ? (
-                      <div className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#b4885f] text-sm font-black text-white shadow-lg">
-                        {index + 1}
-                      </div>
-                    ) : null}
                     <div className="absolute right-3 top-3">
                       <ProductFavoriteIconButton
                         product={{
