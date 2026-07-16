@@ -1,10 +1,15 @@
+'use client';
+
 import Link from 'next/link';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 const returnSteps = [
   {
@@ -31,7 +36,96 @@ const returnReasons = [
 
 const returnOutcomes = ['Rambursare', 'Schimb produs', 'Vreau sa discut cu echipa'];
 
+const initialFormState = {
+  fullName: '',
+  email: '',
+  phone: '',
+  orderNumber: '',
+  productName: '',
+  sku: '',
+  reason: '',
+  outcome: '',
+  details: '',
+};
+
+type ReturnFormState = typeof initialFormState;
+
 export default function ReturnPageContent() {
+  const [form, setForm] = useState<ReturnFormState>(initialFormState);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitAnimationVisible, setIsSubmitAnimationVisible] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const payload = {
+      fullName: form.fullName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      orderNumber: form.orderNumber.trim(),
+      productName: form.productName.trim(),
+      sku: form.sku.trim(),
+      reason: form.reason.trim(),
+      outcome: form.outcome.trim(),
+      details: form.details.trim(),
+    };
+
+    if (!payload.fullName || !payload.email || !payload.phone || !payload.orderNumber || !payload.productName) {
+      setSuccess('');
+      setError('Completeaza toate campurile obligatorii din formular.');
+      return;
+    }
+
+    if (!payload.reason || !payload.outcome) {
+      setSuccess('');
+      setError('Selecteaza motivul returului si ce iti doresti mai departe.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setIsSubmitAnimationVisible(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${backendUrl}/returns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = (await response.json().catch(() => null)) as { message?: string } | null;
+      if (!response.ok) {
+        throw new Error(result?.message || 'Nu am putut trimite cererea de retur.');
+      }
+
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 1200);
+      });
+      setForm(initialFormState);
+      setSuccess(result?.message || 'Cererea de retur a fost trimisa cu succes.');
+    } catch (submitError) {
+      setSuccess('');
+      setError(
+        submitError instanceof Error ? submitError.message : 'Nu am putut trimite cererea de retur.',
+      );
+    } finally {
+      setIsSubmitting(false);
+      setIsSubmitAnimationVisible(false);
+    }
+  };
+
+  const handleReset = () => {
+    setForm(initialFormState);
+    setError('');
+    setIsSubmitAnimationVisible(false);
+    setSuccess('');
+  };
+
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
       <div className="mx-auto max-w-6xl space-y-8">
@@ -109,14 +203,52 @@ export default function ReturnPageContent() {
               </p>
             </div>
 
-            <form className="mt-6 space-y-5">
+            <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
               <div className="grid gap-5 md:grid-cols-2">
-                <Field label="Nume complet" id="full-name" placeholder="Ex. Maria Popescu" />
-                <Field label="Email" id="email" type="email" placeholder="exemplu@email.com" />
-                <Field label="Telefon" id="phone" type="tel" placeholder="07xx xxx xxx" />
-                <Field label="Numar comanda" id="order-number" placeholder="Ex. 12345" />
-                <Field label="Produs returnat" id="product-name" placeholder="Ex. Margele de nisip mate 4mm" />
-                <Field label="SKU produs" id="sku" placeholder="Ex. rou-4mm-01" />
+                <Field
+                  label="Nume complet"
+                  id="full-name"
+                  placeholder="Ex. Maria Popescu"
+                  value={form.fullName}
+                  onChange={(value) => setForm((current) => ({ ...current, fullName: value }))}
+                />
+                <Field
+                  label="Email"
+                  id="email"
+                  type="email"
+                  placeholder="exemplu@email.com"
+                  value={form.email}
+                  onChange={(value) => setForm((current) => ({ ...current, email: value }))}
+                />
+                <Field
+                  label="Telefon"
+                  id="phone"
+                  type="tel"
+                  placeholder="07xx xxx xxx"
+                  value={form.phone}
+                  onChange={(value) => setForm((current) => ({ ...current, phone: value }))}
+                />
+                <Field
+                  label="Numar comanda"
+                  id="order-number"
+                  placeholder="Ex. 12345"
+                  value={form.orderNumber}
+                  onChange={(value) => setForm((current) => ({ ...current, orderNumber: value }))}
+                />
+                <Field
+                  label="Produs returnat"
+                  id="product-name"
+                  placeholder="Ex. Margele de nisip mate 4mm"
+                  value={form.productName}
+                  onChange={(value) => setForm((current) => ({ ...current, productName: value }))}
+                />
+                <Field
+                  label="SKU produs"
+                  id="sku"
+                  placeholder="Ex. rou-4mm-01"
+                  value={form.sku}
+                  onChange={(value) => setForm((current) => ({ ...current, sku: value }))}
+                />
               </div>
 
               <div className="grid gap-5 md:grid-cols-2">
@@ -125,7 +257,8 @@ export default function ReturnPageContent() {
                   <select
                     id="reason"
                     className="flex h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-                    defaultValue=""
+                    value={form.reason}
+                    onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
                   >
                     <option value="" disabled>
                       Alege un motiv
@@ -143,7 +276,8 @@ export default function ReturnPageContent() {
                   <select
                     id="outcome"
                     className="flex h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-                    defaultValue=""
+                    value={form.outcome}
+                    onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))}
                   >
                     <option value="" disabled>
                       Alege optiunea
@@ -162,12 +296,27 @@ export default function ReturnPageContent() {
                 <Textarea
                   id="details"
                   placeholder="Spune-ne daca produsul a fost deteriorat, daca lipseste ceva din colet sau orice detaliu util."
+                  value={form.details}
+                  onChange={(event) => setForm((current) => ({ ...current, details: event.target.value }))}
                 />
               </div>
 
+              {error ? <p className="text-sm font-semibold text-red-600">{error}</p> : null}
+              {isSubmitAnimationVisible ? (
+                <div className="flex items-center gap-3 text-sm font-semibold text-indigo-700">
+                  <span className="inline-flex h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+                  <span>Trimitem cererea...</span>
+                </div>
+              ) : null}
+              {success && !isSubmitAnimationVisible ? (
+                <p className="text-sm font-semibold text-emerald-700">{success}</p>
+              ) : null}
+
               <div className="flex flex-wrap items-center gap-3">
-                <Button type="submit">Trimite cererea</Button>
-                <Button type="button" variant="secondary">
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Trimitem cererea...' : 'Trimite cererea'}
+                </Button>
+                <Button type="button" variant="secondary" onClick={handleReset} disabled={isSubmitting}>
                   Reseteaza formularul
                 </Button>
               </div>
@@ -222,16 +371,26 @@ function Field({
   id,
   type = 'text',
   placeholder,
+  value,
+  onChange,
 }: {
   label: string;
   id: string;
   type?: string;
   placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Input id={id} type={type} placeholder={placeholder} />
+      <Input
+        id={id}
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </div>
   );
 }
