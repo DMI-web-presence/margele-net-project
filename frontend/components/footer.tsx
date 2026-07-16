@@ -14,9 +14,10 @@ const infoLinks = [
 ];
 
 const socialLinks = [
-  { label: 'Instagram', href: '#', icon: 'instagram' },
+  { label: 'Instagram', href: 'https://www.instagram.com/margelenet/', icon: 'instagram' },
   { label: 'Facebook', href: 'https://www.facebook.com/margeleoradea', icon: 'facebook' },
-  { label: 'TikTok', href: '#', icon: 'tiktok' },
+  { label: 'TikTok', href: 'https://www.tiktok.com/@margelenet', icon: 'tiktok' },
+  { label: 'YouTube', href: 'https://www.youtube.com/@margeledegetar9525', icon: 'youtube' },
 ] as const;
 
 function SocialIcon({ icon }: { icon: (typeof socialLinks)[number]['icon'] }) {
@@ -34,6 +35,14 @@ function SocialIcon({ icon }: { icon: (typeof socialLinks)[number]['icon'] }) {
     return (
       <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
         <path d="M14.2 8.4h2.3V4.7A15 15 0 0 0 13.1 4c-3.3 0-5.5 2-5.5 5.6v3.1H4v4.1h3.6V24h4.4v-7.2h3.5l.6-4.1H12V10c0-1.2.3-1.6 2.2-1.6Z" />
+      </svg>
+    );
+  }
+
+  if (icon === 'youtube') {
+    return (
+      <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M21.6 8.2a3 3 0 0 0-2.1-2.1C17.7 5.6 12 5.6 12 5.6s-5.7 0-7.5.5A3 3 0 0 0 2.4 8.2 31.8 31.8 0 0 0 2 12a31.8 31.8 0 0 0 .4 3.8 3 3 0 0 0 2.1 2.1c1.8.5 7.5.5 7.5.5s5.7 0 7.5-.5a3 3 0 0 0 2.1-2.1A31.8 31.8 0 0 0 22 12a31.8 31.8 0 0 0-.4-3.8ZM10 15.4V8.6l5.2 3.4L10 15.4Z" />
       </svg>
     );
   }
@@ -94,6 +103,26 @@ function ContactIcon({ icon }: { icon: 'location' | 'phone' | 'email' }) {
   );
 }
 
+function MessageIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M5 6.5h14A1.5 1.5 0 0 1 20.5 8v8A1.5 1.5 0 0 1 19 17.5H9l-4.5 3v-12A1.5 1.5 0 0 1 5 6.5Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M8 10.5h8M8 13.5h5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 function FooterColumn({
   title,
   links,
@@ -147,6 +176,8 @@ export default function Footer() {
                 <a
                   key={item.label}
                   href={item.href}
+                  target="_blank"
+                  rel="noreferrer noopener"
                   aria-label={item.label}
                   title={item.label}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/[0.08] text-white/80 transition hover:border-white/35 hover:bg-white/15 hover:text-white"
@@ -190,6 +221,14 @@ export default function Footer() {
                 <a href="mailto:degetarmargele@gmail.com" className="transition hover:text-white">
                   degetarmargele@gmail.com
                 </a>
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-white/75">
+                  <MessageIcon />
+                </span>
+                <Link href="/contact" className="transition hover:text-white">
+                  Trimite mesaj
+                </Link>
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 pt-1">
