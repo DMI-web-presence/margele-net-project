@@ -26,6 +26,7 @@ type Product = {
     name: string;
     slug: string;
   } | null;
+  categories?: ProductCategory[];
   categoryId: number | null;
   sku?: string | null;
   stockQuantity?: number;
@@ -35,6 +36,25 @@ type Product = {
   variants?: ProductVariant[];
   sizes?: string[];
   createdAt: string;
+};
+
+type ProductCategory = {
+  id: number;
+  name: string;
+  slug: string;
+  isPrimary?: boolean;
+};
+
+type Category = {
+  id: number;
+  parentId: number | null;
+  name: string;
+  slug: string;
+  parent?: {
+    id: number | null;
+    name: string;
+    slug: string;
+  } | null;
 };
 
 type ProductAttribute = {
@@ -66,32 +86,6 @@ type ProductVariant = {
   priceDelta?: number | string | null;
   pricePrefix?: string | null;
   quantity?: number;
-};
-
-const categoryDefinitions: Record<number, { label: string; parentId?: string }> = {
-  1: { label: 'Craciun', parentId: 'event' },
-  2: { label: 'pandandive' },
-};
-
-const parentCategoryLabels: Record<string, string> = {
-  event: 'Articole pentru evenimente',
-};
-
-const getCategoryLabel = (categoryId: number | null) => {
-  if (!categoryId) {
-    return 'Necategorizat';
-  }
-
-  const category = categoryDefinitions[categoryId];
-  if (!category) {
-    return `Categoria ${categoryId}`;
-  }
-
-  if (category.parentId) {
-    return `${parentCategoryLabels[category.parentId]} / ${category.label}`;
-  }
-
-  return category.label;
 };
 
 const normalizeOptions = (product: Product): ProductOption[] => {
@@ -204,10 +198,90 @@ async function getProducts(): Promise<Product[]> {
   }
 }
 
+async function getCategories(): Promise<Category[]> {
+  try {
+    const res = await fetch('http://127.0.0.1:3001/categories', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) {
+      return [];
+    }
+
+    const text = await res.text();
+    if (!text.trim()) {
+      return [];
+    }
+
+    return JSON.parse(text) as Category[];
+  } catch {
+    return [];
+  }
+}
+
+function getPrimaryProductCategory(product: Product) {
+  const linkedPrimaryCategory = product.categories?.find((category) => category.isPrimary);
+  if (linkedPrimaryCategory) {
+    return linkedPrimaryCategory;
+  }
+
+  const linkedCategory = product.categories?.find((category) => category.id === product.categoryId);
+  if (linkedCategory) {
+    return linkedCategory;
+  }
+
+  if (product.category?.id && product.category.name && product.category.slug) {
+    return {
+      id: product.category.id,
+      name: product.category.name,
+      slug: product.category.slug,
+    };
+  }
+
+  return null;
+}
+
+function getCategoryBreadcrumbs(product: Product, categories: Category[]) {
+  const primaryCategory = getPrimaryProductCategory(product);
+  if (!primaryCategory) {
+    return [];
+  }
+
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const breadcrumbItems: { label: string; href: string }[] = [];
+  let currentCategory: Category | null = categoryById.get(primaryCategory.id) ?? {
+    id: primaryCategory.id,
+    parentId: null,
+    name: primaryCategory.name,
+    slug: primaryCategory.slug,
+  };
+
+  while (currentCategory) {
+    breadcrumbItems.unshift({
+      label: formatCategoryLabel(currentCategory.name),
+      href: `/catalog?category=${currentCategory.slug}`,
+    });
+
+    currentCategory = currentCategory.parentId
+      ? (categoryById.get(currentCategory.parentId) ?? null)
+      : null;
+  }
+
+  if (breadcrumbItems.length === 0) {
+    breadcrumbItems.push({
+      label: formatCategoryLabel(primaryCategory.name),
+      href: `/catalog?category=${primaryCategory.slug}`,
+    });
+  }
+
+  return breadcrumbItems;
+}
+
 export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const fetchedProduct = await getProduct(id);
-  const fetchedProducts = await getProducts();
+  const [fetchedProducts, categories] = await Promise.all([getProducts(), getCategories()]);
   const allProducts = fetchedProducts;
   const product: Product | null = fetchedProduct;
 
@@ -222,7 +296,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const similarProducts =
     (similarByCategory.length > 0 ? similarByCategory : similarFallback).slice(0, 9);
   const purchaseOptionGroups = getPurchaseOptionGroups(product);
-  const categoryLabel = formatCategoryLabel(product.category?.name || getCategoryLabel(product.categoryId));
+  const categoryBreadcrumbs = getCategoryBreadcrumbs(product, categories);
   const availabilityLabel =
     product.stockQuantity === undefined || product.stockQuantity > 0 ? 'In stoc' : 'Stoc epuizat';
   const productCode = product.sku || `MGL-${String(product.id).padStart(4, '0')}`;
@@ -274,13 +348,17 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           <Card className="space-y-6 p-8">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] uppercase tracking-[0.25em] text-slate-500">
-                <Link href="/" className="transition hover:text-slate-700 hover:underline">
-                  Articole
+                <Link href="/catalog" className="transition hover:text-slate-700 hover:underline">
+                  Catalog
                 </Link>
-                <span>/</span>
-                <Link href="/" className="transition hover:text-slate-700 hover:underline">
-                  {categoryLabel}
-                </Link>
+                {categoryBreadcrumbs.map((item) => (
+                  <div key={item.href} className="flex items-center gap-1.5">
+                    <span>/</span>
+                    <Link href={item.href} className="transition hover:text-slate-700 hover:underline">
+                      {item.label}
+                    </Link>
+                  </div>
+                ))}
                 {Number(product.price) > 20 ? <Badge className="px-2 py-0.5 text-[10px]">Popular</Badge> : null}
               </div>
               <ReviewsSummary />
