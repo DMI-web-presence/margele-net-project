@@ -21,6 +21,21 @@ type BasketPageContentProps = {
   products: Product[];
 };
 
+type PaymentStartResponse = {
+  order?: {
+    orderNumber: string;
+    paymentStatus?: string;
+  };
+  payment?: {
+    status?: string;
+    redirectUrl?: string;
+    redirectMethod?: 'GET' | 'POST' | 'NONE';
+    formData?: Record<string, string>;
+    message?: string;
+  };
+  message?: string;
+};
+
 const currencyFormatter = new Intl.NumberFormat('ro-RO', {
   style: 'currency',
   currency: 'RON',
@@ -29,6 +44,59 @@ const currencyFormatter = new Intl.NumberFormat('ro-RO', {
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
+function collectBrowserData() {
+  const screenPrint =
+    typeof window !== 'undefined'
+      ? `Current Resolution: ${window.screen.width}x${window.screen.height}, Available Resolution: ${window.screen.availWidth}x${window.screen.availHeight}, Color Depth: ${window.screen.colorDepth}`
+      : '';
+
+  return {
+    BROWSER_USER_AGENT: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+    OS: typeof navigator !== 'undefined' ? navigator.platform : '',
+    OS_VERSION: '',
+    MOBILE:
+      typeof navigator !== 'undefined' && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+        ? 'true'
+        : 'false',
+    SCREEN_POINT: 'false',
+    SCREEN_PRINT: screenPrint,
+    BROWSER_COLOR_DEPTH: typeof window !== 'undefined' ? String(window.screen.colorDepth || '') : '',
+    BROWSER_SCREEN_HEIGHT: typeof window !== 'undefined' ? String(window.screen.height || '') : '',
+    BROWSER_SCREEN_WIDTH: typeof window !== 'undefined' ? String(window.screen.width || '') : '',
+    BROWSER_PLUGINS:
+      typeof navigator !== 'undefined'
+        ? Array.from(navigator.plugins || [])
+            .map((plugin) => plugin.name)
+            .join(', ')
+        : '',
+    BROWSER_JAVA_ENABLED:
+      typeof navigator !== 'undefined' && typeof navigator.javaEnabled === 'function'
+        ? String(navigator.javaEnabled())
+        : 'false',
+    BROWSER_LANGUAGE: typeof navigator !== 'undefined' ? navigator.language : '',
+    BROWSER_TZ: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Bucharest',
+    BROWSER_TZ_OFFSET: String(new Date().getTimezoneOffset()),
+  };
+}
+
+function submitPaymentForm(action: string, formData: Record<string, string>) {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = action;
+  form.style.display = 'none';
+
+  Object.entries(formData).forEach(([name, value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = String(value ?? '');
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+}
 
 function BasketIcon() {
   return (
@@ -230,25 +298,40 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
     setIsPlacingOrder(true);
 
     try {
-      const response = await fetch(`${backendUrl}/auth/orders`, {
+      const response = await fetch(`${backendUrl}/auth/payments/netopia/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           items: enrichedItems,
           deliveryTotal: delivery,
+          browserData: collectBrowserData(),
         }),
       });
 
-      const result = (await response.json().catch(() => null)) as { message?: string } | null;
+      const result = (await response.json().catch(() => null)) as PaymentStartResponse | null;
       if (!response.ok) {
         throw new Error(result?.message || 'Nu am putut plasa comanda.');
       }
 
+      const orderNumber = result?.order?.orderNumber;
+      const redirectUrl = result?.payment?.redirectUrl;
+      const redirectMethod = result?.payment?.redirectMethod || 'GET';
+
       clearCart();
-      router.push('/cont/comenzi');
+      if (redirectUrl && redirectMethod === 'POST') {
+        submitPaymentForm(redirectUrl, result?.payment?.formData || {});
+        return;
+      }
+
+      if (redirectUrl) {
+        window.location.assign(redirectUrl);
+        return;
+      }
+
+      router.push(orderNumber ? `/checkout/status?orderNumber=${encodeURIComponent(orderNumber)}` : '/cont/comenzi');
     } catch (error) {
-      setOrderError(error instanceof Error ? error.message : 'Nu am putut plasa comanda.');
+      setOrderError(error instanceof Error ? error.message : 'Nu am putut porni plata online.');
     } finally {
       setIsPlacingOrder(false);
     }
@@ -461,7 +544,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
               disabled={isPlacingOrder}
               className="mt-6 inline-flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isPlacingOrder ? 'Se plaseaza comanda...' : 'Mergeti la checkout'}
+              {isPlacingOrder ? 'Se porneste plata...' : 'Continua spre plata'}
             </button>
 
             {orderError ? (
@@ -469,9 +552,12 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
             ) : null}
 
             <div className="mt-6 space-y-3 border-t border-slate-200 pt-6">
-              <p className="text-sm font-semibold text-slate-900">Acceptam</p>
+              <p className="text-sm font-semibold text-slate-900">Plata securizata prin NETOPIA</p>
+              <p className="text-sm leading-6 text-slate-600">
+                Vei fi redirectionat catre procesator pentru finalizarea platii cu cardul.
+              </p>
               <div className="flex flex-wrap gap-2">
-                {['Visa', 'Mastercard', 'Maestro', 'Apple Pay', 'Plata online'].map((label) => (
+                {['NETOPIA Payments', 'Visa', 'Mastercard', 'Maestro', 'Apple Pay'].map((label) => (
                   <span
                     key={label}
                     className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700"

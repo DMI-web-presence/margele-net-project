@@ -22,6 +22,8 @@ type OrderItem = {
   productId: number | null;
   productName: string;
   productImageUrl: string;
+  sku?: string | null;
+  selectedOptions?: string | null;
   unitPrice: string;
   quantity: number;
   lineTotal: string;
@@ -35,6 +37,9 @@ type Order = {
   deliveryTotal: string;
   total: string;
   currency: string;
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  paymentProvider?: string | null;
   createdAt: string;
   items: OrderItem[];
 };
@@ -80,6 +85,14 @@ function formatDate(value: string) {
 function getOrderSummary(order: Order) {
   const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
   return `${itemCount} ${itemCount === 1 ? 'articol' : 'articole'}`;
+}
+
+function paymentStatusLabel(order: Order) {
+  if (order.paymentStatus === 'paid') return 'Plata confirmata';
+  if (order.paymentStatus === 'pending') return 'Plata in asteptare';
+  if (order.paymentStatus === 'failed') return 'Plata esuata';
+  if (order.paymentMethod === 'card') return 'Plata cu cardul';
+  return '';
 }
 
 export default function ContComenziPage() {
@@ -196,6 +209,7 @@ export default function ContComenziPage() {
               <div className="mt-8 space-y-4">
                 {orders.map((order) => {
                   const isExpanded = expandedOrderIds.includes(order.id);
+                  const paymentLabel = paymentStatusLabel(order);
 
                   return (
                     <article
@@ -230,6 +244,11 @@ export default function ContComenziPage() {
                             <p className="mt-1 text-sm text-slate-600">
                               {getOrderSummary(order)} - {order.status}
                             </p>
+                            {paymentLabel ? (
+                              <span className="mt-3 inline-flex rounded-xl border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                                {paymentLabel}
+                              </span>
+                            ) : null}
                           </div>
                         </div>
                         <div className="text-left lg:text-right">
@@ -271,6 +290,14 @@ export default function ContComenziPage() {
                                 <p className="mt-1 text-sm text-slate-600">
                                   {item.quantity} x {formatMoney(item.unitPrice)}
                                 </p>
+                                {item.sku ? (
+                                  <p className="mt-1 text-xs font-semibold text-slate-500">SKU: {item.sku}</p>
+                                ) : null}
+                                {item.selectedOptions ? (
+                                  <p className="mt-1 text-xs font-semibold text-indigo-700">
+                                    {item.selectedOptions}
+                                  </p>
+                                ) : null}
                               </div>
 
                               <p className="text-base font-semibold text-slate-900 sm:text-right">
