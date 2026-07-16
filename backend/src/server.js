@@ -21,6 +21,14 @@ const config = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   googleCallbackUrl:
     process.env.GOOGLE_CALLBACK_URL || `http://localhost:${process.env.PORT || 3001}/auth/google/callback`,
+  backendPublicUrl:
+    process.env.BACKEND_PUBLIC_URL || `http://localhost:${process.env.PORT || 3001}`,
+  netopiaMode: process.env.NETOPIA_MODE || 'sandbox',
+  netopiaApiKey: process.env.NETOPIA_API_KEY,
+  netopiaPosSignature: process.env.NETOPIA_POS_SIGNATURE,
+  netopiaNotifyToken: process.env.NETOPIA_NOTIFY_TOKEN,
+  netopiaEmailTemplate: process.env.NETOPIA_EMAIL_TEMPLATE || '',
+  netopiaLanguage: process.env.NETOPIA_LANGUAGE || 'ro',
   cookieName: 'auth_token',
 };
 
@@ -143,8 +151,24 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const orderMatch = requestUrl.pathname.match(/^\/auth\/orders\/([^/]+)$/);
+    if (orderMatch && req.method === 'GET') {
+      await handleOrderDetails(req, res, decodeURIComponent(orderMatch[1]));
+      return;
+    }
+
     if (req.method === 'POST' && requestUrl.pathname === '/auth/orders') {
       await handleOrderCreate(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/auth/payments/netopia/start') {
+      await handleNetopiaPaymentStart(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/payments/netopia/notify') {
+      await handleNetopiaNotify(req, requestUrl, res);
       return;
     }
 
@@ -921,6 +945,43 @@ async function handleOrderList(req, requestUrl, res) {
   );
 }
 
+async function handleOrderDetails(req, res, orderNumber) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  const orderResult = await pool.query(
+    `
+      SELECT *
+      FROM orders
+      WHERE user_id = $1 AND order_number = $2
+      LIMIT 1
+    `,
+    [user.id, orderNumber],
+  );
+  const order = orderResult.rows[0];
+  if (!order) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  const itemsResult = await pool.query(
+    `
+      SELECT *
+      FROM order_items
+      WHERE order_id = $1
+      ORDER BY id ASC
+    `,
+    [order.id],
+  );
+
+  sendJson(res, 200, orderResponse(order, itemsResult.rows.map(orderItemResponse)));
+}
+
 async function handleOrderCreate(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
@@ -931,7 +992,7 @@ async function handleOrderCreate(req, res) {
   }
 
   const body = await readJson(req);
-  const orderItems = buildOrderItems(body.items);
+  const orderItems = await buildTrustedOrderItems(body.items);
   if (orderItems.length === 0) {
     sendJson(res, 400, { message: 'Cosul este gol.' });
     return;
@@ -954,12 +1015,14 @@ async function handleOrderCreate(req, res) {
           subtotal,
           delivery_total,
           total,
-          currency
+          currency,
+          payment_method,
+          payment_status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
       `,
-      [user.id, orderNumber, 'Plasata', subtotal, deliveryTotal, total, 'RON'],
+      [user.id, orderNumber, 'Plasata', subtotal, deliveryTotal, total, 'RON', 'manual', 'unpaid'],
     );
     const order = orderResult.rows[0];
     const insertedItems = [];
@@ -972,11 +1035,13 @@ async function handleOrderCreate(req, res) {
             product_id,
             product_name,
             product_image_url,
+            sku,
+            selected_options,
             unit_price,
             quantity,
             line_total
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           RETURNING *
         `,
         [
@@ -984,6 +1049,8 @@ async function handleOrderCreate(req, res) {
           item.product_id,
           item.product_name,
           item.product_image_url,
+          item.sku,
+          item.selected_options,
           item.unit_price,
           item.quantity,
           item.line_total,
@@ -1000,6 +1067,205 @@ async function handleOrderCreate(req, res) {
   } finally {
     client.release();
   }
+}
+
+async function handleNetopiaPaymentStart(req, res) {
+  const user = await requireUser(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+    sendJson(res, 501, { message: 'Tabelele pentru comenzi nu exista inca.' });
+    return;
+  }
+
+  if (!config.netopiaApiKey || !config.netopiaPosSignature) {
+    sendJson(res, 501, {
+      message:
+        'Plata online nu este configurata inca. Adauga NETOPIA_API_KEY si NETOPIA_POS_SIGNATURE in backend/.env.',
+    });
+    return;
+  }
+
+  const body = await readJson(req);
+  const orderItems = await buildTrustedOrderItems(body.items);
+  if (orderItems.length === 0) {
+    sendJson(res, 400, { message: 'Cosul este gol.' });
+    return;
+  }
+
+  const subtotal = roundMoney(orderItems.reduce((sum, item) => sum + item.line_total, 0));
+  const deliveryTotal = roundMoney(body.deliveryTotal || body.delivery || 0);
+  const total = roundMoney(subtotal + deliveryTotal);
+  const orderNumber = await generateOrderNumber();
+  const customer = await getCheckoutCustomer(user);
+  const client = await pool.connect();
+  let order = null;
+  const insertedItems = [];
+
+  try {
+    await client.query('BEGIN');
+    const orderResult = await client.query(
+      `
+        INSERT INTO orders (
+          user_id,
+          order_number,
+          status,
+          subtotal,
+          delivery_total,
+          total,
+          currency,
+          payment_method,
+          payment_status,
+          payment_provider
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `,
+      [
+        user.id,
+        orderNumber,
+        'In asteptare plata',
+        subtotal,
+        deliveryTotal,
+        total,
+        'RON',
+        'card',
+        'pending',
+        'netopia',
+      ],
+    );
+    order = orderResult.rows[0];
+
+    for (const item of orderItems) {
+      const itemResult = await client.query(
+        `
+          INSERT INTO order_items (
+            order_id,
+            product_id,
+            product_name,
+            product_image_url,
+            sku,
+            selected_options,
+            unit_price,
+            quantity,
+            line_total
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING *
+        `,
+        [
+          order.id,
+          item.product_id,
+          item.product_name,
+          item.product_image_url,
+          item.sku,
+          item.selected_options,
+          item.unit_price,
+          item.quantity,
+          item.line_total,
+        ],
+      );
+      insertedItems.push(orderItemResponse(itemResult.rows[0]));
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  try {
+    const netopiaResponse = await startNetopiaPayment({
+      order,
+      items: orderItems,
+      customer,
+      browserData: body.browserData || {},
+      req,
+    });
+    const paymentState = netopiaPaymentState(netopiaResponse);
+    const paymentAction = netopiaPaymentAction(netopiaResponse);
+    const updatedOrder = await updateOrderPayment(order.id, {
+      status: paymentState.orderStatus,
+      payment_status: paymentState.paymentStatus,
+      provider_payment_id: netopiaResponse.payment?.ntpID || null,
+      provider_payment_url: paymentAction.redirectUrl || null,
+      provider_response: JSON.stringify(netopiaResponse),
+      paid_at: paymentState.paymentStatus === 'paid' ? new Date() : null,
+      payment_error: paymentState.errorMessage || null,
+    });
+
+    sendJson(res, 201, {
+      order: orderResponse(updatedOrder || order, insertedItems),
+      payment: {
+        provider: 'netopia',
+        status: paymentState.paymentStatus,
+        redirectUrl: paymentAction.redirectUrl,
+        redirectMethod: paymentAction.redirectMethod,
+        formData: paymentAction.formData,
+        message: paymentState.errorMessage || netopiaResponse.error?.message || '',
+      },
+    });
+  } catch (error) {
+    const updatedOrder = await updateOrderPayment(order.id, {
+      status: 'Plata esuata',
+      payment_status: 'failed',
+      payment_error: error instanceof Error ? error.message : 'Nu am putut porni plata online.',
+    });
+
+    sendJson(res, 502, {
+      message: error instanceof Error ? error.message : 'Nu am putut porni plata online.',
+      order: orderResponse(updatedOrder || order, insertedItems),
+    });
+  }
+}
+
+async function handleNetopiaNotify(req, requestUrl, res) {
+  if (config.netopiaNotifyToken && requestUrl.searchParams.get('token') !== config.netopiaNotifyToken) {
+    sendJson(res, 401, { ok: false, message: 'Invalid notify token.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const orderNumber = String(body.order?.orderID || body.orderID || '').trim();
+  if (!orderNumber) {
+    sendJson(res, 400, { ok: false, message: 'Missing orderID.' });
+    return;
+  }
+
+  const orderResult = await pool.query('SELECT * FROM orders WHERE order_number = $1 LIMIT 1', [
+    orderNumber,
+  ]);
+  const order = orderResult.rows[0];
+  if (!order) {
+    sendJson(res, 404, { ok: false, message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  const payment = body.payment || {};
+  const amount = Number(payment.amount);
+  const currency = String(payment.currency || order.currency || 'RON').toUpperCase();
+  if (
+    Number.isFinite(amount) &&
+    (!netopiaAmountMatches(amount, Number(order.total)) || currency !== String(order.currency || 'RON').toUpperCase())
+  ) {
+    sendJson(res, 400, { ok: false, message: 'Suma sau moneda notificarii nu corespunde comenzii.' });
+    return;
+  }
+
+  const paymentState = netopiaPaymentState(body);
+  await updateOrderPayment(order.id, {
+    status: paymentState.orderStatus,
+    payment_status: paymentState.paymentStatus,
+    provider_payment_id: payment.ntpID || order.provider_payment_id || null,
+    provider_response: JSON.stringify(body),
+    paid_at: paymentState.paymentStatus === 'paid' ? new Date() : order.paid_at || null,
+    cancelled_at: paymentState.paymentStatus === 'cancelled' ? new Date() : order.cancelled_at || null,
+    payment_error: paymentState.errorMessage || payment.message || null,
+  });
+
+  sendJson(res, 200, { ok: true });
 }
 
 async function handleAddressCreate(req, res) {
@@ -1252,6 +1518,272 @@ function validateAddressData(data) {
   return '';
 }
 
+async function buildTrustedOrderItems(rawItems) {
+  if (!Array.isArray(rawItems) || rawItems.length === 0) return [];
+
+  const productIds = Array.from(
+    new Set(
+      rawItems
+        .map((item) => {
+          const product = item && typeof item === 'object' ? item.product || item : {};
+          return normalizeInteger(product.id || item.productId || item.product_id);
+        })
+        .filter(Boolean),
+    ),
+  );
+
+  if (productIds.length === 0) return [];
+
+  const products = await getCheckoutProducts(productIds);
+  const orderItems = [];
+
+  for (const item of rawItems) {
+    const productInput = item && typeof item === 'object' ? item.product || item : {};
+    const productId = normalizeInteger(productInput.id || item.productId || item.product_id);
+    const product = products.get(productId);
+    if (!product) {
+      const error = new Error('Un produs din cos nu mai este disponibil.');
+      error.status = 400;
+      throw error;
+    }
+
+    const quantity = Math.max(1, Math.min(999, Math.floor(Number(item.quantity || 1))));
+    if (!Number.isFinite(quantity)) continue;
+
+    const requestedSku = cleanOptionalValue(productInput.sku || item.sku);
+    const selectedOptions = cleanOptionalValue(productInput.selectedSize || item.selectedSize);
+    const selectedVariant = findVariantForCartLine(product.variants, requestedSku, selectedOptions);
+    if ((requestedSku || selectedOptions || productRequiresVariantSelection(product)) && !selectedVariant) {
+      const error = new Error(`Selectia pentru produsul "${product.name}" nu mai este valida.`);
+      error.status = 400;
+      throw error;
+    }
+
+    const unitPrice = roundMoney(applyCheckoutVariantPrice(Number(product.price), selectedVariant));
+    const lineTotal = roundMoney(unitPrice * quantity);
+
+    orderItems.push({
+      product_id: product.id,
+      product_name: product.name,
+      product_image_url: cleanOptionalValue(productInput.imageUrl) || product.imageUrl,
+      sku: selectedVariant?.sku || product.sku || requestedSku || null,
+      selected_options: selectedOptions || null,
+      unit_price: unitPrice,
+      quantity,
+      line_total: lineTotal,
+      category_name: product.categoryName || '',
+    });
+  }
+
+  return orderItems;
+}
+
+async function getCheckoutProducts(productIds) {
+  const result = await pool.query(
+    `
+      SELECT
+        p.id,
+        p.name,
+        p.price,
+        p.sku,
+        COALESCE(primary_image.image_url, p.image_url) AS image_url,
+        c.name AS category_name,
+        COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'optionName', pov.option_name,
+              'optionValue', pov.option_value,
+              'legacyOptionValueId', pov.legacy_option_value_id,
+              'combinationId', pov.combination_id,
+              'model', pov.model,
+              'sku', pov.sku,
+              'quantity', pov.quantity,
+              'priceDelta', pov.price_delta,
+              'pricePrefix', pov.price_prefix,
+              'imageUrl', pov.image_url,
+              'sortOrder', pov.sort_order
+            )
+            ORDER BY pov.sort_order ASC, pov.id ASC
+          ) FILTER (WHERE pov.id IS NOT NULL),
+          '[]'::jsonb
+        ) AS variants
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      LEFT JOIN LATERAL (
+        SELECT image_url
+        FROM product_images
+        WHERE product_id = p.id
+        ORDER BY is_primary DESC, sort_order ASC, id ASC
+        LIMIT 1
+      ) primary_image ON true
+      LEFT JOIN product_option_values pov ON pov.product_id = p.id
+      WHERE p.id = ANY($1::int[]) AND COALESCE(p.status, 'active') = 'active'
+      GROUP BY p.id, c.name, primary_image.image_url
+    `,
+    [productIds],
+  );
+
+  return new Map(
+    result.rows.map((product) => [
+      Number(product.id),
+      {
+        id: Number(product.id),
+        name: product.name || '',
+        price: Number(product.price || 0),
+        sku: product.sku || null,
+        imageUrl: product.image_url || null,
+        categoryName: product.category_name || '',
+        variants: normalizeJsonArray(product.variants),
+      },
+    ]),
+  );
+}
+
+function findVariantForCartLine(variants, requestedSku, selectedOptions) {
+  const availableVariants = variants.filter(variantIsAvailableForCheckout);
+  const candidates = availableVariants.length > 0 ? availableVariants : variants;
+  const sku = String(requestedSku || '').trim();
+  if (sku) {
+    const skuMatch = findBestCheckoutVariant(candidates, (variant) => String(variant.sku || '').trim() === sku);
+    if (skuMatch) return skuMatch;
+  }
+
+  const selectedOptionPairs = parseSelectedOptionPairs(selectedOptions);
+  if (selectedOptionPairs.length === 0) return null;
+
+  const selectedOptionVariants = selectedOptionPairs
+    .map(({ name, value }) =>
+      findBestCheckoutVariant(
+        candidates,
+        (variant) =>
+          normalizeOptionText(variant.optionName) === name &&
+          normalizeOptionText(variant.optionValue) === value,
+      ),
+    )
+    .filter(Boolean);
+
+  const selectedImageVariant = selectedOptionVariants.find((variant) => variant.imageUrl);
+  const selectedImageValueId = selectedImageVariant?.legacyOptionValueId;
+  const selectedNonImageVariants = selectedOptionVariants.filter((variant) => !variant.imageUrl);
+
+  if (selectedNonImageVariants.length > 0) {
+    for (const optionVariant of selectedNonImageVariants) {
+      const match = findBestCheckoutVariant(candidates, (variant) => {
+        if (!optionVariant.legacyOptionValueId || variant.legacyOptionValueId !== optionVariant.legacyOptionValueId) {
+          return false;
+        }
+
+        if (!selectedImageValueId) {
+          return !variant.combinationId;
+        }
+
+        return variantCombinationIncludes(variant, selectedImageValueId);
+      });
+      if (match) return match;
+    }
+  }
+
+  if (selectedImageValueId) {
+    return findBestCheckoutVariant(
+      candidates,
+      (variant) =>
+        variant.legacyOptionValueId === selectedImageValueId &&
+        (!variant.combinationId || variantCombinationIncludes(variant, selectedImageValueId)),
+    );
+  }
+
+  return selectedOptionVariants[0] || null;
+}
+
+function parseSelectedOptionPairs(selectedOptions) {
+  return String(selectedOptions || '')
+    .split(';')
+    .map((part) => {
+      const [name, ...valueParts] = part.split(':');
+      return {
+        name: normalizeOptionText(name),
+        value: normalizeOptionText(valueParts.join(':')),
+      };
+    })
+    .filter((pair) => pair.name && pair.value);
+}
+
+function normalizeOptionText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function variantCombinationIncludes(variant, legacyOptionValueId) {
+  return String(variant.combinationId || '')
+    .split('-')
+    .map((part) => Number(part))
+    .includes(Number(legacyOptionValueId));
+}
+
+function findBestCheckoutVariant(variants, predicate) {
+  const matches = variants.filter(predicate);
+  return (
+    matches.find((variant) => variantHasCheckoutCode(variant) && variantIsAvailableForCheckout(variant)) ||
+    matches.find(variantHasCheckoutCode) ||
+    matches.find(variantIsAvailableForCheckout) ||
+    matches[0] ||
+    null
+  );
+}
+
+function variantHasCheckoutCode(variant) {
+  return Boolean(variant.sku || variant.model);
+}
+
+function variantIsAvailableForCheckout(variant) {
+  return variant.quantity === undefined || variant.quantity === null || Number(variant.quantity) > 0;
+}
+
+function productRequiresVariantSelection(product) {
+  const variants = product.variants || [];
+  const optionValuesByName = new Map();
+  const finalSkus = new Set();
+
+  for (const variant of variants.filter(variantIsAvailableForCheckout)) {
+    const optionName = String(variant.optionName || '').trim();
+    const optionValue = String(variant.optionValue || '').trim();
+    if (optionName && optionValue) {
+      if (!optionValuesByName.has(optionName)) optionValuesByName.set(optionName, new Set());
+      optionValuesByName.get(optionName).add(optionValue);
+    }
+
+    if (variantHasFinalCheckoutPrice(variant) && variant.sku) {
+      finalSkus.add(String(variant.sku).trim());
+    }
+  }
+
+  return (
+    Array.from(optionValuesByName.values()).some((values) => values.size > 1) ||
+    finalSkus.size > 1
+  );
+}
+
+function applyCheckoutVariantPrice(basePrice, variant) {
+  const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
+  if (!variant) return safeBasePrice;
+
+  const priceDelta = Number(variant.priceDelta ?? 0);
+  if (!Number.isFinite(priceDelta)) return safeBasePrice;
+
+  if (variantHasFinalCheckoutPrice(variant)) {
+    return priceDelta;
+  }
+
+  if (variant.pricePrefix === '-') {
+    return Math.max(0, safeBasePrice - priceDelta);
+  }
+
+  return safeBasePrice + priceDelta;
+}
+
+function variantHasFinalCheckoutPrice(variant) {
+  return Boolean(variant.combinationId || variant.sku || variant.model) && Number(variant.priceDelta ?? 0) > 0;
+}
+
 function buildOrderItems(rawItems) {
   if (!Array.isArray(rawItems)) return [];
 
@@ -1277,6 +1809,236 @@ function buildOrderItems(rawItems) {
       };
     })
     .filter(Boolean);
+}
+
+async function getCheckoutCustomer(user) {
+  const fullNameParts = String(user.full_name || '').trim().split(/\s+/).filter(Boolean);
+  const fallbackFirstName = fullNameParts[0] || 'Client';
+  const fallbackLastName = fullNameParts.slice(1).join(' ') || 'Margele.net';
+  let address = null;
+
+  if (await hasTable('addresses')) {
+    const addressResult = await pool.query(
+      `
+        SELECT *
+        FROM addresses
+        WHERE user_id = $1
+        ORDER BY implicit_facturare DESC, implicit_livrare DESC, id DESC
+        LIMIT 1
+      `,
+      [user.id],
+    );
+    address = addressResult.rows[0] || null;
+  }
+
+  const firstName = cleanOptionalValue(address?.prenume) || fallbackFirstName;
+  const lastName = cleanOptionalValue(address?.nume) || fallbackLastName;
+  const email = cleanOptionalValue(user.email) || 'client@example.com';
+  const phone = cleanOptionalValue(address?.telefon || address?.phone || user.phone) || '0259267109';
+  const city = cleanOptionalValue(address?.oras || address?.city) || 'Oradea';
+  const state = cleanOptionalValue(address?.judet || address?.county) || 'Bihor';
+  const postalCode = cleanOptionalValue(address?.cod_postal || address?.postal_code) || '410000';
+  const details = [address?.adresa1, address?.adresa2].map(cleanOptionalValue).filter(Boolean).join(', ') ||
+    'Str. Sovata 5, bl PC26, ap2';
+
+  return {
+    email,
+    phone,
+    firstName,
+    lastName,
+    city,
+    country: 642,
+    countryName: 'Romania',
+    state,
+    postalCode,
+    details,
+  };
+}
+
+async function startNetopiaPayment({ order, items, customer, browserData, req }) {
+  const endpoint =
+    config.netopiaMode === 'live'
+      ? 'https://secure.mobilpay.ro/pay/payment/card/start'
+      : 'https://secure.sandbox.netopia-payments.com/payment/card/start';
+  const payload = buildNetopiaStartPayload({ order, items, customer, browserData, req });
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: config.netopiaApiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  const responseBody = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(responseBody?.error?.message || responseBody?.message || 'NETOPIA a respins cererea de plata.');
+  }
+
+  if (responseBody?.error?.code && !['00', '0', '100', 0, 100].includes(responseBody.error.code)) {
+    throw new Error(responseBody.error.message || 'NETOPIA a returnat o eroare pentru plata.');
+  }
+
+  return responseBody || {};
+}
+
+function buildNetopiaStartPayload({ order, items, customer, browserData, req }) {
+  const notifyUrl = new URL('/payments/netopia/notify', config.backendPublicUrl);
+  if (config.netopiaNotifyToken) {
+    notifyUrl.searchParams.set('token', config.netopiaNotifyToken);
+  }
+
+  const redirectUrl = new URL('/checkout/status', config.frontendOrigin);
+  redirectUrl.searchParams.set('orderNumber', order.order_number);
+
+  return {
+    config: {
+      emailTemplate: config.netopiaEmailTemplate,
+      notifyUrl: notifyUrl.toString(),
+      redirectUrl: redirectUrl.toString(),
+      language: config.netopiaLanguage,
+    },
+    payment: {
+      options: {
+        installments: 0,
+        bonus: 0,
+      },
+      instrument: {
+        type: 'card',
+        token: '',
+      },
+      data: netopiaBrowserData(browserData, req),
+    },
+    order: {
+      ntpID: '',
+      posSignature: config.netopiaPosSignature,
+      dateTime: new Date().toISOString(),
+      description: `Comanda ${order.order_number} - Margele.net`,
+      orderID: order.order_number,
+      amount: Number(order.total),
+      currency: order.currency || 'RON',
+      billing: customer,
+      shipping: customer,
+      products: items.map((item) => ({
+        name: `${item.product_name} x ${item.quantity}`,
+        code: item.sku || String(item.product_id || ''),
+        category: item.category_name || '',
+        price: Number(item.line_total),
+        vat: 19,
+      })),
+      installments: {
+        selected: 0,
+        available: [0],
+      },
+      data: {
+        localOrderId: String(order.id),
+      },
+    },
+  };
+}
+
+function netopiaBrowserData(browserData, req) {
+  return {
+    BROWSER_USER_AGENT: cleanOptionalValue(browserData.BROWSER_USER_AGENT) || req.headers['user-agent'] || '',
+    OS: cleanOptionalValue(browserData.OS) || '',
+    OS_VERSION: cleanOptionalValue(browserData.OS_VERSION) || '',
+    MOBILE: cleanOptionalValue(browserData.MOBILE) || 'false',
+    SCREEN_POINT: cleanOptionalValue(browserData.SCREEN_POINT) || 'false',
+    SCREEN_PRINT: cleanOptionalValue(browserData.SCREEN_PRINT) || '',
+    BROWSER_COLOR_DEPTH: cleanOptionalValue(browserData.BROWSER_COLOR_DEPTH) || '',
+    BROWSER_SCREEN_HEIGHT: cleanOptionalValue(browserData.BROWSER_SCREEN_HEIGHT) || '',
+    BROWSER_SCREEN_WIDTH: cleanOptionalValue(browserData.BROWSER_SCREEN_WIDTH) || '',
+    BROWSER_PLUGINS: cleanOptionalValue(browserData.BROWSER_PLUGINS) || '',
+    BROWSER_JAVA_ENABLED: cleanOptionalValue(browserData.BROWSER_JAVA_ENABLED) || 'false',
+    BROWSER_LANGUAGE: cleanOptionalValue(browserData.BROWSER_LANGUAGE) || '',
+    BROWSER_TZ: cleanOptionalValue(browserData.BROWSER_TZ) || 'Europe/Bucharest',
+    BROWSER_TZ_OFFSET: cleanOptionalValue(browserData.BROWSER_TZ_OFFSET) || '',
+    IP_ADDRESS: clientIpAddress(req),
+  };
+}
+
+function clientIpAddress(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.socket?.remoteAddress || '';
+}
+
+function netopiaPaymentAction(response) {
+  const paymentUrl =
+    response.payment?.paymentURL ||
+    response.payment?.paymentUrl ||
+    response.payment?.url ||
+    '';
+  if (paymentUrl) {
+    return {
+      redirectUrl: paymentUrl,
+      redirectMethod: 'GET',
+      formData: null,
+    };
+  }
+
+  const customerAction = response.customerAction || {};
+  if (customerAction.url) {
+    return {
+      redirectUrl: customerAction.url,
+      redirectMethod: 'POST',
+      formData: customerAction.formData || {},
+    };
+  }
+
+  return {
+    redirectUrl: '',
+    redirectMethod: 'NONE',
+    formData: null,
+  };
+}
+
+function netopiaPaymentState(response) {
+  const payment = response.payment || {};
+  const error = response.error || {};
+  const status = Number(payment.status);
+  const errorCode = String(error.code ?? '').trim();
+  const errorMessage = cleanOptionalValue(error.message || payment.message);
+
+  if ([3, 5].includes(status)) {
+    return {
+      paymentStatus: 'paid',
+      orderStatus: 'Platita',
+      errorMessage: null,
+    };
+  }
+
+  if (status === 15 || errorCode === '100') {
+    return {
+      paymentStatus: 'pending',
+      orderStatus: 'In asteptare plata',
+      errorMessage: null,
+    };
+  }
+
+  if ((errorCode && !['00', '0', '100'].includes(errorCode)) || status === 12) {
+    return {
+      paymentStatus: 'failed',
+      orderStatus: 'Plata esuata',
+      errorMessage: errorMessage || 'Plata nu a fost autorizata.',
+    };
+  }
+
+  return {
+    paymentStatus: 'pending',
+    orderStatus: 'In asteptare plata',
+    errorMessage: null,
+  };
+}
+
+function netopiaAmountMatches(providerAmount, orderTotal) {
+  return (
+    Math.abs(Number(providerAmount) - Number(orderTotal)) < 0.01 ||
+    Math.abs(Number(providerAmount) / 100 - Number(orderTotal)) < 0.01
+  );
+}
+
+async function updateOrderPayment(orderId, updates) {
+  return updateRow('orders', orderId, updates);
 }
 
 async function generateOrderNumber() {
@@ -1377,6 +2139,12 @@ function orderResponse(order, items = []) {
     deliveryTotal: String(order.delivery_total || '0'),
     total: String(order.total || '0'),
     currency: order.currency || 'RON',
+    paymentMethod: order.payment_method || 'manual',
+    paymentStatus: order.payment_status || 'unpaid',
+    paymentProvider: order.payment_provider || null,
+    providerPaymentId: order.provider_payment_id || null,
+    paidAt: order.paid_at || null,
+    paymentError: order.payment_error || null,
     createdAt: order.created_at,
     items,
   };
@@ -1388,6 +2156,8 @@ function orderItemResponse(item) {
     productId: item.product_id,
     productName: item.product_name || '',
     productImageUrl: item.product_image_url || '',
+    sku: item.sku || null,
+    selectedOptions: item.selected_options || null,
     unitPrice: String(item.unit_price || '0'),
     quantity: Number(item.quantity || 0),
     lineTotal: String(item.line_total || '0'),
