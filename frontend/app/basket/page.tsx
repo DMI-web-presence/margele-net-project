@@ -1,5 +1,4 @@
 import BasketPageContent from '@/components/basket-page-content';
-import { mockProducts } from '@/lib/mock-products';
 
 type Product = {
   id: number;
@@ -35,5 +34,5 @@ async function getProducts(): Promise<Product[]> {
 export default async function BasketPage() {
   const products = await getProducts();
 
-  return <BasketPageContent products={products.length > 0 ? products : mockProducts} />;
+  return <BasketPageContent products={products} />;
 }

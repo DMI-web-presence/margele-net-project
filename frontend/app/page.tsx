@@ -1,5 +1,4 @@
 import LandingPage from '@/components/landing-page';
-import { mockProducts } from '@/lib/mock-products';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -42,7 +41,7 @@ export default async function Home() {
 
   return (
     <main>
-      <LandingPage products={products.length > 0 ? products : mockProducts} />
+      <LandingPage products={products} />
     </main>
   );
 }

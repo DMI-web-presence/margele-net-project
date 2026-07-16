@@ -208,7 +208,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
           product: {
             ...item.product,
             name: product?.name ?? item.product.name,
-            imageUrl: product?.imageUrl ?? item.product.imageUrl,
+            imageUrl: item.product.imageUrl ?? product?.imageUrl ?? null,
             price: product?.price ?? item.product.price,
             sku: item.product.sku ?? product?.sku ?? null,
             description: product?.description ?? null,

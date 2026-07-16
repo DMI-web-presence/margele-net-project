@@ -10,7 +10,6 @@ import ReviewsSection from '@/components/reviews-section';
 import ReviewsSummary from '@/components/reviews-summary';
 import SimilarProductsSlider from '@/components/similar-products-slider';
 import { formatCategoryLabel } from '@/lib/format-category-label';
-import { mockProducts } from '@/lib/mock-products';
 
 type Product = {
   id: number;
@@ -209,9 +208,8 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const fetchedProduct = await getProduct(id);
   const fetchedProducts = await getProducts();
-  const allProducts = (fetchedProducts.length > 0 ? fetchedProducts : mockProducts) as Product[];
-  const fallbackProduct = mockProducts.find((item) => item.id === Number(id)) as Product | undefined;
-  const product: Product | null = fetchedProduct ?? fallbackProduct ?? null;
+  const allProducts = fetchedProducts;
+  const product: Product | null = fetchedProduct;
 
   if (!product) {
     notFound();

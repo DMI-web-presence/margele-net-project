@@ -358,6 +358,7 @@ export default function ProductPurchaseControls({
             addToCart(
               {
                 ...product,
+                imageUrl: selectedImageOption?.imageUrl ?? product.imageUrl,
                 price: currentPrice.toFixed(2),
                 sku: currentSku || product.sku || null,
                 selectedSize: cartOption || null,
