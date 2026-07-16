@@ -179,7 +179,6 @@ export default function LandingPage({ products }: LandingPageProps) {
         products={bestSellingProducts}
         variant="popular"
         ctaLabel="Vezi top produse"
-        showRanking
       />
     </>
   );

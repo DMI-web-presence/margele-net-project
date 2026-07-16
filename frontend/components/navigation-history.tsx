@@ -47,11 +47,6 @@ export default function NavigationHistory() {
     return () => window.removeEventListener(historyEventName, handleProductHistoryRecorded);
   }, []);
 
-  const clearHistory = () => {
-    window.localStorage.removeItem(storageKey);
-    setItems([]);
-  };
-
   if (!hasMounted || pathname === '/' || items.length === 0) {
     return null;
   }
@@ -59,18 +54,9 @@ export default function NavigationHistory() {
   return (
     <section className="border-t border-slate-200 bg-slate-50">
       <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-3 px-6 py-4 sm:px-10 lg:px-16">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-            Istoric navigare
-          </h2>
-          <button
-            type="button"
-            onClick={clearHistory}
-            className="cursor-pointer rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"
-          >
-            Sterge istoricul
-          </button>
-        </div>
+        <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+          Istoric navigare
+        </h2>
 
         <div className="flex gap-3 overflow-x-auto pb-1">
           {items.map((item) => (

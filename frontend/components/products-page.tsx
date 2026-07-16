@@ -247,11 +247,6 @@ const normalizeProductOptions = (product: Product): ProductOption[] => {
   return [];
 };
 
-const getProductOptionTags = (product: Product) =>
-  normalizeProductOptions(product)
-    .flatMap((option) => option.values.map((value) => `${option.name}: ${value}`))
-    .slice(0, 4);
-
 const getAllProductOptionTags = (product: Product) =>
   normalizeProductOptions(product).flatMap((option) =>
     option.values.map((value) => `${option.name}: ${value}`),
@@ -859,7 +854,6 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
         <div className="mt-6 grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
           {paginatedProducts.map((product) => {
             const favorited = isFavorite(product.id);
-            const optionTags = getProductOptionTags(product);
             return (
             <Card key={product.id} className="flex h-full w-full flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
               <div className="relative">
@@ -910,46 +904,26 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
                   >
                     {product.name}
                   </Link>
-                  {optionTags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {optionTags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="line-clamp-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-6">
                 <p className="text-2xl font-semibold text-slate-900">{numberFormatter.format(Number(product.price))}</p>
-                <div className="flex flex-col items-center gap-1.5">
-                  <Link
-                    href={`/products/${product.id}`}
-                    className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-100"
-                  >
-                    Detalii produs
-                  </Link>
-                  <Button
-                    className="h-8 rounded-xl px-3 text-xs"
-                    onClick={(event) =>
-                      addToCart(
-                        {
-                          id: product.id,
-                          name: product.name,
-                          price: product.price,
-                          imageUrl: product.imageUrl,
-                        },
-                        event.currentTarget,
-                      )
-                    }
-                  >
-                    Adauga in cos
-                  </Button>
-                </div>
+                <Button
+                  className="h-9 rounded-xl px-4 text-xs"
+                  onClick={(event) =>
+                    addToCart(
+                      {
+                        id: product.id,
+                        name: product.name,
+                        price: product.price,
+                        imageUrl: product.imageUrl,
+                      },
+                      event.currentTarget,
+                    )
+                  }
+                >
+                  Adauga in cos
+                </Button>
               </div>
             </Card>
             );
