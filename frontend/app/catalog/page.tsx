@@ -1,6 +1,5 @@
 import { Suspense } from 'react';
 import ProductsPage from '@/components/products-page';
-import { mockProducts } from '@/lib/mock-products';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,7 +74,7 @@ export default async function CatalogPage() {
   return (
     <main className="px-10 py-8 sm:px-20 lg:px-32">
       <Suspense fallback={<div className="py-12 text-sm font-semibold text-slate-500">Se incarca produsele...</div>}>
-        <ProductsPage products={products.length > 0 ? products : mockProducts} categories={categories} />
+        <ProductsPage products={products} categories={categories} />
       </Suspense>
     </main>
   );

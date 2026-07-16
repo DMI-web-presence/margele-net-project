@@ -16,7 +16,7 @@ const campaigns = [
     id: 'sale',
     eyebrow: 'Oferta limitata',
     title: 'Reduceri de weekend',
-    description: 'Selectii demo pentru campanii de pret: seturi, mixuri si accesorii esentiale.',
+    description: 'Selectii pentru campanii de pret: seturi, mixuri si accesorii esentiale.',
     href: null,
     imageUrl: '/campaign-sale.png',
     accentClass: 'bg-[#e7f0ff] text-[#23527c]',
