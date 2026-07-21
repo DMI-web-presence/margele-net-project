@@ -1,0 +1,10 @@
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier VARCHAR(80);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(120);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_url TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS package_status VARCHAR(30) NOT NULL DEFAULT 'nepregatit';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS package_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS packed_at TIMESTAMP;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS orders_package_status_idx ON orders(package_status);
+CREATE INDEX IF NOT EXISTS orders_tracking_number_idx ON orders(tracking_number);

@@ -431,6 +431,40 @@ function createBrevoMailer(config = {}) {
     });
   }
 
+  async function sendConversationReplyEmail(conversation, replyMessage) {
+    const email =
+      cleanEmail(conversation?.customerEmail) ||
+      extractEmailFromContactDetail(conversation?.contactDetail);
+    if (!email) {
+      return { skipped: true, reason: 'missing_customer_email' };
+    }
+
+    const name = String(conversation?.customerName || '').trim();
+    const subjectBase = String(conversation?.subject || 'Mesaj website').trim();
+    const body = cleanMultiline(replyMessage);
+
+    return sendTransactionalEmail({
+      to: [{ email, name: name || undefined }],
+      subject: `Raspuns Margele.net${subjectBase ? ` - ${subjectBase}` : ''}`,
+      textContent: [
+        `Salut${name ? `, ${name}` : ''}!`,
+        '',
+        body || '-',
+        '',
+        'Echipa Margele.net',
+      ].join('\n'),
+      htmlContent: `
+        <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+          <h2 style="margin: 0 0 16px;">Raspuns din partea echipei Margele.net</h2>
+          <p style="margin: 0 0 12px;">Salut${name ? `, ${escapeHtml(name)}` : ''}!</p>
+          <p style="margin: 0; white-space: pre-line;">${escapeHtml(body || '-')}</p>
+          <p style="margin: 24px 0 0;">Echipa Margele.net</p>
+        </div>
+      `,
+      tags: ['contact', 'reply'],
+    });
+  }
+
   return {
     isConfigured,
     sendTransactionalEmail,
@@ -441,6 +475,7 @@ function createBrevoMailer(config = {}) {
     sendReturnRequestCustomerConfirmation,
     sendContactMessageAdminAlert,
     sendContactMessageCustomerConfirmation,
+    sendConversationReplyEmail,
   };
 }
 
