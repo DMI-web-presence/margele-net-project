@@ -405,6 +405,7 @@ const getProductFacetValues = (product: Product, preferredNames: string[]) => {
     .sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
 };
 
+
 const getOptionValuesByName = (products: Product[], preferredNames: string[]) =>
   Array.from(
     new Set(products.flatMap((product) => getProductFacetValues(product, preferredNames))),
@@ -616,8 +617,10 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
     () => getOptionValuesByName(categoryScopedProducts, packageOptionNames),
     [categoryScopedProducts],
   );
-
   const resetSideFilters = () => {
+    setSearch('');
+    setCategory('Toate');
+    setSubcategory('Toate');
     setSelectedColors([]);
     setSelectedDimensions([]);
     setSelectedPackages([]);
@@ -738,73 +741,14 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
   return (
     <div className="space-y-8">
       <Card className="bg-slate-50 p-8 shadow-sm">
-        <div className="sm:flex sm:items-end sm:justify-between sm:space-x-8">
-          <div className="max-w-2xl">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Articole atent selectionate</p>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-              Cantitati en-gross
-            </h1>
-            <p className="mt-4 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
-              Fiecare material este de calitate superioara, aduse din cele mai bune surse, pentru a te ajuta sa creezi orice iti imaginezi.
-            </p>
-          </div>
-          <div className="mt-6 grid gap-3 sm:mt-0 sm:grid-cols-2">
-            <Card className="rounded-3xl bg-white p-4 shadow-sm">
-              <label className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-                Cauta produse
-              </label>
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Cauta in colectia noastra..."
-                className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-              />
-            </Card>
-            <Card className="rounded-3xl bg-white p-4 shadow-sm">
-              <label className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-                Filtre
-              </label>
-              <div className="mt-3 space-y-3">
-                <select
-                  value={category}
-                  onChange={(event) => {
-                    setCategory(event.target.value);
-                    setSubcategory('Toate');
-                  }}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-                >
-                  {categoryGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.label}
-                    </option>
-                  ))}
-                </select>
-                {selectedGroup.children.length > 0 ? (
-                  <select
-                    value={subcategory}
-                    onChange={(event) => setSubcategory(event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-                  >
-                    <option value="Toate">Toate {selectedGroup.label[0].toLowerCase() + selectedGroup.label.slice(1)}</option>
-                    {selectedGroup.children.map((child) => (
-                      <option key={child.id} value={String(child.id)}>
-                        {child.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                <select
-                  value={sort}
-                  onChange={(event) => setSort(event.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-                >
-                  <option value="featured">Sorteaza</option>
-                  <option value="price-asc">Pret: de la Mic la Mare</option>
-                  <option value="price-desc">Pret: de la Mare la Mic</option>
-                </select>
-              </div>
-            </Card>
-          </div>
+        <div className="max-w-2xl">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Articole atent selectionate</p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+            Cantitati en-gross
+          </h1>
+          <p className="mt-4 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
+            Fiecare material este de calitate superioara, aduse din cele mai bune surse, pentru a te ajuta sa creezi orice iti imaginezi.
+          </p>
         </div>
       </Card>
 
@@ -822,6 +766,58 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
           </div>
 
           <div className="mt-5 flex flex-col gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Cauta produse
+              </label>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Cauta in colectie..."
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Categorie
+              </label>
+              <select
+                value={category}
+                onChange={(event) => {
+                  setCategory(event.target.value);
+                  setSubcategory('Toate');
+                }}
+                className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+              >
+                {categoryGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedGroup.children.length > 0 ? (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  Subcategorie
+                </label>
+                <select
+                  value={subcategory}
+                  onChange={(event) => setSubcategory(event.target.value)}
+                  className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+                >
+                  <option value="Toate">Toate {selectedGroup.label[0].toLowerCase() + selectedGroup.label.slice(1)}</option>
+                  {selectedGroup.children.map((child) => (
+                    <option key={child.id} value={String(child.id)}>
+                      {child.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
             <FilterGroup
               title="Culoare"
               options={colorOptions}
