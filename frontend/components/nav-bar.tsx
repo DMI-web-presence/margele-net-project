@@ -231,12 +231,12 @@ export default function NavBar() {
       >
         <Link href="/" className="inline-flex items-center" aria-label="Margele.net">
           <Image
-            src="/margele-logo-mark.png"
+            src="/margelenet-logo-nav-bar-cropped.png"
             alt="Margele.net"
-            width={430}
-            height={430}
+            width={1045}
+            height={290}
             className={`h-auto transition-[width] duration-500 ease-out ${
-              isNavCompact ? 'w-[42px] sm:w-[46px]' : 'w-[56px] sm:w-[64px]'
+              isNavCompact ? 'w-[140px] sm:w-[158px]' : 'w-[176px] sm:w-[210px]'
             }`}
             unoptimized
           />
@@ -255,7 +255,7 @@ export default function NavBar() {
           >
             <button
               type="button"
-              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-violet-200 bg-violet-600 font-semibold text-white transition-[height,padding,font-size,background-color,border-color,color,box-shadow] duration-500 ease-out shadow-[0_10px_22px_rgba(124,58,237,0.22)] hover:border-violet-300 hover:bg-violet-700 hover:text-white ${
                 isNavCompact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-[13px]'
               }`}
               aria-expanded={isCategoryMenuOpen}
@@ -285,7 +285,7 @@ export default function NavBar() {
 
           <Link
             href="/#noutati"
-            className={`inline-flex items-center rounded-full border border-slate-200 bg-white font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+            className={`inline-flex items-center rounded-full border border-violet-200 bg-white font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-violet-300 hover:bg-slate-100 hover:text-slate-900 ${
               isNavCompact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-[13px]'
             }`}
           >
@@ -294,7 +294,7 @@ export default function NavBar() {
 
           <form
             onSubmit={handleSearchSubmit}
-            className={`flex items-center overflow-hidden rounded-full border border-slate-200 bg-white text-slate-600 transition-[width,background-color,border-color,box-shadow] duration-300 ease-out hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus-within:border-slate-300 focus-within:bg-slate-50 focus-within:text-slate-900 ${
+            className={`flex items-center overflow-hidden rounded-full border border-violet-200 bg-white text-slate-600 transition-[width,background-color,border-color,box-shadow] duration-300 ease-out hover:border-violet-300 hover:bg-slate-50 hover:text-slate-900 focus-within:border-violet-400 focus-within:bg-slate-50 focus-within:text-slate-900 ${
               isSearchOpen ? 'w-[18.5rem] shadow-sm' : isNavCompact ? 'w-[5.5rem]' : 'w-[6.25rem]'
             } ${isNavCompact ? 'h-9' : 'h-10'}`}
             onMouseEnter={() => setIsSearchOpen(true)}
@@ -343,7 +343,7 @@ export default function NavBar() {
             <Link
               href={isAuthenticated ? '/cont' : '/autentificare'}
               aria-label="Cont"
-              className={`inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+              className={`inline-flex items-center gap-2 rounded-full border border-violet-200 px-4 font-semibold text-slate-700 transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out hover:border-violet-300 hover:bg-slate-100 hover:text-slate-900 ${
                 isNavCompact ? 'h-9 text-xs' : 'h-10 text-sm'
               }`}
             >
@@ -372,7 +372,7 @@ export default function NavBar() {
               href="/favorites"
               aria-label="Favorite"
               id="favorite-icon-button"
-              className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 transition-[height,width,background-color,border-color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 ${
+              className={`relative inline-flex items-center justify-center rounded-full border border-violet-200 transition-[height,width,background-color,border-color] duration-500 ease-out hover:border-violet-300 hover:bg-slate-100 ${
                 isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
               } ${
                 isFavoritePulsing ? 'animate-[favorite-bump_400ms_ease-out]' : ''
@@ -404,7 +404,7 @@ export default function NavBar() {
               href="/basket"
               aria-label="Cos"
               id="basket-icon-button"
-              className={`relative inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 ${
+              className={`relative inline-flex items-center justify-center rounded-full border border-violet-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-violet-300 hover:bg-slate-100 hover:text-slate-900 ${
                 isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
               } ${
                 isBasketPulsing ? 'animate-[basket-bump_400ms_ease-out]' : ''
