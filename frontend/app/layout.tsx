@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
-import { CartProvider } from "@/components/cart-provider";
-import CookieConsent from "@/components/cookie-consent";
-import Footer from "@/components/footer";
+import AppChrome from "@/components/app-chrome";
 import { Geist, Geist_Mono } from "next/font/google";
-import NavigationHistory from "@/components/navigation-history";
-import NavBar from "@/components/nav-bar";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -38,13 +34,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <CartProvider>
-          <NavBar />
-          <div className="flex-1">{children}</div>
-          <NavigationHistory />
-          <Footer />
-          <CookieConsent />
-        </CartProvider>
+        <AppChrome>{children}</AppChrome>
       </body>
     </html>
   );

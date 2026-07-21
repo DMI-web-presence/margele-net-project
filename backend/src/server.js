@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
+const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const { Pool } = require('pg');
@@ -18,6 +19,7 @@ const config = {
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET,
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  adminEmails: parseCsv(process.env.ADMIN_EMAILS || ''),
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   googleCallbackUrl:
@@ -42,6 +44,8 @@ const config = {
 
 const dbSearchSchemas = ['catalog', 'auth', 'commerce', 'content', 'public'];
 const dbSearchPath = dbSearchSchemas.join(',');
+const uploadRoot = path.join(__dirname, '..', 'uploads');
+const productUploadDir = path.join(uploadRoot, 'products');
 
 if (!config.databaseUrl) {
   throw new Error('DATABASE_URL is required. Add it to backend/.env.');
@@ -68,6 +72,8 @@ const brevoMailer = createBrevoMailer({
 
 let userColumnsCache = null;
 let addressColumnsCache = null;
+let orderColumnsCache = null;
+let conversationMessageColumnsCache = null;
 
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -81,6 +87,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    if (req.method === 'GET' && requestUrl.pathname.startsWith('/uploads/')) {
+      await handleUploadedFile(requestUrl, res);
+      return;
+    }
+
     if (req.method === 'GET' && requestUrl.pathname === '/health') {
       sendJson(res, 200, { ok: true });
       return;
@@ -99,6 +110,75 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && requestUrl.pathname === '/categories') {
       await handleCategoryList(res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/admin/categories') {
+      await handleAdminCategoryList(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/admin/categories') {
+      await handleAdminCategoryCreate(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/admin/products') {
+      await handleAdminProductList(req, requestUrl, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/admin/products') {
+      await handleAdminProductCreate(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/admin/uploads/product-image') {
+      await handleAdminProductImageUpload(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/admin/orders') {
+      await handleAdminOrderList(req, requestUrl, res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/admin/conversations') {
+      await handleAdminConversationList(req, requestUrl, res);
+      return;
+    }
+
+    const adminProductMatch = requestUrl.pathname.match(/^\/admin\/products\/(\d+)$/);
+    if (adminProductMatch && req.method === 'GET') {
+      await handleAdminProductDetails(req, res, Number(adminProductMatch[1]));
+      return;
+    }
+
+    if (adminProductMatch && req.method === 'PATCH') {
+      await handleAdminProductUpdate(req, res, Number(adminProductMatch[1]));
+      return;
+    }
+
+    if (adminProductMatch && req.method === 'DELETE') {
+      await handleAdminProductDelete(req, res, Number(adminProductMatch[1]));
+      return;
+    }
+
+    const adminOrderMatch = requestUrl.pathname.match(/^\/admin\/orders\/(\d+)$/);
+    if (adminOrderMatch && req.method === 'PATCH') {
+      await handleAdminOrderUpdate(req, res, Number(adminOrderMatch[1]));
+      return;
+    }
+
+    const adminConversationMatch = requestUrl.pathname.match(/^\/admin\/conversations\/(\d+)$/);
+    if (adminConversationMatch && req.method === 'PATCH') {
+      await handleAdminConversationUpdate(req, res, Number(adminConversationMatch[1]));
+      return;
+    }
+
+    const adminConversationReplyMatch = requestUrl.pathname.match(/^\/admin\/conversations\/(\d+)\/reply$/);
+    if (adminConversationReplyMatch && req.method === 'POST') {
+      await handleAdminConversationReply(req, res, Number(adminConversationReplyMatch[1]));
       return;
     }
 
@@ -141,6 +221,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && requestUrl.pathname === '/auth/me') {
       await handleMe(req, res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/auth/admin/me') {
+      await handleAdminMe(req, res);
       return;
     }
 
@@ -305,6 +390,122 @@ async function readJson(req) {
     error.status = 400;
     throw error;
   }
+}
+
+async function handleUploadedFile(requestUrl, res) {
+  const relativePath = decodeURIComponent(requestUrl.pathname.replace(/^\/uploads\//, ''));
+  const normalizedPath = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, '');
+  const filePath = path.join(uploadRoot, normalizedPath);
+  const resolvedRoot = path.resolve(uploadRoot);
+  const resolvedFilePath = path.resolve(filePath);
+
+  if (!resolvedFilePath.startsWith(resolvedRoot + path.sep) && resolvedFilePath !== resolvedRoot) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
+  let stat;
+  try {
+    stat = await fs.promises.stat(resolvedFilePath);
+  } catch {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
+
+  if (!stat.isFile()) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': getMimeTypeForPath(resolvedFilePath),
+    'Cache-Control': 'public, max-age=31536000, immutable',
+  });
+
+  fs.createReadStream(resolvedFilePath).pipe(res);
+}
+
+async function handleAdminProductImageUpload(req, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const body = await readJson(req);
+  const mimeType = String(body.mimeType || '').trim().toLowerCase();
+  const fileName = String(body.fileName || '').trim();
+  const base64Data = String(body.base64Data || '').trim();
+  const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+  if (!mimeType || !allowedMimeTypes.has(mimeType)) {
+    sendJson(res, 400, { message: 'Tipul imaginii nu este acceptat.' });
+    return;
+  }
+
+  if (!base64Data) {
+    sendJson(res, 400, { message: 'Imaginea nu a fost trimisa.' });
+    return;
+  }
+
+  let fileBuffer;
+  try {
+    fileBuffer = Buffer.from(base64Data, 'base64');
+  } catch {
+    sendJson(res, 400, { message: 'Imaginea nu a putut fi decodata.' });
+    return;
+  }
+
+  if (!fileBuffer.length) {
+    sendJson(res, 400, { message: 'Imaginea este goala.' });
+    return;
+  }
+
+  if (fileBuffer.length > 6 * 1024 * 1024) {
+    sendJson(res, 400, { message: 'Imaginea este prea mare. Limita este 6 MB.' });
+    return;
+  }
+
+  await fs.promises.mkdir(productUploadDir, { recursive: true });
+
+  const safeBaseName = slugifyFileName(path.parse(fileName).name || 'produs');
+  const extension = mimeTypeToExtension(mimeType);
+  const uniqueName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safeBaseName}.${extension}`;
+  const absoluteFilePath = path.join(productUploadDir, uniqueName);
+
+  await fs.promises.writeFile(absoluteFilePath, fileBuffer);
+
+  const publicPath = `/uploads/products/${uniqueName}`;
+  sendJson(res, 201, {
+    imageUrl: `${config.backendPublicUrl}${publicPath}`,
+    path: publicPath,
+  });
+}
+
+function slugifyFileName(value) {
+  return String(value || 'produs')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'produs';
+}
+
+function mimeTypeToExtension(mimeType) {
+  if (mimeType === 'image/png') return 'png';
+  if (mimeType === 'image/webp') return 'webp';
+  if (mimeType === 'image/gif') return 'gif';
+  return 'jpg';
+}
+
+function getMimeTypeForPath(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === '.png') return 'image/png';
+  if (extension === '.webp') return 'image/webp';
+  if (extension === '.gif') return 'image/gif';
+  if (extension === '.svg') return 'image/svg+xml';
+  return 'image/jpeg';
 }
 
 async function handleEmailExists(requestUrl, res) {
@@ -633,6 +834,1131 @@ async function handleCategoryDetails(res, categoryIdentifier) {
   sendJson(res, 200, categoryResponse(category));
 }
 
+async function handleAdminCategoryList(req, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('categories'))) {
+    sendJson(res, 200, []);
+    return;
+  }
+
+  const result = await pool.query(`
+    SELECT
+      c.*,
+      parent.name AS parent_name,
+      parent.slug AS parent_slug,
+      COUNT(DISTINCT p.id)::int AS product_count
+    FROM categories c
+    LEFT JOIN categories parent ON parent.id = c.parent_id
+    LEFT JOIN product_categories pc ON pc.category_id = c.id
+    LEFT JOIN products p ON p.id = pc.product_id
+    GROUP BY c.id, parent.id
+    ORDER BY c.sort_order ASC, c.name ASC
+  `);
+
+  sendJson(res, 200, result.rows.map(categoryResponse));
+}
+
+async function handleAdminCategoryCreate(req, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('categories'))) {
+    sendJson(res, 501, { message: 'Tabela de categorii nu este disponibila.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const input = normalizeAdminCategoryInput(body);
+
+  if (input.parentId) {
+    const parentResult = await pool.query('SELECT id FROM categories WHERE id = $1 LIMIT 1', [input.parentId]);
+    if (parentResult.rowCount === 0) {
+      sendJson(res, 400, { message: 'Categoria parinte selectata nu exista.' });
+      return;
+    }
+  }
+
+  const createdCategory = await withTransaction(async (client) => {
+    const slug = await ensureUniqueCategorySlug(client, input.slug || input.name, null);
+    const sortOrderResult = await client.query(
+      'SELECT COALESCE(MAX(sort_order), 0)::int AS max_sort_order FROM categories WHERE parent_id IS NOT DISTINCT FROM $1',
+      [input.parentId],
+    );
+    const nextSortOrder = Number(sortOrderResult.rows[0]?.max_sort_order || 0) + 1;
+
+    const inserted = await insertRowWithClient(client, 'categories', {
+      name: input.name,
+      slug,
+      parent_id: input.parentId,
+      is_active: true,
+      sort_order: nextSortOrder,
+      updated_at: new Date(),
+    });
+
+    const result = await client.query(
+      `
+        SELECT
+          c.*,
+          parent.name AS parent_name,
+          parent.slug AS parent_slug,
+          0::int AS product_count
+        FROM categories c
+        LEFT JOIN categories parent ON parent.id = c.parent_id
+        WHERE c.id = $1
+        LIMIT 1
+      `,
+      [inserted.id],
+    );
+
+    return result.rows[0];
+  }).catch((error) => {
+    if (error.code === '23505') {
+      const conflict = new Error('Exista deja o categorie cu acest slug.');
+      conflict.status = 409;
+      throw conflict;
+    }
+    throw error;
+  });
+
+  sendJson(res, 201, categoryResponse(createdCategory));
+}
+
+async function handleAdminProductList(req, requestUrl, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const search = String(requestUrl.searchParams.get('q') || '').trim().toLowerCase();
+  const products = await getAdminProducts();
+  const filtered = search
+    ? products.filter((product) =>
+        [product.name, product.slug, product.sku]
+          .map((value) => String(value || '').toLowerCase())
+          .some((value) => value.includes(search)),
+      )
+    : products;
+
+  sendJson(res, 200, filtered);
+}
+
+async function handleAdminProductDetails(req, res, productId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const product = await getAdminProductById(productId);
+  if (!product) {
+    sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+    return;
+  }
+
+  sendJson(res, 200, product);
+}
+
+async function handleAdminProductCreate(req, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const body = await readJson(req);
+  const input = normalizeAdminProductInput(body);
+  await assertCategoryIdsExist(input.categoryIds);
+
+  const product = await withTransaction(async (client) => {
+    const slug = await ensureUniqueProductSlug(client, input.slug || input.name, null);
+    const inserted = await insertRowWithClient(client, 'products', {
+      name: input.name,
+      slug,
+      description: input.description,
+      short_description: input.shortDescription,
+      price: input.price,
+      compare_at_price: input.compareAtPrice,
+      currency: input.currency,
+      sku: input.sku,
+      stock_quantity: input.stockQuantity,
+      status: input.status,
+      image_url: input.imageUrl,
+      material: input.material,
+      category_id: input.primaryCategoryId,
+      updated_at: new Date(),
+    });
+
+    await syncProductRelations(client, inserted.id, input);
+    return getAdminProductById(inserted.id, client);
+  }).catch((error) => translateProductMutationError(error));
+
+  sendJson(res, 201, product);
+}
+
+async function handleAdminProductUpdate(req, res, productId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const existing = await getAdminProductById(productId);
+  if (!existing) {
+    sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const input = normalizeAdminProductInput(body);
+  await assertCategoryIdsExist(input.categoryIds);
+
+  const product = await withTransaction(async (client) => {
+    const slug = await ensureUniqueProductSlug(client, input.slug || input.name, productId);
+    const updated = await updateRowWithClient(client, 'products', productId, {
+      name: input.name,
+      slug,
+      description: input.description,
+      short_description: input.shortDescription,
+      price: input.price,
+      compare_at_price: input.compareAtPrice,
+      currency: input.currency,
+      sku: input.sku,
+      stock_quantity: input.stockQuantity,
+      status: input.status,
+      image_url: input.imageUrl,
+      material: input.material,
+      category_id: input.primaryCategoryId,
+      updated_at: new Date(),
+    });
+
+    await syncProductRelations(client, productId, input);
+    return updated ? getAdminProductById(productId, client) : null;
+  }).catch((error) => translateProductMutationError(error));
+
+  if (!product) {
+    sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+    return;
+  }
+
+  sendJson(res, 200, product);
+}
+
+async function handleAdminProductDelete(req, res, productId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const result = await pool.query('DELETE FROM products WHERE id = $1 RETURNING id', [productId]);
+  if (result.rowCount === 0) {
+    sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+    return;
+  }
+
+  sendJson(res, 200, { ok: true });
+}
+
+async function handleAdminOrderList(req, requestUrl, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const search = String(requestUrl.searchParams.get('q') || '').trim().toLowerCase();
+  const status = String(requestUrl.searchParams.get('status') || '').trim().toLowerCase();
+  const paymentStatus = String(requestUrl.searchParams.get('paymentStatus') || '').trim().toLowerCase();
+  const orders = await getAdminOrders();
+
+  const filtered = orders.filter((order) => {
+    const matchesSearch =
+      !search ||
+      [
+        order.orderNumber,
+        order.customer?.name,
+        order.customer?.email,
+        ...order.items.map((item) => item.productName),
+      ]
+        .map((value) => String(value || '').toLowerCase())
+        .some((value) => value.includes(search));
+
+    const matchesStatus = !status || String(order.status || '').toLowerCase() === status;
+    const matchesPaymentStatus =
+      !paymentStatus || String(order.paymentStatus || '').toLowerCase() === paymentStatus;
+
+    return matchesSearch && matchesStatus && matchesPaymentStatus;
+  });
+
+  sendJson(res, 200, filtered);
+}
+
+async function handleAdminOrderUpdate(req, res, orderId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const existing = await getAdminOrderById(orderId);
+  if (!existing) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const input = normalizeAdminOrderUpdateInput(body, existing);
+
+  await updateRow('orders', orderId, input);
+  const updated = await getAdminOrderById(orderId);
+
+  sendJson(res, 200, updated);
+}
+
+async function handleAdminConversationList(req, requestUrl, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('conversations')) || !(await hasTable('conversation_messages'))) {
+    sendJson(res, 200, []);
+    return;
+  }
+
+  const search = String(requestUrl.searchParams.get('q') || '').trim().toLowerCase();
+  const status = String(requestUrl.searchParams.get('status') || '').trim().toLowerCase();
+  const source = String(requestUrl.searchParams.get('source') || '').trim().toLowerCase();
+  const conversations = await getAdminConversations();
+
+  const filtered = conversations.filter((conversation) => {
+    const matchesSearch =
+      !search ||
+      [
+        conversation.customerName,
+        conversation.customerEmail,
+        conversation.customerPhone,
+        conversation.contactDetail,
+        conversation.subject,
+        conversation.lastMessagePreview,
+        ...conversation.messages.map((message) => message.messageText),
+      ]
+        .map((value) => String(value || '').toLowerCase())
+        .some((value) => value.includes(search));
+
+    const matchesStatus = !status || String(conversation.status || '').toLowerCase() === status;
+    const matchesSource = !source || String(conversation.source || '').toLowerCase() === source;
+
+    return matchesSearch && matchesStatus && matchesSource;
+  });
+
+  sendJson(res, 200, filtered);
+}
+
+async function handleAdminConversationUpdate(req, res, conversationId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('conversations'))) {
+    sendJson(res, 404, { message: 'Conversatia nu a fost gasita.' });
+    return;
+  }
+
+  const existing = await getAdminConversationById(conversationId);
+  if (!existing) {
+    sendJson(res, 404, { message: 'Conversatia nu a fost gasita.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const input = normalizeAdminConversationUpdateInput(body);
+
+  await updateRow('conversations', conversationId, {
+    ...input,
+    updated_at: new Date(),
+  });
+  const updated = await getAdminConversationById(conversationId);
+
+  sendJson(res, 200, updated);
+}
+
+async function handleAdminConversationReply(req, res, conversationId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('conversations')) || !(await hasTable('conversation_messages'))) {
+    sendJson(res, 404, { message: 'Conversatia nu a fost gasita.' });
+    return;
+  }
+
+  const existing = await getAdminConversationById(conversationId);
+  if (!existing) {
+    sendJson(res, 404, { message: 'Conversatia nu a fost gasita.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const replyText = String(body.message || '').trim();
+  if (!replyText) {
+    sendJson(res, 400, { message: 'Mesajul de raspuns este obligatoriu.' });
+    return;
+  }
+
+  const recipientEmail = normalizeEmail(existing.customerEmail || '');
+  if (!recipientEmail || !isEmail(recipientEmail)) {
+    sendJson(res, 400, { message: 'Conversatia nu are o adresa de email valida pentru raspuns.' });
+    return;
+  }
+
+  const replyResult = await brevoMailer.sendConversationReplyEmail(existing, replyText);
+  if (replyResult?.skipped) {
+    sendJson(res, 503, { message: 'Emailul de raspuns nu a putut fi trimis momentan.' });
+    return;
+  }
+
+  const conversationMessageColumns = await getConversationMessageColumns();
+  const replyAuthorName = buildAdminUserDisplayName(user);
+
+  await withTransaction(async (client) => {
+    const insertColumns = ['conversation_id', 'direction', 'source', 'message_text', 'attachments', 'sent_at'];
+    const insertValues = [conversationId, 'outbound', 'email', replyText, '[]', new Date()];
+
+    if (conversationMessageColumns.has('author_user_id')) {
+      insertColumns.push('author_user_id');
+      insertValues.push(user.id);
+    }
+
+    if (conversationMessageColumns.has('author_name')) {
+      insertColumns.push('author_name');
+      insertValues.push(replyAuthorName);
+    }
+
+    const insertParams = insertValues.map((_, index) => `$${index + 1}`);
+    await client.query(
+      `
+        INSERT INTO conversation_messages (${insertColumns.join(', ')})
+        VALUES (${insertParams.join(', ')})
+      `,
+      insertValues,
+    );
+
+    await client.query(
+      `
+        UPDATE conversations
+        SET
+          status = $2,
+          last_message_preview = $3,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `,
+      [conversationId, existing.status === 'nou' ? 'in_curs' : existing.status, replyText.slice(0, 280)],
+    );
+  });
+
+  const updated = await getAdminConversationById(conversationId);
+  sendJson(res, 200, updated);
+}
+
+async function getAdminOrders(db = pool) {
+  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+    return [];
+  }
+
+  const result = await db.query(`${await adminOrderSelectSql()} ORDER BY o.created_at DESC`);
+  return result.rows.map(adminOrderResponse);
+}
+
+async function getAdminConversations(db = pool) {
+  if (!(await hasTable('conversations')) || !(await hasTable('conversation_messages'))) {
+    return [];
+  }
+
+  const result = await db.query(
+    `${await adminConversationSelectSql()}
+     ORDER BY COALESCE(messages.last_message_at, c.updated_at, c.created_at) DESC, c.id DESC`,
+  );
+  return result.rows.map(adminConversationResponse);
+}
+
+async function getAdminConversationById(conversationId, db = pool) {
+  if (!(await hasTable('conversations')) || !(await hasTable('conversation_messages'))) {
+    return null;
+  }
+
+  const result = await db.query(`${await adminConversationSelectSql()} WHERE c.id = $1`, [conversationId]);
+  return result.rows[0] ? adminConversationResponse(result.rows[0]) : null;
+}
+
+async function getAdminOrderById(orderId, db = pool) {
+  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+    return null;
+  }
+
+  const result = await db.query(`${await adminOrderSelectSql()} WHERE o.id = $1`, [orderId]);
+  return result.rows[0] ? adminOrderResponse(result.rows[0]) : null;
+}
+
+async function adminOrderSelectSql() {
+  const userColumns = await getUserColumns();
+  const orderColumns = await getOrderColumns();
+  const userNameSelect = buildAdminOrderUserNameSql(userColumns);
+  const shipmentSelect = buildAdminOrderShipmentSql(orderColumns);
+
+  return `
+    SELECT
+      o.*,
+      ${userNameSelect} AS user_name,
+      u.email AS user_email,
+      ${shipmentSelect},
+      COALESCE(items.items, '[]'::jsonb) AS items,
+      COALESCE(items.item_count, 0)::int AS item_count
+    FROM orders o
+    LEFT JOIN users u ON u.id = o.user_id
+    LEFT JOIN LATERAL (
+      SELECT
+        jsonb_agg(
+          jsonb_build_object(
+            'id', oi.id,
+            'productId', oi.product_id,
+            'productName', oi.product_name,
+            'productImageUrl', oi.product_image_url,
+            'sku', oi.sku,
+            'selectedOptions', oi.selected_options,
+            'unitPrice', oi.unit_price,
+            'quantity', oi.quantity,
+            'lineTotal', oi.line_total
+          )
+          ORDER BY oi.id ASC
+        ) AS items,
+        COALESCE(SUM(oi.quantity), 0) AS item_count
+      FROM order_items oi
+      WHERE oi.order_id = o.id
+    ) items ON true
+  `;
+}
+
+async function adminConversationSelectSql() {
+  const conversationMessageColumns = await getConversationMessageColumns();
+  const authorUserIdSelect = conversationMessageColumns.has('author_user_id')
+    ? 'cm.author_user_id'
+    : 'NULL';
+  const authorNameSelect = conversationMessageColumns.has('author_name')
+    ? 'cm.author_name'
+    : 'NULL';
+
+  return `
+    SELECT
+      c.*,
+      COALESCE(messages.messages, '[]'::jsonb) AS messages,
+      COALESCE(messages.message_count, 0)::int AS message_count,
+      messages.last_message_at
+    FROM conversations c
+    LEFT JOIN LATERAL (
+      SELECT
+        jsonb_agg(
+          jsonb_build_object(
+            'id', cm.id,
+            'direction', cm.direction,
+            'source', cm.source,
+            'messageText', cm.message_text,
+            'sentAt', cm.sent_at,
+            'attachments', cm.attachments,
+            'authorUserId', ${authorUserIdSelect},
+            'authorName', ${authorNameSelect}
+          )
+          ORDER BY cm.sent_at ASC, cm.id ASC
+        ) AS messages,
+        COUNT(*) AS message_count,
+        MAX(cm.sent_at) AS last_message_at
+      FROM conversation_messages cm
+      WHERE cm.conversation_id = c.id
+    ) messages ON true
+  `;
+}
+
+function buildAdminOrderShipmentSql(orderColumns) {
+  const field = (column, alias) =>
+    orderColumns.has(column) ? `o.${column} AS ${alias}` : `NULL AS ${alias}`;
+
+  return [
+    field('courier', 'courier'),
+    field('tracking_number', 'tracking_number'),
+    field('tracking_url', 'tracking_url'),
+    orderColumns.has('package_status')
+      ? `o.package_status AS package_status`
+      : `'nepregatit'::varchar AS package_status`,
+    orderColumns.has('package_count')
+      ? `o.package_count AS package_count`
+      : `1::int AS package_count`,
+    field('packed_at', 'packed_at'),
+    field('shipped_at', 'shipped_at'),
+    field('invoice_number', 'invoice_number'),
+    orderColumns.has('invoice_status')
+      ? `o.invoice_status AS invoice_status`
+      : `'negenerata'::varchar AS invoice_status`,
+    field('invoice_url', 'invoice_url'),
+    field('invoice_issued_at', 'invoice_issued_at'),
+    field('billing_company', 'billing_company'),
+    field('billing_vat', 'billing_vat'),
+  ].join(',\n      ');
+}
+
+function buildAdminOrderUserNameSql(userColumns) {
+  const parts = [];
+
+  if (userColumns.has('full_name')) {
+    parts.push('NULLIF(BTRIM(u.full_name), \'\')');
+  }
+
+  const firstNameColumn = userColumns.has('first_name')
+    ? 'first_name'
+    : userColumns.has('prenume')
+      ? 'prenume'
+      : null;
+  const lastNameColumn = userColumns.has('last_name')
+    ? 'last_name'
+    : userColumns.has('nume')
+      ? 'nume'
+      : null;
+
+  if (firstNameColumn || lastNameColumn) {
+    const firstExpr = firstNameColumn ? `COALESCE(u.${firstNameColumn}, '')` : `''`;
+    const lastExpr = lastNameColumn ? `COALESCE(u.${lastNameColumn}, '')` : `''`;
+    parts.push(`NULLIF(BTRIM(${firstExpr} || ' ' || ${lastExpr}), '')`);
+  }
+
+  if (userColumns.has('name')) {
+    parts.push('NULLIF(BTRIM(u.name), \'\')');
+  }
+
+  parts.push(`SPLIT_PART(COALESCE(u.email, ''), '@', 1)`);
+
+  return `COALESCE(${parts.join(', ')})`;
+}
+
+function normalizeAdminConversationUpdateInput(body) {
+  const updates = {};
+  const nextStatus = cleanOptionalValue(body.status);
+  const allowedStatuses = ['nou', 'in_curs', 'rezolvat', 'spam'];
+
+  if (nextStatus) {
+    if (!allowedStatuses.includes(nextStatus)) {
+      const error = new Error('Statusul conversatiei nu este valid.');
+      error.status = 400;
+      throw error;
+    }
+
+    updates.status = nextStatus;
+  }
+
+  return updates;
+}
+
+function adminConversationResponse(conversation) {
+  const messages = normalizeJsonArray(conversation.messages).map((message) => ({
+    id: message.id,
+    direction: message.direction || 'inbound',
+    source: message.source || 'website',
+    messageText: message.messageText || message.message_text || '',
+    sentAt: message.sentAt || message.sent_at || null,
+    authorUserId: message.authorUserId || message.author_user_id || null,
+    authorName: message.authorName || message.author_name || '',
+    attachments: normalizeJsonArray(message.attachments),
+  }));
+
+  return {
+    id: conversation.id,
+    customerName: conversation.customer_name || '',
+    customerEmail: conversation.customer_email || '',
+    customerPhone: conversation.customer_phone || '',
+    contactDetail: conversation.contact_detail || '',
+    source: conversation.source || 'website',
+    status: conversation.status || 'nou',
+    subject: conversation.subject || '',
+    lastMessagePreview: conversation.last_message_preview || '',
+    lastMessageAt: conversation.last_message_at || messages[messages.length - 1]?.sentAt || null,
+    messageCount: Number(conversation.message_count || messages.length),
+    createdAt: conversation.created_at || null,
+    updatedAt: conversation.updated_at || null,
+    messages,
+  };
+}
+
+function normalizeAdminOrderUpdateInput(body, existingOrder) {
+  const nextStatus = cleanOptionalValue(body.status) || existingOrder.status;
+  const nextPaymentStatus = cleanOptionalValue(body.paymentStatus) || existingOrder.paymentStatus;
+  const nextPackageStatus = cleanOptionalValue(body.packageStatus) || existingOrder.packageStatus || 'nepregatit';
+  const nextInvoiceStatus = cleanOptionalValue(body.invoiceStatus) || existingOrder.invoiceStatus || 'negenerata';
+  const allowedStatuses = [
+    'Plasata',
+    'Confirmata',
+    'In procesare',
+    'Expediata',
+    'Livrata',
+    'Anulata',
+    'Returnata',
+  ];
+  const allowedPaymentStatuses = ['unpaid', 'pending', 'paid', 'failed', 'refunded'];
+  const allowedPackageStatuses = ['nepregatit', 'pregatit', 'impachetat', 'expediat', 'livrat', 'retur'];
+  const allowedInvoiceStatuses = ['negenerata', 'generata', 'trimisa', 'anulata'];
+
+  if (!allowedStatuses.includes(nextStatus)) {
+    const error = new Error('Statusul comenzii nu este valid.');
+    error.status = 400;
+    throw error;
+  }
+
+  if (!allowedPaymentStatuses.includes(nextPaymentStatus)) {
+    const error = new Error('Statusul platii nu este valid.');
+    error.status = 400;
+    throw error;
+  }
+
+  if (!allowedPackageStatuses.includes(nextPackageStatus)) {
+    const error = new Error('Statusul coletului nu este valid.');
+    error.status = 400;
+    throw error;
+  }
+
+  if (!allowedInvoiceStatuses.includes(nextInvoiceStatus)) {
+    const error = new Error('Statusul facturii nu este valid.');
+    error.status = 400;
+    throw error;
+  }
+
+  const updates = {
+    status: nextStatus,
+    payment_status: nextPaymentStatus,
+    paid_at: nextPaymentStatus === 'paid' ? existingOrder.paidAt || new Date() : null,
+    cancelled_at: nextStatus === 'Anulata' ? new Date() : null,
+    updated_at: new Date(),
+  };
+
+  // Shipment fields are optional because older databases may not have the migration yet.
+  const shipmentColumns = orderColumnsCache;
+  if (shipmentColumns?.has('courier')) {
+    updates.courier = cleanOptionalValue(body.courier);
+  }
+  if (shipmentColumns?.has('tracking_number')) {
+    updates.tracking_number = cleanOptionalValue(body.trackingNumber);
+  }
+  if (shipmentColumns?.has('tracking_url')) {
+    updates.tracking_url = cleanOptionalValue(body.trackingUrl);
+  }
+  if (shipmentColumns?.has('package_status')) {
+    updates.package_status = nextPackageStatus;
+  }
+  if (shipmentColumns?.has('package_count') && Object.prototype.hasOwnProperty.call(body, 'packageCount')) {
+    updates.package_count = normalizeWholeNumber(
+      body.packageCount,
+      'Numarul de colete trebuie sa fie un numar intreg.',
+    );
+  }
+  if (shipmentColumns?.has('packed_at')) {
+    updates.packed_at =
+      nextPackageStatus === 'pregatit' || nextPackageStatus === 'impachetat' || nextPackageStatus === 'expediat' || nextPackageStatus === 'livrat'
+        ? existingOrder.packedAt || new Date()
+        : null;
+  }
+  if (shipmentColumns?.has('shipped_at')) {
+    updates.shipped_at =
+      nextPackageStatus === 'expediat' || nextPackageStatus === 'livrat'
+        ? existingOrder.shippedAt || new Date()
+        : null;
+  }
+  if (shipmentColumns?.has('invoice_number')) {
+    updates.invoice_number = cleanOptionalValue(body.invoiceNumber);
+  }
+  if (shipmentColumns?.has('invoice_status')) {
+    updates.invoice_status = nextInvoiceStatus;
+  }
+  if (shipmentColumns?.has('invoice_url')) {
+    updates.invoice_url = cleanOptionalValue(body.invoiceUrl);
+  }
+  if (shipmentColumns?.has('invoice_issued_at')) {
+    updates.invoice_issued_at =
+      nextInvoiceStatus === 'generata' || nextInvoiceStatus === 'trimisa'
+        ? existingOrder.invoiceIssuedAt || new Date()
+        : null;
+  }
+  if (shipmentColumns?.has('billing_company')) {
+    updates.billing_company = cleanOptionalValue(body.billingCompany);
+  }
+  if (shipmentColumns?.has('billing_vat')) {
+    updates.billing_vat = cleanOptionalValue(body.billingVat);
+  }
+
+  return updates;
+}
+
+async function getAdminProducts(db = pool) {
+  if (!(await hasTable('products'))) {
+    return [];
+  }
+
+  const result = await db.query(adminProductSelectSql());
+  return result.rows.map(productResponse);
+}
+
+async function getAdminProductById(productId, db = pool) {
+  if (!(await hasTable('products'))) {
+    return null;
+  }
+
+  const result = await db.query(`${adminProductSelectSql()} WHERE p.id = $1`, [productId]);
+  return result.rows[0] ? productResponse(result.rows[0]) : null;
+}
+
+function adminProductSelectSql() {
+  return `
+    SELECT
+      p.*,
+      c.name AS category_name,
+      c.slug AS category_slug,
+      COALESCE(primary_image.image_url, p.image_url) AS primary_image_url,
+      COALESCE(images.images, '[]'::jsonb) AS images,
+      COALESCE(attributes.attributes, '[]'::jsonb) AS attributes,
+      COALESCE(variants.variants, '[]'::jsonb) AS variants,
+      COALESCE(categories.categories, '[]'::jsonb) AS categories
+    FROM products p
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN LATERAL (
+      SELECT image_url
+      FROM product_images
+      WHERE product_id = p.id
+      ORDER BY is_primary DESC, sort_order ASC, id ASC
+      LIMIT 1
+    ) primary_image ON true
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', pi.id,
+          'imageUrl', pi.image_url,
+          'altText', pi.alt_text,
+          'sortOrder', pi.sort_order,
+          'isPrimary', pi.is_primary
+        )
+        ORDER BY pi.sort_order ASC, pi.id ASC
+      ) AS images
+      FROM product_images pi
+      WHERE pi.product_id = p.id
+    ) images ON true
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', pa.id,
+          'key', pa.attribute_key,
+          'value', pa.attribute_value,
+          'sortOrder', pa.sort_order
+        )
+        ORDER BY pa.sort_order ASC, pa.id ASC
+      ) AS attributes
+      FROM product_attributes pa
+      WHERE pa.product_id = p.id
+    ) attributes ON true
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', pov.id,
+          'optionName', pov.option_name,
+          'optionValue', pov.option_value,
+          'legacyOptionId', pov.legacy_option_id,
+          'legacyOptionValueId', pov.legacy_option_value_id,
+          'combinationId', pov.combination_id,
+          'model', pov.model,
+          'sku', pov.sku,
+          'quantity', pov.quantity,
+          'priceDelta', pov.price_delta,
+          'pricePrefix', pov.price_prefix,
+          'imageUrl', pov.image_url,
+          'sortOrder', pov.sort_order
+        )
+        ORDER BY pov.sort_order ASC, pov.id ASC
+      ) AS variants
+      FROM product_option_values pov
+      WHERE pov.product_id = p.id
+    ) variants ON true
+    LEFT JOIN LATERAL (
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', linked_category.id,
+          'name', linked_category.name,
+          'slug', linked_category.slug,
+          'isPrimary', product_category.is_primary
+        )
+        ORDER BY product_category.is_primary DESC, linked_category.sort_order ASC, linked_category.name ASC
+      ) AS categories
+      FROM product_categories product_category
+      JOIN categories linked_category ON linked_category.id = product_category.category_id
+      WHERE product_category.product_id = p.id
+    ) categories ON true
+  `;
+}
+
+function normalizeAdminProductInput(body) {
+  const name = String(body.name || '').trim();
+  if (!name) {
+    const error = new Error('Numele produsului este obligatoriu.');
+    error.status = 400;
+    throw error;
+  }
+
+  const status = String(body.status || 'draft').trim().toLowerCase();
+  if (!['draft', 'active', 'archived'].includes(status)) {
+    const error = new Error('Statusul produsului nu este valid.');
+    error.status = 400;
+    throw error;
+  }
+
+  const categoryIds = uniqueNumbers([...(Array.isArray(body.categoryIds) ? body.categoryIds : []), body.categoryId]);
+  const images = normalizeAdminImages(body.images);
+  const attributes = normalizeAdminAttributes(body.attributes);
+  const variants = normalizeAdminVariants(body.variants);
+  const primaryImage = images.find((image) => image.isPrimary) || images[0] || null;
+
+  return {
+    name,
+    slug: slugify(String(body.slug || '').trim()),
+    description: cleanOptionalValue(body.description),
+    shortDescription: cleanOptionalValue(body.shortDescription),
+    price: normalizeMoneyInput(body.price, 'Pretul de baza este obligatoriu.'),
+    compareAtPrice: normalizeNullableMoney(body.compareAtPrice),
+    currency: String(body.currency || 'RON').trim().toUpperCase() || 'RON',
+    sku: cleanOptionalValue(body.sku),
+    stockQuantity: normalizeWholeNumber(body.stockQuantity, 'Stocul trebuie sa fie un numar intreg.'),
+    status,
+    imageUrl: cleanOptionalValue(body.imageUrl) || primaryImage?.imageUrl || null,
+    material: cleanOptionalValue(body.material),
+    categoryIds,
+    primaryCategoryId: categoryIds[0] ?? null,
+    images,
+    attributes,
+    variants,
+  };
+}
+
+function normalizeAdminCategoryInput(body) {
+  const name = String(body.name || '').trim();
+  if (!name) {
+    const error = new Error('Numele categoriei este obligatoriu.');
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    name,
+    slug: slugify(String(body.slug || '').trim()),
+    parentId: normalizeNullableInteger(body.parentId),
+  };
+}
+
+function normalizeAdminImages(images) {
+  if (!Array.isArray(images)) return [];
+
+  return images
+    .map((image, index) => ({
+      imageUrl: cleanOptionalValue(image?.imageUrl || image?.url || image),
+      altText: cleanOptionalValue(image?.altText),
+      sortOrder: normalizeWholeNumber(image?.sortOrder ?? index, 'Ordinea imaginilor trebuie sa fie numar intreg.'),
+      isPrimary: Boolean(image?.isPrimary),
+    }))
+    .filter((image) => image.imageUrl);
+}
+
+function normalizeAdminAttributes(attributes) {
+  if (!Array.isArray(attributes)) return [];
+
+  return attributes
+    .map((attribute, index) => ({
+      key: String(attribute?.key || '').trim(),
+      value: String(attribute?.value || '').trim(),
+      sortOrder: normalizeWholeNumber(
+        attribute?.sortOrder ?? index,
+        'Ordinea atributelor trebuie sa fie numar intreg.',
+      ),
+    }))
+    .filter((attribute) => attribute.key && attribute.value);
+}
+
+function normalizeAdminVariants(variants) {
+  if (!Array.isArray(variants)) return [];
+
+  return variants
+    .map((variant, index) => {
+      const optionName = String(variant?.optionName || '').trim();
+      const optionValue = String(variant?.optionValue || '').trim();
+      if (!optionName || !optionValue) return null;
+
+      const pricePrefix = String(variant?.pricePrefix || '+').trim();
+      if (!['+', '-'].includes(pricePrefix)) {
+        const error = new Error('Prefixul diferentei de pret trebuie sa fie + sau -.');
+        error.status = 400;
+        throw error;
+      }
+
+      return {
+        optionName,
+        optionValue,
+        legacyOptionId: normalizeNullableInteger(variant?.legacyOptionId),
+        legacyOptionValueId: normalizeNullableInteger(variant?.legacyOptionValueId),
+        combinationId: cleanOptionalValue(variant?.combinationId),
+        model: cleanOptionalValue(variant?.model),
+        sku: cleanOptionalValue(variant?.sku),
+        quantity: normalizeWholeNumber(variant?.quantity ?? 0, 'Cantitatea variantei trebuie sa fie numar intreg.'),
+        priceDelta: normalizeMoneyInput(variant?.priceDelta ?? 0, 'Diferenta de pret a variantei nu este valida.'),
+        pricePrefix,
+        imageUrl: cleanOptionalValue(variant?.imageUrl),
+        sortOrder: normalizeWholeNumber(variant?.sortOrder ?? index, 'Ordinea variantelor trebuie sa fie numar intreg.'),
+      };
+    })
+    .filter(Boolean);
+}
+
+async function assertCategoryIdsExist(categoryIds) {
+  if (!categoryIds.length) return;
+
+  const result = await pool.query(
+    'SELECT id FROM categories WHERE id = ANY($1::int[])',
+    [categoryIds],
+  );
+  if (result.rowCount !== categoryIds.length) {
+    const error = new Error('Una sau mai multe categorii selectate nu exista.');
+    error.status = 400;
+    throw error;
+  }
+}
+
+async function syncProductRelations(client, productId, input) {
+  await syncProductCategories(client, productId, input.categoryIds);
+  await syncProductImages(client, productId, input.images, input.imageUrl);
+  await syncProductAttributes(client, productId, input.attributes);
+  await syncProductVariants(client, productId, input.variants);
+}
+
+async function syncProductCategories(client, productId, categoryIds) {
+  await client.query('DELETE FROM product_categories WHERE product_id = $1', [productId]);
+  for (const [index, categoryId] of categoryIds.entries()) {
+    await client.query(
+      'INSERT INTO product_categories (product_id, category_id, is_primary) VALUES ($1, $2, $3)',
+      [productId, categoryId, index === 0],
+    );
+  }
+}
+
+async function syncProductImages(client, productId, images, fallbackImageUrl) {
+  await client.query('DELETE FROM product_images WHERE product_id = $1', [productId]);
+
+  const normalizedImages = images.length
+    ? images.map((image, index) => ({
+        ...image,
+        isPrimary: image.isPrimary || index === 0,
+      }))
+    : fallbackImageUrl
+      ? [{ imageUrl: fallbackImageUrl, altText: null, sortOrder: 0, isPrimary: true }]
+      : [];
+
+  for (const image of normalizedImages) {
+    await client.query(
+      `
+        INSERT INTO product_images (product_id, image_url, alt_text, sort_order, is_primary)
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [productId, image.imageUrl, image.altText, image.sortOrder, image.isPrimary],
+    );
+  }
+}
+
+async function syncProductAttributes(client, productId, attributes) {
+  await client.query('DELETE FROM product_attributes WHERE product_id = $1', [productId]);
+
+  for (const attribute of attributes) {
+    await client.query(
+      `
+        INSERT INTO product_attributes (product_id, attribute_key, attribute_value, sort_order)
+        VALUES ($1, $2, $3, $4)
+      `,
+      [productId, attribute.key, attribute.value, attribute.sortOrder],
+    );
+  }
+}
+
+async function syncProductVariants(client, productId, variants) {
+  await client.query('DELETE FROM product_option_values WHERE product_id = $1', [productId]);
+
+  for (const variant of variants) {
+    await client.query(
+      `
+        INSERT INTO product_option_values (
+          product_id,
+          option_name,
+          option_value,
+          legacy_option_id,
+          legacy_option_value_id,
+          combination_id,
+          model,
+          sku,
+          quantity,
+          price_delta,
+          price_prefix,
+          image_url,
+          sort_order,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+      `,
+      [
+        productId,
+        variant.optionName,
+        variant.optionValue,
+        variant.legacyOptionId,
+        variant.legacyOptionValueId,
+        variant.combinationId,
+        variant.model,
+        variant.sku,
+        variant.quantity,
+        variant.priceDelta,
+        variant.pricePrefix,
+        variant.imageUrl,
+        variant.sortOrder,
+      ],
+    );
+  }
+}
+
+async function ensureUniqueProductSlug(db, rawValue, excludeProductId) {
+  const base = slugify(rawValue) || `produs-${Date.now()}`;
+  let candidate = base;
+  let counter = 2;
+
+  while (true) {
+    const values = [candidate];
+    let sql = 'SELECT id FROM products WHERE slug = $1';
+    if (excludeProductId) {
+      values.push(excludeProductId);
+      sql += ' AND id <> $2';
+    }
+    sql += ' LIMIT 1';
+
+    const result = await db.query(sql, values);
+    if (result.rowCount === 0) return candidate;
+
+    candidate = `${base}-${counter}`;
+    counter += 1;
+  }
+}
+
+async function ensureUniqueCategorySlug(db, rawValue, excludeCategoryId) {
+  const base = slugify(rawValue) || `categorie-${Date.now()}`;
+  let candidate = base;
+  let counter = 2;
+
+  while (true) {
+    const values = [candidate];
+    let sql = 'SELECT id FROM categories WHERE slug = $1';
+    if (excludeCategoryId) {
+      values.push(excludeCategoryId);
+      sql += ' AND id <> $2';
+    }
+    sql += ' LIMIT 1';
+
+    const result = await db.query(sql, values);
+    if (result.rowCount === 0) return candidate;
+
+    candidate = `${base}-${counter}`;
+    counter += 1;
+  }
+}
+
+function translateProductMutationError(error) {
+  if (error.code === '23505') {
+    const conflict = new Error('Slugul sau SKU-ul exista deja pentru alt produs.');
+    conflict.status = 409;
+    throw conflict;
+  }
+
+  throw error;
+}
+
 async function handleGoogleStart(res) {
   if (!config.googleClientId || !config.googleClientSecret) {
     sendJson(res, 501, {
@@ -733,6 +2059,10 @@ async function handleRegister(req, res) {
     password_hash: passwordHash,
   };
 
+  if (columns.has('role')) {
+    insertData.role = roleForEmail(email);
+  }
+
   addOptionalUserData(insertData, columns, body);
 
   const insertedUser = await insertUser(insertData).catch((error) => {
@@ -757,11 +2087,18 @@ async function findOrCreateGoogleUser({ email, fullName }) {
 
   if (existing.rows[0]) return existing.rows[0];
 
-  return insertUser({
+  const columns = await getUserColumns();
+  const insertData = {
     full_name: fullName,
     email,
     password_hash: `google$${crypto.randomBytes(32).toString('hex')}`,
-  });
+  };
+
+  if (columns.has('role')) {
+    insertData.role = roleForEmail(email);
+  }
+
+  return insertUser(insertData);
 }
 
 async function handleLogin(req, res) {
@@ -774,8 +2111,10 @@ async function handleLogin(req, res) {
     return;
   }
 
+  const userColumns = await getUserColumns();
+  const selectRole = userColumns.has('role') ? ', role' : '';
   const result = await pool.query(
-    'SELECT id, full_name, email, password_hash FROM users WHERE lower(email) = lower($1) LIMIT 1',
+    `SELECT id, full_name, email, password_hash${selectRole} FROM users WHERE lower(email) = lower($1) LIMIT 1`,
     [email],
   );
   const user = result.rows[0];
@@ -798,6 +2137,20 @@ async function handleMe(req, res) {
 
   sendJson(res, 200, {
     authenticated: true,
+    user: publicUser(user),
+  });
+}
+
+async function handleAdminMe(req, res) {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    sendJson(res, 200, { authenticated: false, isAdmin: false });
+    return;
+  }
+
+  sendJson(res, 200, {
+    authenticated: true,
+    isAdmin: isAdminUser(user),
     user: publicUser(user),
   });
 }
@@ -1387,6 +2740,18 @@ async function requireUser(req, res, includePassword = false) {
   return user;
 }
 
+async function requireAdmin(req, res, includePassword = false) {
+  const user = await requireUser(req, res, includePassword);
+  if (!user) return null;
+
+  if (!isAdminUser(user)) {
+    sendJson(res, 403, { message: 'Nu ai permisiunea de a accesa panoul de administrare.' });
+    return null;
+  }
+
+  return user;
+}
+
 async function getUserColumns() {
   if (userColumnsCache) return userColumnsCache;
   userColumnsCache = await getColumns('users');
@@ -1397,6 +2762,18 @@ async function getAddressColumns() {
   if (addressColumnsCache) return addressColumnsCache;
   addressColumnsCache = await getColumns('addresses');
   return addressColumnsCache;
+}
+
+async function getOrderColumns() {
+  if (orderColumnsCache) return orderColumnsCache;
+  orderColumnsCache = await getColumns('orders');
+  return orderColumnsCache;
+}
+
+async function getConversationMessageColumns() {
+  if (conversationMessageColumnsCache) return conversationMessageColumnsCache;
+  conversationMessageColumnsCache = await getColumns('conversation_messages');
+  return conversationMessageColumnsCache;
 }
 
 async function getColumns(tableName) {
@@ -1432,11 +2809,15 @@ async function insertUser(data) {
 }
 
 async function insertRow(tableName, data) {
+  return insertRowWithClient(pool, tableName, data);
+}
+
+async function insertRowWithClient(db, tableName, data) {
   const entries = Object.entries(data).filter(([, value]) => value !== undefined);
   const columns = entries.map(([key]) => key);
   const values = entries.map(([, value]) => value);
   const params = values.map((_, index) => `$${index + 1}`);
-  const result = await pool.query(
+  const result = await db.query(
     `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${params.join(', ')}) RETURNING *`,
     values,
   );
@@ -1449,15 +2830,19 @@ async function updateUser(userId, updates) {
 }
 
 async function updateRow(tableName, id, updates) {
+  return updateRowWithClient(pool, tableName, id, updates);
+}
+
+async function updateRowWithClient(db, tableName, id, updates) {
   const entries = Object.entries(updates).filter(([, value]) => value !== undefined);
   if (entries.length === 0) {
-    const result = await pool.query(`SELECT * FROM ${tableName} WHERE id = $1 LIMIT 1`, [id]);
+    const result = await db.query(`SELECT * FROM ${tableName} WHERE id = $1 LIMIT 1`, [id]);
     return result.rows[0] || null;
   }
 
   const setParts = entries.map(([key], index) => `${key} = $${index + 1}`);
   const values = entries.map(([, value]) => value);
-  const result = await pool.query(
+  const result = await db.query(
     `UPDATE ${tableName} SET ${setParts.join(', ')} WHERE id = $${
       values.length + 1
     } RETURNING *`,
@@ -1465,6 +2850,21 @@ async function updateRow(tableName, id, updates) {
   );
 
   return result.rows[0] || null;
+}
+
+async function withTransaction(action) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await action(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function updateRowForUser(tableName, id, userId, updates) {
@@ -2183,6 +3583,44 @@ function orderResponse(order, items = []) {
   };
 }
 
+function adminOrderResponse(order) {
+  const items = normalizeJsonArray(order.items).map((item) => ({
+    id: item.id,
+    productId: item.productId ?? item.product_id ?? null,
+    productName: item.productName || item.product_name || '',
+    productImageUrl: item.productImageUrl || item.product_image_url || '',
+    sku: item.sku || null,
+    selectedOptions: item.selectedOptions || item.selected_options || null,
+    unitPrice: String(item.unitPrice || item.unit_price || '0'),
+    quantity: Number(item.quantity || 0),
+    lineTotal: String(item.lineTotal || item.line_total || '0'),
+  }));
+
+  return {
+    ...orderResponse(order, items),
+    updatedAt: order.updated_at || null,
+    courier: order.courier || null,
+    trackingNumber: order.tracking_number || null,
+    trackingUrl: order.tracking_url || null,
+    packageStatus: order.package_status || 'nepregatit',
+    packageCount: Number(order.package_count || 1),
+    packedAt: order.packed_at || null,
+    shippedAt: order.shipped_at || null,
+    invoiceNumber: order.invoice_number || null,
+    invoiceStatus: order.invoice_status || 'negenerata',
+    invoiceUrl: order.invoice_url || null,
+    invoiceIssuedAt: order.invoice_issued_at || null,
+    billingCompany: order.billing_company || null,
+    billingVat: order.billing_vat || null,
+    customer: {
+      id: order.user_id ?? null,
+      name: order.user_name || '',
+      email: order.user_email || '',
+    },
+    itemCount: Number(order.item_count || items.reduce((sum, item) => sum + item.quantity, 0)),
+  };
+}
+
 function orderItemResponse(item) {
   return {
     id: item.id,
@@ -2528,6 +3966,10 @@ async function handleContactMessage(req, res) {
     return;
   }
 
+  if ((await hasTable('conversations')) && (await hasTable('conversation_messages'))) {
+    await createWebsiteConversation(message);
+  }
+
   const emailResults = await Promise.allSettled([
     bestEffortEmail('contact admin alert', () =>
       brevoMailer.sendContactMessageAdminAlert(message),
@@ -2555,6 +3997,52 @@ async function handleContactMessage(req, res) {
   });
 }
 
+async function createWebsiteConversation(message) {
+  const contactDetail = String(message.contactDetail || '').trim();
+  const email = isEmail(normalizeEmail(contactDetail)) ? normalizeEmail(contactDetail) : null;
+  const phone = email ? null : contactDetail;
+  const subject = String(message.topic || '').trim() || 'Mesaj website';
+  const preview = String(message.message || '').trim().slice(0, 280);
+
+  await withTransaction(async (client) => {
+    const conversationResult = await client.query(
+      `
+        INSERT INTO conversations (
+          customer_name,
+          customer_email,
+          customer_phone,
+          contact_detail,
+          source,
+          status,
+          subject,
+          last_message_preview,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        RETURNING id
+      `,
+      [message.name, email, phone, contactDetail, 'website', 'nou', subject, preview],
+    );
+
+    const conversationId = conversationResult.rows[0]?.id;
+    await client.query(
+      `
+        INSERT INTO conversation_messages (
+          conversation_id,
+          direction,
+          source,
+          message_text,
+          attachments,
+          sent_at
+        )
+        VALUES ($1, $2, $3, $4, '[]'::jsonb, CURRENT_TIMESTAMP)
+      `,
+      [conversationId, 'inbound', 'website', message.message],
+    );
+  });
+}
+
 async function sendOrderEmails({ user, order, items }) {
   await Promise.allSettled([
     bestEffortEmail('order confirmation', () =>
@@ -2571,7 +4059,19 @@ function publicUser(user) {
     id: user.id,
     name: user.full_name,
     email: user.email,
+    role: isAdminUser(user) ? 'admin' : user.role || 'customer',
+    isAdmin: isAdminUser(user),
   };
+}
+
+function buildAdminUserDisplayName(user) {
+  const fullName = String(user.full_name || '').trim();
+  if (fullName) return fullName;
+
+  const fallbackName = String(user.name || '').trim();
+  if (fallbackName) return fallbackName;
+
+  return String(user.email || 'Admin').split('@')[0];
 }
 
 function buildFullName(body) {
@@ -2582,6 +4082,15 @@ function buildFullName(body) {
     .map((value) => String(value || '').trim())
     .filter(Boolean)
     .join(' ');
+}
+
+function roleForEmail(email) {
+  return config.adminEmails.has(normalizeEmail(email)) ? 'admin' : 'customer';
+}
+
+function isAdminUser(user) {
+  const email = normalizeEmail(user?.email);
+  return user?.role === 'admin' || (email ? config.adminEmails.has(email) : false);
 }
 
 function normalizeEmail(value) {
@@ -2597,6 +4106,77 @@ function cleanOptionalValue(value) {
   if (typeof value === 'boolean') return value;
   const text = String(value || '').trim();
   return text === '--' ? '' : text;
+}
+
+function parseCsv(value) {
+  return new Set(
+    String(value || '')
+      .split(',')
+      .map((item) => normalizeEmail(item))
+      .filter(Boolean),
+  );
+}
+
+function slugify(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 255);
+}
+
+function normalizeMoneyInput(value, message) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    const error = new Error(message);
+    error.status = 400;
+    throw error;
+  }
+
+  return roundMoney(number);
+}
+
+function normalizeNullableMoney(value) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    return null;
+  }
+
+  return normalizeMoneyInput(value, 'Pretul promotional nu este valid.');
+}
+
+function normalizeWholeNumber(value, message) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0) {
+    const error = new Error(message);
+    error.status = 400;
+    throw error;
+  }
+
+  return number;
+}
+
+function normalizeNullableInteger(value) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    return null;
+  }
+
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
+}
+
+function uniqueNumbers(values) {
+  const normalized = [];
+
+  for (const value of values) {
+    const number = normalizeNullableInteger(value);
+    if (number && !normalized.includes(number)) {
+      normalized.push(number);
+    }
+  }
+
+  return normalized;
 }
 
 function toDateInputValue(value) {
