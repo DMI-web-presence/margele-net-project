@@ -92,7 +92,7 @@ export default function LandingPage({ products }: LandingPageProps) {
             <div className="grid min-h-[430px] lg:grid-cols-[49%_51%]">
               <div className="flex flex-col justify-between p-7 sm:p-10 lg:p-11">
                 <div className="max-w-[470px]">
-                  <p className="text-xs font-bold uppercase tracking-[0.34em] text-slate-700">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-700">
                     Despre noi
                   </p>
                   <h1 className="mt-7 text-[2.35rem] font-bold leading-[1.08] text-slate-950 sm:text-[3.1rem] lg:text-[3.45rem]">

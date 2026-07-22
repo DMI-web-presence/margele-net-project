@@ -26,7 +26,7 @@ export default function ProductRangeSection() {
   return (
     <section className="bg-white mb-14">
       <div className="mx-auto max-w-[1370px] rounded-[1.45rem] border border-slate-200 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.06)]">
-        <p className="px-1 text-xs font-bold uppercase tracking-[0.34em] text-[#7b4a75]">
+        <p className="px-1 text-xs font-bold uppercase tracking-[0.16em] text-[#7b4a75]">
           Oferim o gama larga de produse
         </p>
 

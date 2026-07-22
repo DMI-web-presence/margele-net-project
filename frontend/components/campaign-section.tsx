@@ -50,7 +50,7 @@ export default function CampaignSection() {
       <div className="mx-auto max-w-[1370px] rounded-[1.45rem] border border-slate-200 bg-slate-50 p-5 shadow-[0_10px_35px_rgba(15,23,42,0.05)] sm:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.34em] text-[#7b4a75]">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#7b4a75]">
               Campanii
             </p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
