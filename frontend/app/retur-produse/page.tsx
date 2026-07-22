@@ -1,8 +1,8 @@
 import ReturnPageContent from '@/components/return-page-content';
 
 export const metadata = {
-  title: 'Retur produse | Margele.net',
-  description: 'Formular pentru retur produse si solicitari de asistenta.',
+  title: 'Formular de retragere | Margele.net',
+  description: 'Formular de retragere si solicitari de asistenta pentru comenzi.',
 };
 
 export default function ReturnProductsPage() {
