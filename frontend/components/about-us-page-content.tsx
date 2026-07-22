@@ -39,7 +39,7 @@ export default function AboutUsPageContent() {
           <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-6 bg-gradient-to-br from-white via-slate-50 to-rose-50 p-6 sm:p-8 lg:p-10">
               <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                   Despre noi
                 </p>
                 <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">

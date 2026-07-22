@@ -105,7 +105,7 @@ export default function LandingProductCarousel({
               {eyebrow ? (
                 <p
                   className={[
-                    'text-xs font-bold uppercase tracking-[0.34em]',
+                    'text-xs font-bold uppercase tracking-[0.16em]',
                     'text-[#7b4a75]',
                   ].join(' ')}
                 >
