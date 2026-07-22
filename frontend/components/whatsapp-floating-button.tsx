@@ -25,6 +25,7 @@ function normalizeWhatsAppNumber(value: string) {
 
 export default function WhatsAppFloatingButton() {
   const [isVisible, setIsVisible] = useState(false);
+  const [bottomOffset, setBottomOffset] = useState(20);
   const normalizedNumber = normalizeWhatsAppNumber(rawWhatsAppNumber);
 
   useEffect(() => {
@@ -50,11 +51,32 @@ export default function WhatsAppFloatingButton() {
       }, 650);
     }
 
+    function syncFooterOffset() {
+      const footerPresenceBar = document.querySelector('[data-footer-presence-bar]');
+      if (!footerPresenceBar) {
+        setBottomOffset(20);
+        return;
+      }
+
+      const footerRect = footerPresenceBar.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const overlap = Math.max(0, viewportHeight - footerRect.top);
+      setBottomOffset(overlap > 0 ? overlap + 12 : 20);
+    }
+
     handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    syncFooterOffset();
+    const handleWindowChange = () => {
+      handleScroll();
+      syncFooterOffset();
+    };
+
+    window.addEventListener('scroll', handleWindowChange, { passive: true });
+    window.addEventListener('resize', handleWindowChange);
 
     return () => {
-      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('scroll', handleWindowChange);
+      window.removeEventListener('resize', handleWindowChange);
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
@@ -74,6 +96,7 @@ export default function WhatsAppFloatingButton() {
       className={`fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-full bg-[#25D366] px-4 py-3 text-white shadow-[0_18px_45px_rgba(37,211,102,0.34)] transition-all duration-300 hover:scale-[1.03] hover:bg-[#20ba59] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] focus-visible:ring-offset-2 ${
         isVisible ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'
       }`}
+      style={{ bottom: `${bottomOffset}px` }}
     >
       <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/16">
         <svg viewBox="0 0 32 32" className="h-6 w-6 fill-current" aria-hidden="true">

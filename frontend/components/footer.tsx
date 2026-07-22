@@ -263,7 +263,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-white/15 bg-black/20">
+      <div data-footer-presence-bar className="border-t border-white/15 bg-black/20">
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-2 px-6 py-4 text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between sm:px-10 lg:px-16">
           <p>Pamil srl © 2005 - 2026. Toate drepturile rezervate.</p>
           <p>
