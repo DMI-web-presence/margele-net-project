@@ -6,11 +6,10 @@ import { usePathname } from 'next/navigation';
 
 const infoLinks = [
   { label: 'Transport', href: '/transport' },
-  { label: 'Conditii Retur', href: '/retur-produse' },
+  { label: 'Formular de retragere', href: '/retur-produse' },
   { label: 'Cum cumpar', href: '/cum-cumpar' },
   { label: 'Despre noi', href: '/despre-noi' },
   { label: 'GDPR', href: '/gdpr' },
-  { label: 'Retururi', href: '/retur-produse' },
 ];
 
 const socialLinks = [

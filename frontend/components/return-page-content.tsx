@@ -36,6 +36,33 @@ const returnReasons = [
 
 const returnOutcomes = ['Rambursare', 'Schimb produs', 'Vreau sa discut cu echipa'];
 
+const officialWithdrawalDetails = [
+  {
+    label: 'Operator',
+    value: 'S.C. PAMIL S.R.L.',
+  },
+  {
+    label: 'Adresa pentru notificare',
+    value: 'Str. Sovata 5, bl PC26, ap. 2, Oradea, Bihor, Romania',
+  },
+  {
+    label: 'E-mail',
+    value: 'degetarmargele@gmail.com',
+  },
+  {
+    label: 'Telefon',
+    value: '0259 267 109',
+  },
+];
+
+const legalHighlights = [
+  'Pentru comenzile online, dreptul de retragere este de 14 zile calendaristice de la primirea produsului, conform art. 9 din OUG nr. 34/2014.',
+  'Retragerea se poate face prin acest formular sau prin orice declaratie neechivoca transmisa inainte de expirarea termenului, conform art. 11.',
+  'Produsele trebuie trimise inapoi in maximum 14 zile de la comunicarea retragerii, conform art. 14 alin. (1).',
+  'Consumatorul suporta costurile directe de returnare, cu exceptia situatiilor in care comerciantul a acceptat altfel sau nu a informat consumatorul despre aceste costuri, conform art. 14 alin. (2).',
+  'Pot exista exceptii de la dreptul de retragere pentru anumite categorii de produse, conform art. 16 din OUG nr. 34/2014.',
+];
+
 const initialFormState = {
   fullName: '',
   email: '',
@@ -135,15 +162,15 @@ export default function ReturnPageContent() {
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(84,67,241,0.10),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(106,60,101,0.10),transparent_36%)]" />
               <div className="relative space-y-6">
                 <div className="space-y-3">
-                  <Badge className="bg-indigo-100 text-indigo-700">Retur produse</Badge>
+                  <Badge className="bg-indigo-100 text-indigo-700">Formular de retragere</Badge>
                   <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
                     Cerere asistata
                   </p>
                   <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                    Formular pentru retur
+                    Formular de retragere
                   </h1>
                   <p className="max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
-                    Foloseste acest formular pentru a ne trimite rapid detaliile returului. Cu cat
+                    Foloseste acest formular pentru a ne trimite rapid detaliile retragerii. Cu cat
                     adaugi mai exact informatiile comenzii si ale produsului, cu atat solutionarea
                     va fi mai rapida.
                   </p>
@@ -195,10 +222,10 @@ export default function ReturnPageContent() {
                 Formular
               </p>
               <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
-                Datele returului
+                Datele retragerii
               </h2>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                Completeaza campurile de mai jos si noi preluam cererea de retur in cel mai scurt
+                Completeaza campurile de mai jos si noi preluam cererea de retragere in cel mai scurt
                 timp.
               </p>
             </div>
@@ -359,6 +386,65 @@ export default function ReturnPageContent() {
                 Vezi ajutorul
               </Link>
             </div>
+          </Card>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <Card className="p-6 sm:p-8">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
+                Date oficiale
+              </p>
+              <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+                Informatii pentru exercitarea retragerii
+              </h2>
+              <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                Daca doresti sa iti exerciti dreptul de retragere, poti folosi formularul de mai
+                sus sau poti transmite o declaratie clara catre comerciant, folosind datele de mai
+                jos.
+              </p>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {officialWithdrawalDetails.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    {item.label}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-950">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-6 sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+              Baza legala
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+              Ce prevede OUG nr. 34/2014
+            </h2>
+
+            <div className="mt-6 space-y-3">
+              {legalHighlights.map((item) => (
+                <div
+                  key={item}
+                  className="rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-700"
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-6 text-xs leading-5 text-slate-500">
+              Informatiile de mai sus sunt prezentate in acord cu OUG nr. 34/2014 privind
+              drepturile consumatorilor in cadrul contractelor incheiate cu profesionistii.
+            </p>
           </Card>
         </section>
       </div>
