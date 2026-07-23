@@ -8,6 +8,7 @@ import { useCart } from '@/components/cart-provider';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { formatCategoryLabel } from '@/lib/format-category-label';
+import { getProductImageProps } from '@/lib/product-image-variants';
 
 type Product = {
   id: number;
@@ -594,7 +595,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
   const [minPrice, setMinPrice] = useState(priceBounds.min);
   const [maxPrice, setMaxPrice] = useState(priceBounds.max);
   const [currentPage, setCurrentPage] = useState(1);
-  const [productsPerPage, setProductsPerPage] = useState(35);
+  const [productsPerPage, setProductsPerPage] = useState(12);
 
   const selectedGroup = categoryGroups.find((group) => group.id === category) ?? categoryGroups[0];
   const categoryScopedProducts = useMemo(() => {
@@ -948,10 +949,8 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
                   <div className="flex h-72 items-center justify-center bg-slate-100 sm:h-65">
                     {product.imageUrl ? (
                       <Image
-                        src={product.imageUrl}
+                        {...getProductImageProps(product.imageUrl, 'card')}
                         alt={product.name}
-                        width={640}
-                        height={640}
                         className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
                         unoptimized
                       />

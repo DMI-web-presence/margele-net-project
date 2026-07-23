@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/components/cart-provider';
 import { Button } from '@/components/ui/button';
+import { getProductImageVariantConfig } from '@/lib/product-image-variants';
 
 const currencyFormatter = new Intl.NumberFormat('ro-RO', {
   style: 'currency',
@@ -117,6 +118,7 @@ export default function FavoritesPageContent() {
                       src={item.product.imageUrl}
                       alt={item.product.name}
                       fill
+                      sizes={getProductImageVariantConfig('card').sizes}
                       className="object-cover transition duration-300 group-hover:scale-105"
                       unoptimized
                     />

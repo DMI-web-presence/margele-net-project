@@ -3,7 +3,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
+import { getProductImageVariantConfig } from '@/lib/product-image-variants';
 
 type HistoryItem = {
   href: string;
@@ -14,40 +15,18 @@ type HistoryItem = {
 
 const storageKey = 'margele_navigation_history_v1';
 const historyEventName = 'margele-product-history-recorded';
+const emptyHistorySnapshot: HistoryItem[] = [];
+const hydratedSnapshot = true;
+const serverHydrationSnapshot = false;
+let cachedHistoryRawValue: string | null = null;
+let cachedHistorySnapshot: HistoryItem[] = emptyHistorySnapshot;
 
 export default function NavigationHistory() {
   const pathname = usePathname();
-  const [items, setItems] = useState<HistoryItem[]>([]);
-  const [hasMounted, setHasMounted] = useState(false);
+  const isHydrated = useSyncExternalStore(subscribeToHydration, getClientSnapshot, getServerSnapshot);
+  const items = useSyncExternalStore(subscribeToHistory, getHistorySnapshot, getEmptyHistorySnapshot);
 
-  const readStoredItems = () => {
-    try {
-      const storedItems = window.localStorage.getItem(storageKey);
-      if (!storedItems) return [];
-      const parsedItems = JSON.parse(storedItems) as HistoryItem[];
-      return Array.isArray(parsedItems)
-        ? parsedItems.filter((item) => item.type === 'product' || Boolean(item.imageUrl))
-        : [];
-    } catch {
-      return [];
-    }
-  };
-
-  useEffect(() => {
-    setItems(readStoredItems());
-    setHasMounted(true);
-  }, []);
-
-  useEffect(() => {
-    const handleProductHistoryRecorded = () => {
-      setItems(readStoredItems());
-    };
-
-    window.addEventListener(historyEventName, handleProductHistoryRecorded);
-    return () => window.removeEventListener(historyEventName, handleProductHistoryRecorded);
-  }, []);
-
-  if (!hasMounted || pathname === '/' || items.length === 0) {
+  if (!isHydrated || pathname === '/' || items.length === 0) {
     return null;
   }
 
@@ -71,6 +50,7 @@ export default function NavigationHistory() {
                     src={item.imageUrl}
                     alt={item.label}
                     fill
+                    sizes={getProductImageVariantConfig('card').sizes}
                     className="object-cover transition group-hover:scale-105"
                     unoptimized
                   />
@@ -83,4 +63,51 @@ export default function NavigationHistory() {
       </div>
     </section>
   );
+}
+
+function subscribeToHydration() {
+  return () => {};
+}
+
+function getClientSnapshot() {
+  return hydratedSnapshot;
+}
+
+function getServerSnapshot() {
+  return serverHydrationSnapshot;
+}
+
+function subscribeToHistory(onStoreChange: () => void) {
+  window.addEventListener(historyEventName, onStoreChange);
+  window.addEventListener('storage', onStoreChange);
+
+  return () => {
+    window.removeEventListener(historyEventName, onStoreChange);
+    window.removeEventListener('storage', onStoreChange);
+  };
+}
+
+function getHistorySnapshot() {
+  try {
+    const storedItems = window.localStorage.getItem(storageKey);
+    if (!storedItems) return emptyHistorySnapshot;
+    if (storedItems === cachedHistoryRawValue) {
+      return cachedHistorySnapshot;
+    }
+
+    const parsedItems = JSON.parse(storedItems) as HistoryItem[];
+    cachedHistoryRawValue = storedItems;
+    cachedHistorySnapshot = Array.isArray(parsedItems)
+      ? parsedItems.filter((item) => item.type === 'product' || Boolean(item.imageUrl))
+      : emptyHistorySnapshot;
+    return cachedHistorySnapshot;
+  } catch {
+    cachedHistoryRawValue = null;
+    cachedHistorySnapshot = emptyHistorySnapshot;
+    return emptyHistorySnapshot;
+  }
+}
+
+function getEmptyHistorySnapshot() {
+  return emptyHistorySnapshot;
 }

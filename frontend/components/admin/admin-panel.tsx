@@ -398,6 +398,7 @@ export default function AdminPanel() {
   const [imageUploadPreview, setImageUploadPreview] = useState('');
   const [imageUploadAltText, setImageUploadAltText] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [conversationPage, setConversationPage] = useState(1);
@@ -1452,6 +1453,7 @@ export default function AdminPanel() {
     setImageUploadFile(null);
     setImageUploadPreview(index !== null ? draft.images[index]?.imageUrl || '' : '');
     setImageUploadAltText(index !== null ? draft.images[index]?.altText || '' : '');
+    setImageUploadError('');
     setIsImageUploadModalOpen(true);
   }
 
@@ -1461,6 +1463,7 @@ export default function AdminPanel() {
     setImageUploadFile(null);
     setImageUploadPreview('');
     setImageUploadAltText('');
+    setImageUploadError('');
     setIsUploadingImage(false);
   }
 
@@ -1480,6 +1483,7 @@ export default function AdminPanel() {
   function handleImageFileChange(event: ChangeEvent<HTMLInputElement>) {
     const nextFile = event.target.files?.[0] ?? null;
     setImageUploadFile(nextFile);
+    setImageUploadError('');
 
     if (!nextFile) {
       setImageUploadPreview(imageUploadTarget.index !== null ? draft.images[imageUploadTarget.index]?.imageUrl || '' : '');
@@ -1495,11 +1499,12 @@ export default function AdminPanel() {
 
   async function handleImageUpload() {
     if (!imageUploadFile) {
-      setErrorMessage('Selecteaza o imagine de pe dispozitiv.');
+      setImageUploadError('Selecteaza o imagine de pe dispozitiv.');
       return;
     }
 
     setErrorMessage('');
+    setImageUploadError('');
     setIsUploadingImage(true);
 
     try {
@@ -1517,18 +1522,38 @@ export default function AdminPanel() {
 
       const data = await response.json().catch(() => null);
       if (!response.ok) {
-        setErrorMessage(data?.message || 'Imaginea nu a putut fi incarcata.');
+        setImageUploadError(data?.message || 'Imaginea nu a putut fi incarcata.');
         return;
       }
 
       const uploadedImageUrl = String(data?.imageUrl || '').trim();
       if (!uploadedImageUrl) {
-        setErrorMessage('Serverul nu a returnat URL-ul imaginii.');
+        setImageUploadError('Serverul nu a returnat URL-ul imaginii.');
         return;
       }
 
       if (imageUploadTarget.index === null) {
         setDraft((current) => {
+          const hasOnlyPlaceholderImage =
+            current.images.length === 1 &&
+            !current.images[0]?.imageUrl &&
+            !current.images[0]?.altText;
+
+          if (hasOnlyPlaceholderImage) {
+            return {
+              ...current,
+              imageUrl: uploadedImageUrl,
+              images: [
+                {
+                  imageUrl: uploadedImageUrl,
+                  altText: imageUploadAltText,
+                  sortOrder: 0,
+                  isPrimary: true,
+                },
+              ],
+            };
+          }
+
           const nextImage = {
             imageUrl: uploadedImageUrl,
             altText: imageUploadAltText,
@@ -1550,7 +1575,7 @@ export default function AdminPanel() {
 
       closeImageUploadModal();
     } catch {
-      setErrorMessage('Imaginea nu a putut fi incarcata.');
+      setImageUploadError('Imaginea nu a putut fi incarcata.');
     } finally {
       setIsUploadingImage(false);
     }
@@ -1630,7 +1655,12 @@ export default function AdminPanel() {
                     </DashboardSelect>
                   </DashboardField>
                   <DashboardField label="Imagine principala">
-                    <DashboardInput value={draft.imageUrl} onChange={(event) => updateDraft('imageUrl', event.target.value)} placeholder="https://..." />
+                    <DashboardInput
+                      value={draft.imageUrl}
+                      disabled
+                      placeholder="Se completeaza automat din galerie"
+                      className="cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    />
                   </DashboardField>
                   <DashboardField label="Material">
                     <DashboardInput value={draft.material} onChange={(event) => updateDraft('material', event.target.value)} />
@@ -2495,7 +2525,12 @@ export default function AdminPanel() {
                         </DashboardSelect>
                       </DashboardField>
                       <DashboardField label="Imagine principala">
-                        <DashboardInput value={draft.imageUrl} onChange={(event) => updateDraft('imageUrl', event.target.value)} placeholder="https://..." />
+                        <DashboardInput
+                          value={draft.imageUrl}
+                          disabled
+                          placeholder="Se completeaza automat din galerie"
+                          className="cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                        />
                       </DashboardField>
                       <DashboardField label="Material">
                         <DashboardInput value={draft.material} onChange={(event) => updateDraft('material', event.target.value)} />
@@ -2740,6 +2775,8 @@ export default function AdminPanel() {
                   </div>
                 </div>
 
+                {imageUploadError ? <Alert tone="danger">{imageUploadError}</Alert> : null}
+
                 <div className="flex justify-end gap-3">
                   <Button type="button" variant="secondary" onClick={closeImageUploadModal} className="rounded-2xl">
                     Anuleaza
@@ -2747,7 +2784,7 @@ export default function AdminPanel() {
                   <Button
                     type="button"
                     onClick={handleImageUpload}
-                    disabled={isUploadingImage}
+                    disabled={isUploadingImage || !imageUploadFile}
                     className="rounded-2xl bg-violet-600 px-5 py-2.5 text-white hover:bg-violet-700"
                   >
                     {isUploadingImage ? 'Se incarca...' : imageUploadTarget.index === null ? 'Adauga imaginea' : 'Salveaza imaginea'}

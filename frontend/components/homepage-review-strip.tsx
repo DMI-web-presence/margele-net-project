@@ -1,12 +1,4 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  type CarouselApi,
-} from '@/components/ui/carousel';
+import Link from 'next/link';
 
 const reviewSources = [
   {
@@ -44,19 +36,6 @@ const reviewHighlights = [
     rating: 5,
     quote:
       'Mereu atente si gata sa serveasca clientii. Cumpar de cativa ani si nu am fost niciodata dezamagita.',
-  },
-  {
-    name: 'Iulia Sarmasan',
-    source: 'Google',
-    rating: 5,
-    quote:
-      'De fiecare data am o experienta placuta cumparand produsele magazinului si sunt multumita de produse. Va recomand sa incercati.',
-  },
-  {
-    name: 'Carmen Mihai',
-    source: 'Google',
-    rating: 5,
-    quote: 'Super. Servire impecabila. Recomand.',
   },
 ] as const;
 
@@ -126,28 +105,6 @@ function CylexBadge() {
 }
 
 export default function HomepageReviewStrip() {
-  const [api, setApi] = useState<CarouselApi>();
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [snapCount, setSnapCount] = useState(0);
-
-  useEffect(() => {
-    if (!api) return;
-
-    const syncState = () => {
-      setSelectedIndex(api.selectedScrollSnap());
-      setSnapCount(api.scrollSnapList().length);
-    };
-
-    syncState();
-    api.on('select', syncState);
-    api.on('reInit', syncState);
-
-    return () => {
-      api.off('select', syncState);
-      api.off('reInit', syncState);
-    };
-  }, [api]);
-
   return (
     <section className="mb-14 bg-white px-6 sm:px-6">
       <div className="mx-auto max-w-[1370px] rounded-[1.45rem] border border-slate-200 bg-[linear-gradient(135deg,#fff7fb_0%,#ffffff_42%,#f7f4ff_100%)] p-6 shadow-[0_12px_38px_rgba(15,23,42,0.06)] sm:p-7 lg:p-8">
@@ -165,7 +122,7 @@ export default function HomepageReviewStrip() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             {reviewSources.map((source) => (
               <a
                 key={source.name}
@@ -204,60 +161,43 @@ export default function HomepageReviewStrip() {
           </div>
         </div>
 
-        <div className="mt-7">
-          <Carousel
-            opts={{ align: 'start', loop: false }}
-            setApi={setApi}
-            className="w-full"
+        <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {reviewHighlights.map((review) => (
+            <article
+              key={`${review.name}-${review.source}`}
+              className="flex min-h-[13rem] flex-col rounded-[1.4rem] border border-slate-200 bg-white/90 p-5 shadow-[0_8px_22px_rgba(15,23,42,0.04)]"
+            >
+              <div className="flex items-start gap-3">
+                <ReviewAvatar name={review.name} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-medium text-slate-950">{review.name}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Recenzie de la{' '}
+                    {review.source === 'Google' ? <GoogleWordmark /> : <span>{review.source}</span>}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2 text-sm">
+                <span className="font-semibold text-slate-950">{review.rating}/5</span>
+                <Stars rating={review.rating} />
+              </div>
+
+              <p className="mt-4 text-sm leading-7 text-slate-700">{review.quote}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-5 text-center">
+          <Link
+            href="/despre-noi"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[#6437f3] transition hover:text-[#542ce1]"
           >
-            <CarouselContent className="items-stretch">
-              {reviewHighlights.map((review) => (
-                <CarouselItem
-                  key={`${review.name}-${review.source}`}
-                  className="basis-full md:basis-1/2 xl:basis-1/3"
-                >
-                  <article className="flex min-h-[13rem] flex-col rounded-[1.4rem] border border-slate-200 bg-white/90 p-5 shadow-[0_8px_22px_rgba(15,23,42,0.04)]">
-                    <div className="flex items-start gap-3">
-                      <ReviewAvatar name={review.name} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-base font-medium text-slate-950">{review.name}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">
-                          Recenzie de la{' '}
-                          {review.source === 'Google' ? <GoogleWordmark /> : <span>{review.source}</span>}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-2 text-sm">
-                      <span className="font-semibold text-slate-950">{review.rating}/5</span>
-                      <Stars rating={review.rating} />
-                    </div>
-
-                    <p className="mt-4 text-sm leading-7 text-slate-700">{review.quote}</p>
-                  </article>
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-          </Carousel>
-
-          {snapCount > 1 ? (
-            <div className="mt-5 flex items-center justify-center gap-2">
-              {Array.from({ length: snapCount }, (_, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => api?.scrollTo(index)}
-                  aria-label={`Mergi la recenzia ${index + 1}`}
-                  aria-current={selectedIndex === index ? 'true' : undefined}
-                  className={`h-2.5 rounded-full transition ${
-                    selectedIndex === index
-                      ? 'w-8 bg-slate-900'
-                      : 'w-2.5 bg-slate-300 hover:bg-slate-400'
-                  }`}
-                />
-              ))}
-            </div>
-          ) : null}
+            Vezi mai multe despre noi
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">
+              <path d="M5 12h14M13 6l6 6-6 6" className="fill-none stroke-current stroke-2" />
+            </svg>
+          </Link>
         </div>
       </div>
     </section>

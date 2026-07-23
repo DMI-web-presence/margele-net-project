@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
+import { getProductImageProps } from '@/lib/product-image-variants';
 
 type ProductImageMagnifierProps = {
   src: string;
@@ -111,10 +112,8 @@ export default function ProductImageMagnifier({
       className="relative flex h-full w-full items-center justify-center overflow-hidden"
     >
       <Image
-        src={activeSrc}
+        {...getProductImageProps(activeSrc, 'product')}
         alt={alt}
-        width={width}
-        height={height}
         className="h-full w-full object-contain object-bottom"
         unoptimized
       />
@@ -130,10 +129,8 @@ export default function ProductImageMagnifier({
         >
           <div className="relative h-full w-full bg-white">
             <Image
-              src={activeSrc}
+              {...getProductImageProps(activeSrc, 'zoom')}
               alt=""
-              width={width}
-              height={height}
               className="absolute max-w-none object-contain object-bottom"
               style={{
                 left: `${zoomedOffset.x}px`,
