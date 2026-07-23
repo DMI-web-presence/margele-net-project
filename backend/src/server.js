@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { Pool } = require('pg');
 const { createBrevoMailer } = require('./services/brevo-mail');
 
@@ -39,6 +40,13 @@ const config = {
   brevoReplyToEmail: process.env.BREVO_REPLY_TO_EMAIL || '',
   brevoReplyToName: process.env.BREVO_REPLY_TO_NAME || '',
   brevoAdminEmail: process.env.BREVO_ADMIN_EMAIL || '',
+  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+  r2BucketName: process.env.R2_BUCKET_NAME || '',
+  r2Endpoint: process.env.R2_ENDPOINT || '',
+  r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL || '',
+  r2Region: process.env.R2_REGION || 'auto',
+  productImageStorage: (process.env.PRODUCT_IMAGE_STORAGE || 'auto').toLowerCase(),
   cookieName: 'auth_token',
 };
 
@@ -59,6 +67,8 @@ const pool = new Pool({
   connectionString: config.databaseUrl,
   options: `-c search_path=${dbSearchPath}`,
 });
+
+const r2Client = createR2Client(config);
 
 const brevoMailer = createBrevoMailer({
   enabled: config.brevoEnabled,
@@ -466,20 +476,16 @@ async function handleAdminProductImageUpload(req, res) {
     return;
   }
 
-  await fs.promises.mkdir(productUploadDir, { recursive: true });
-
   const safeBaseName = slugifyFileName(path.parse(fileName).name || 'produs');
   const extension = mimeTypeToExtension(mimeType);
-  const uniqueName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safeBaseName}.${extension}`;
-  const absoluteFilePath = path.join(productUploadDir, uniqueName);
-
-  await fs.promises.writeFile(absoluteFilePath, fileBuffer);
-
-  const publicPath = `/uploads/products/${uniqueName}`;
-  sendJson(res, 201, {
-    imageUrl: `${config.backendPublicUrl}${publicPath}`,
-    path: publicPath,
+  const storageResult = await storeProductImage({
+    fileBuffer,
+    mimeType,
+    extension,
+    safeBaseName,
   });
+
+  sendJson(res, 201, storageResult);
 }
 
 function slugifyFileName(value) {
@@ -508,6 +514,103 @@ function getMimeTypeForPath(filePath) {
   return 'image/jpeg';
 }
 
+async function storeProductImage({
+  fileBuffer,
+  mimeType,
+  extension,
+  safeBaseName,
+}) {
+  const objectKey = buildProductImageObjectKey(safeBaseName, extension);
+  const shouldTryR2 =
+    config.productImageStorage !== 'local' &&
+    r2Client &&
+    isR2PublicDeliveryConfigured(config);
+
+  if (shouldTryR2) {
+    try {
+      await r2Client.send(
+        new PutObjectCommand({
+          Bucket: config.r2BucketName,
+          Key: objectKey,
+          Body: fileBuffer,
+          ContentType: mimeType,
+          CacheControl: 'public, max-age=31536000, immutable',
+        }),
+      );
+
+      return {
+        imageUrl: `${stripTrailingSlash(config.r2PublicBaseUrl)}/${objectKey}`,
+        path: objectKey,
+        storage: 'r2',
+      };
+    } catch (error) {
+      if (config.productImageStorage === 'r2') {
+        throw error;
+      }
+      console.warn('R2 upload failed, falling back to local storage.', error);
+    }
+  }
+
+  await fs.promises.mkdir(productUploadDir, { recursive: true });
+  const localFileName = path.basename(objectKey);
+  const absoluteFilePath = path.join(productUploadDir, localFileName);
+
+  await fs.promises.writeFile(absoluteFilePath, fileBuffer);
+
+  const publicPath = `/uploads/products/${localFileName}`;
+  return {
+    imageUrl: `${config.backendPublicUrl}${publicPath}`,
+    path: publicPath,
+    storage: 'local',
+  };
+}
+
+function buildProductImageObjectKey(safeBaseName, extension) {
+  const now = new Date();
+  const year = String(now.getUTCFullYear());
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const uniqueName = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safeBaseName}.${extension}`;
+
+  return `products/${year}/${month}/${uniqueName}`;
+}
+
+function createR2Client(appConfig) {
+  if (appConfig.productImageStorage === 'local') {
+    return null;
+  }
+
+  if (!isR2UploadConfigured(appConfig)) {
+    return null;
+  }
+
+  return new S3Client({
+    region: appConfig.r2Region,
+    endpoint: appConfig.r2Endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: appConfig.r2AccessKeyId,
+      secretAccessKey: appConfig.r2SecretAccessKey,
+    },
+  });
+}
+
+function isR2UploadConfigured(appConfig) {
+  return Boolean(
+    appConfig.r2AccessKeyId &&
+      appConfig.r2SecretAccessKey &&
+      appConfig.r2BucketName &&
+      appConfig.r2Endpoint,
+  );
+}
+
+function isR2PublicDeliveryConfigured(appConfig) {
+  return Boolean(appConfig.r2PublicBaseUrl);
+}
+
+function stripTrailingSlash(value) {
+  return String(value || '').replace(/\/+$/, '');
+}
+
 async function handleEmailExists(requestUrl, res) {
   const email = normalizeEmail(requestUrl.searchParams.get('email'));
   if (!email) {
@@ -524,6 +627,48 @@ async function handleEmailExists(requestUrl, res) {
 async function handleProductList(requestUrl, res) {
   if (!(await hasTable('products'))) {
     sendJson(res, 200, []);
+    return;
+  }
+
+  const listView = String(requestUrl.searchParams.get('view') || '').trim().toLowerCase();
+  if (listView === 'lite') {
+    const filters = buildProductFilters(requestUrl);
+    if (filters.error) {
+      sendJson(res, 400, { message: filters.error });
+      return;
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        p.id,
+        p.name,
+        p.slug,
+        COALESCE(NULLIF(p.short_description, ''), NULLIF(p.description, '')) AS description,
+        p.price,
+        p.compare_at_price,
+        p.currency,
+        COALESCE(primary_image.image_url, p.image_url) AS primary_image_url,
+        p.category_id,
+        c.name AS category_name,
+        c.slug AS category_slug,
+        p.created_at
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      LEFT JOIN LATERAL (
+        SELECT image_url
+        FROM product_images
+        WHERE product_id = p.id
+        ORDER BY is_primary DESC, sort_order ASC, id ASC
+        LIMIT 1
+      ) primary_image ON true
+      WHERE ${filters.whereSql}
+      ORDER BY p.created_at DESC, p.id DESC
+    `,
+      filters.values,
+    );
+
+    sendJson(res, 200, result.rows.map(productCardResponse));
     return;
   }
 
@@ -3675,6 +3820,43 @@ function productResponse(product) {
       .flatMap((option) => option.values),
     createdAt: product.created_at || product.createdAt || null,
   };
+}
+
+function productCardResponse(product) {
+  return {
+    id: product.id,
+    name: product.name || '',
+    slug: product.slug || null,
+    description: trimProductCardDescription(
+      product.short_description || product.description || product.shortDescription || null,
+    ),
+    price: String(product.price || '0'),
+    compareAtPrice: product.compare_at_price ? String(product.compare_at_price) : null,
+    currency: product.currency || 'RON',
+    imageUrl: product.primary_image_url || product.image_url || product.imageUrl || product.image || null,
+    categoryId: product.category_id ?? product.categoryId ?? null,
+    category:
+      product.category_id || product.category_name || product.category_slug
+        ? {
+            id: product.category_id ?? null,
+            name: product.category_name || '',
+            slug: product.category_slug || '',
+          }
+        : null,
+    createdAt: product.created_at || product.createdAt || null,
+  };
+}
+
+function trimProductCardDescription(value) {
+  const normalized = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.length > 180 ? `${normalized.slice(0, 177).trimEnd()}...` : normalized;
 }
 
 function categoryResponse(category) {

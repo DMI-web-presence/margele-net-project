@@ -6,19 +6,19 @@ const productRanges = [
     title: 'Margele si accesorii',
     description: 'Margele din sticla, plastic, acril, pietre semipretioase si o varietate de accesorii pentru bijuterii.',
     href: '/catalog?category=margele',
-    imageUrl: '/range-margele-accesorii.png',
+    imageUrl: '/range-margele-accesorii.avif',
   },
   {
     title: 'Fimo si materiale creative',
     description: 'Plastilina FIMO, unelte, culori si materiale pentru proiecte creative si hobby.',
     href: '/catalog?category=materiale-handmade',
-    imageUrl: '/range-fimo-materiale.png',
+    imageUrl: '/range-fimo-materiale.avif',
   },
   {
     title: 'Polistiren si proiecte personalizate',
     description: 'Elemente din polistiren pentru decoratiuni, proiecte DIY si arhitecturale la comanda.',
     href: '/catalog?search=polistiren',
-    imageUrl: '/range-polistiren.png',
+    imageUrl: '/range-polistiren.avif',
   },
 ];
 
@@ -44,7 +44,6 @@ export default function ProductRangeSection() {
                   fill
                   className="object-cover object-center transition duration-500 group-hover:scale-[1.03]"
                   sizes="(min-width: 1024px) 31vw, 100vw"
-                  unoptimized
                 />
               </div>
               <div className="px-1 pb-1 pt-4">

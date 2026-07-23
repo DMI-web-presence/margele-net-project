@@ -238,7 +238,6 @@ export default function NavBar() {
             className={`h-auto transition-[width] duration-500 ease-out ${
               isNavCompact ? 'w-[140px] sm:w-[158px]' : 'w-[176px] sm:w-[210px]'
             }`}
-            unoptimized
           />
         </Link>
 

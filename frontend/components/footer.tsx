@@ -164,7 +164,6 @@ export default function Footer() {
                 width={1045}
                 height={290}
                 className="h-auto w-[220px]"
-                unoptimized
               />
             </Link>
             <p className="max-w-xs text-sm leading-6 text-white/70">
@@ -244,7 +243,6 @@ export default function Footer() {
                   width={170}
                   height={44}
                   className="h-auto w-[170px]"
-                  unoptimized
                 />
               </a>
               <div className="inline-flex rounded-xl border border-white/25 bg-white/10 p-2">
@@ -254,7 +252,6 @@ export default function Footer() {
                   width={170}
                   height={44}
                   className="h-auto w-[140px]"
-                  unoptimized
                 />
               </div>
             </div>

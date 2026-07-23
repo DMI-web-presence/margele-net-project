@@ -2,6 +2,8 @@ import LandingPage from '@/components/landing-page';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+const homepageRevalidateSeconds = 300;
+export const revalidate = 300;
 
 type Product = {
   id: number;
@@ -15,8 +17,8 @@ type Product = {
 
 async function getProducts(): Promise<Product[]> {
   try {
-    const res = await fetch(`${backendUrl}/products`, {
-      cache: 'no-store',
+    const res = await fetch(`${backendUrl}/products?view=lite`, {
+      next: { revalidate: homepageRevalidateSeconds },
       signal: AbortSignal.timeout(5000),
     });
 

@@ -1,12 +1,20 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { CartProvider } from '@/components/cart-provider';
-import CookieConsent from '@/components/cookie-consent';
 import Footer from '@/components/footer';
-import NavigationHistory from '@/components/navigation-history';
 import NavBar from '@/components/nav-bar';
-import WhatsAppFloatingButton from '@/components/whatsapp-floating-button';
+
+const CookieConsent = dynamic(() => import('@/components/cookie-consent'), {
+  ssr: false,
+});
+const NavigationHistory = dynamic(() => import('@/components/navigation-history'), {
+  ssr: false,
+});
+const WhatsAppFloatingButton = dynamic(() => import('@/components/whatsapp-floating-button'), {
+  ssr: false,
+});
 
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

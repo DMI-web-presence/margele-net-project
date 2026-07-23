@@ -1,8 +1,10 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
 import { Card } from '@/components/ui/card';
+import { getProductImageProps } from '@/lib/product-image-variants';
 import {
   Carousel,
   CarouselContent,
@@ -60,10 +62,11 @@ export default function SimilarProductsSlider({
                   <Link href={`/products/${item.id}`} className="block">
                     {item.imageUrl ? (
                       <div className="h-64 w-full overflow-hidden bg-white">
-                        <img
-                          src={item.imageUrl}
+                        <Image
+                          {...getProductImageProps(item.imageUrl, 'card')}
                           alt={item.name}
                           className="block h-full w-full object-cover object-center transition duration-300 hover:scale-[1.02]"
+                          unoptimized
                         />
                       </div>
                     ) : (

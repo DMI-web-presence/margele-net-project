@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/components/cart-provider';
 import type { CartItem } from '@/components/cart-provider';
+import { getProductImageVariantConfig } from '@/lib/product-image-variants';
 
 const numberFormatter = new Intl.NumberFormat('ro-RO', {
   style: 'currency',
@@ -48,6 +49,7 @@ export default function BasketPreviewCard({ items, totalCount }: BasketPreviewCa
                           src={item.product.imageUrl}
                           alt={item.product.name}
                           fill
+                          sizes={getProductImageVariantConfig('thumb').sizes}
                           className="object-cover"
                           unoptimized
                         />

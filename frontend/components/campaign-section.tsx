@@ -8,7 +8,7 @@ const campaigns = [
     title: 'Paste handmade',
     description: 'Margele pastel, charm-uri delicate si decoratiuni pentru cadouri de primavara.',
     href: '/catalog?category=paste',
-    imageUrl: '/campaign-easter.png',
+    imageUrl: '/campaign-easter.avif',
     accentClass: 'bg-[#f6e8f3] text-[#7b4a75]',
     unavailable: true,
   },
@@ -18,7 +18,7 @@ const campaigns = [
     title: 'Reduceri de weekend',
     description: 'Selectii pentru campanii de pret: seturi, mixuri si accesorii esentiale.',
     href: null,
-    imageUrl: '/campaign-sale.png',
+    imageUrl: '/campaign-sale.avif',
     accentClass: 'bg-[#e7f0ff] text-[#23527c]',
     unavailable: true,
   },
@@ -28,7 +28,7 @@ const campaigns = [
     title: 'Craciun creativ',
     description: 'Rosu, auriu si accente stralucitoare pentru ornamente, bratari si ambalaje.',
     href: '/catalog?category=craciun',
-    imageUrl: '/campaign-christmas.png',
+    imageUrl: '/campaign-christmas.avif',
     accentClass: 'bg-[#e9f7ef] text-[#27724a]',
     unavailable: false,
   },
@@ -38,7 +38,7 @@ const campaigns = [
     title: 'Martisoare si mici atentii',
     description: 'Materiale potrivite pentru martisoare, comenzi mici si proiecte rapide.',
     href: '/catalog?category=martisor-si-ziua-femeii',
-    imageUrl: '/campaign-martisor.png',
+    imageUrl: '/campaign-martisor.avif',
     accentClass: 'bg-[#fff1d8] text-[#8a5a1f]',
     unavailable: false,
   },
@@ -82,7 +82,6 @@ export default function CampaignSection() {
                   className={`object-cover object-center transition duration-500 ${
                     isUnavailable ? 'grayscale-[0.35] saturate-75' : 'group-hover:scale-[1.03]'
                   }`}
-                  unoptimized
                 />
                 {isUnavailable ? (
                   <div className="absolute inset-0 bg-white/35" />

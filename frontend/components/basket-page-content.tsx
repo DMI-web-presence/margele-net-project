@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useCart } from '@/components/cart-provider';
+import { getProductImageProps } from '@/lib/product-image-variants';
 
 type Product = {
   id: number;
@@ -378,10 +379,8 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                         >
                           {item.product.imageUrl ? (
                             <Image
-                              src={item.product.imageUrl}
+                              {...getProductImageProps(item.product.imageUrl, 'card')}
                               alt={item.product.name}
-                              width={220}
-                              height={220}
                               className="h-[120px] w-full object-contain transition duration-300 group-hover:scale-105"
                               unoptimized
                             />
