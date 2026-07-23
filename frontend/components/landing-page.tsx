@@ -163,6 +163,7 @@ export default function LandingPage({ products }: LandingPageProps) {
         products={recommendedProducts}
         variant="recommended"
         ctaLabel="Vezi toate produsele"
+        autoPlay
       />
       <CampaignSection />
       <LandingProductCarousel
