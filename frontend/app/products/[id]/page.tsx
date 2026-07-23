@@ -10,6 +10,7 @@ import ReviewsSection from '@/components/reviews-section';
 import ReviewsSummary from '@/components/reviews-summary';
 import SimilarProductsSlider from '@/components/similar-products-slider';
 import { formatCategoryLabel } from '@/lib/format-category-label';
+import { toPlainText } from '@/lib/plain-text';
 
 type Product = {
   id: number;
@@ -300,7 +301,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const availabilityLabel =
     product.stockQuantity === undefined || product.stockQuantity > 0 ? 'In stoc' : 'Stoc epuizat';
   const productCode = product.sku || `MGL-${String(product.id).padStart(4, '0')}`;
-  const materialText = product.material || product.description || 'Material premium';
+  const materialText = toPlainText(product.material || product.description) || 'Material premium';
 
   return (
     <main className="px-6 py-8 sm:px-10 lg:px-54">

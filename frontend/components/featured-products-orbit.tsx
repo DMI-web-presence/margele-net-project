@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { toPlainText } from '@/lib/plain-text';
 
 type Product = {
   id: number;
@@ -152,7 +153,7 @@ export default function FeaturedProductsOrbit({
               <div>
                 <p className="text-xs font-medium text-slate-500">Material</p>
                 <p className="mt-1 truncate text-lg font-semibold text-[#7b4a75]">
-                  {activeProduct.description ?? 'Premium'}
+                  {toPlainText(activeProduct.description) || 'Premium'}
                 </p>
               </div>
             </div>

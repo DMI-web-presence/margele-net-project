@@ -644,7 +644,8 @@ async function handleProductList(requestUrl, res) {
         p.id,
         p.name,
         p.slug,
-        COALESCE(NULLIF(p.short_description, ''), NULLIF(p.description, '')) AS description,
+        p.short_description,
+        p.description,
         p.price,
         p.compare_at_price,
         p.currency,
@@ -3827,9 +3828,9 @@ function productCardResponse(product) {
     id: product.id,
     name: product.name || '',
     slug: product.slug || null,
-    description: trimProductCardDescription(
-      product.short_description || product.description || product.shortDescription || null,
-    ),
+    description:
+      trimProductCardDescription(product.short_description || product.shortDescription) ||
+      trimProductCardDescription(product.description),
     price: String(product.price || '0'),
     compareAtPrice: product.compare_at_price ? String(product.compare_at_price) : null,
     currency: product.currency || 'RON',
@@ -3848,7 +3849,22 @@ function productCardResponse(product) {
 }
 
 function trimProductCardDescription(value) {
-  const normalized = String(value || '')
+  let plainText = String(value || '');
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    const decoded = decodeProductDescriptionEntities(plainText);
+    if (decoded === plainText) break;
+    plainText = decoded;
+  }
+
+  const normalized = plainText
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<(br|hr)\b[^>]*\/?>/gi, ' ')
+    .replace(/<\/(p|div|li|h[1-6]|tr|section|article)>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/<[^>]*$/g, ' ')
+    .replace(/\u00a0/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -3857,6 +3873,33 @@ function trimProductCardDescription(value) {
   }
 
   return normalized.length > 180 ? `${normalized.slice(0, 177).trimEnd()}...` : normalized;
+}
+
+function decodeProductDescriptionEntities(value) {
+  return String(value || '')
+    .replace(/&#x([\da-f]+);/gi, (match, hexadecimal) => {
+      const codePoint = Number.parseInt(hexadecimal, 16);
+      return isValidHtmlCodePoint(codePoint) ? String.fromCodePoint(codePoint) : match;
+    })
+    .replace(/&#(\d+);/g, (match, decimal) => {
+      const codePoint = Number.parseInt(decimal, 10);
+      return isValidHtmlCodePoint(codePoint) ? String.fromCodePoint(codePoint) : match;
+    })
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;|&#0*39;/gi, "'")
+    .replace(/&amp;/gi, '&');
+}
+
+function isValidHtmlCodePoint(value) {
+  return (
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= 0x10ffff &&
+    !(value >= 0xd800 && value <= 0xdfff)
+  );
 }
 
 function categoryResponse(category) {

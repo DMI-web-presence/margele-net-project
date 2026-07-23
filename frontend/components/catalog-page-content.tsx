@@ -1,9 +1,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import CatalogFiltersForm from '@/components/catalog-filters-form';
 import CatalogPerPageSelect from '@/components/catalog-per-page-select';
 import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
 import { Card } from '@/components/ui/card';
 import { formatCategoryLabel } from '@/lib/format-category-label';
+import { toPlainText } from '@/lib/plain-text';
 import { getProductImageProps } from '@/lib/product-image-variants';
 
 type Product = {
@@ -14,6 +16,8 @@ type Product = {
   imageUrl: string | null;
   categoryId: number | null;
   category?: ProductCategory | null;
+  attributes?: ProductAttribute[];
+  options?: ProductOption[] | ProductOption;
   createdAt: string;
 };
 
@@ -21,6 +25,21 @@ type ProductCategory = {
   id: number;
   name: string;
   slug: string;
+};
+
+type ProductAttribute = {
+  key: string;
+  value: string;
+};
+
+type ProductOption = {
+  name: string;
+  values: string[];
+  valueDetails?: ProductOptionValue[];
+};
+
+type ProductOptionValue = {
+  value: string;
 };
 
 type Category = {
@@ -54,6 +73,8 @@ type CatalogPageContentProps = {
     sort: string;
     page: number;
     perPage: number;
+    colors: string[];
+    sizes: string[];
   };
 };
 
@@ -173,6 +194,31 @@ const fallbackCategoryGroups: CategoryGroup[] = [
   },
 ];
 
+const colorOptionNames = ['culoare', 'color'];
+const preferredDimensionNames = ['dimensiune', 'marime', 'diametru', 'size'];
+const textColorOptions = [
+  { label: 'Alb', terms: ['alb', 'alba', 'albe', 'albi'] },
+  { label: 'Negru', terms: ['negru', 'neagra', 'negre', 'negri'] },
+  { label: 'Rosu', terms: ['rosu', 'rosie', 'rosii'] },
+  { label: 'Verde', terms: ['verde', 'verzi'] },
+  { label: 'Albastru', terms: ['albastru', 'albastra', 'albastre'] },
+  { label: 'Galben', terms: ['galben', 'galbena', 'galbene'] },
+  { label: 'Portocaliu', terms: ['portocaliu', 'portocalie', 'portocalii'] },
+  { label: 'Mov', terms: ['mov', 'violet'] },
+  { label: 'Roz', terms: ['roz'] },
+  { label: 'Maro', terms: ['maro'] },
+  { label: 'Bej', terms: ['bej'] },
+  { label: 'Crem', terms: ['crem'] },
+  { label: 'Gri', terms: ['gri'] },
+  { label: 'Auriu', terms: ['auriu', 'aurie', 'aurii'] },
+  { label: 'Argintiu', terms: ['argintiu', 'argintie', 'argintii'] },
+  { label: 'Bronz', terms: ['bronz'] },
+  { label: 'Cupru', terms: ['cupru'] },
+  { label: 'Transparent', terms: ['transparent', 'transparente'] },
+  { label: 'Natural', terms: ['natural', 'natur'] },
+  { label: 'Multicolor', terms: ['multicolor', 'mix'] },
+] as const;
+
 export default function CatalogPageContent({
   products,
   categories,
@@ -181,13 +227,19 @@ export default function CatalogPageContent({
   const categoryGroups = buildCategoryGroups(categories);
   const selectedGroup = categoryGroups.find((group) => group.id === query.category) ?? categoryGroups[0];
   const normalizedSearch = query.search.trim().toLowerCase();
+  const categoryScopedProducts = products.filter((product) =>
+    productMatchesCategoryGroup(product, selectedGroup, query.subcategory),
+  );
+  const colorOptions = getOptionValuesByName(categoryScopedProducts, colorOptionNames);
+  const sizeOptions = getOptionValuesByName(categoryScopedProducts, preferredDimensionNames);
 
-  const filteredProducts = products
-    .filter((product) => productMatchesCategoryGroup(product, selectedGroup, query.subcategory))
+  const filteredProducts = categoryScopedProducts
     .filter((product) => {
       if (!normalizedSearch) return true;
       return productSearchText(product).includes(normalizedSearch);
     })
+    .filter((product) => productMatchesFacetValues(product, query.colors, colorOptionNames))
+    .filter((product) => productMatchesFacetValues(product, query.sizes, preferredDimensionNames))
     .sort((left, right) => sortProducts(left, right, query.sort));
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / query.perPage));
@@ -221,116 +273,19 @@ export default function CatalogPageContent({
 
       <section className="grid gap-6 lg:grid-cols-[17rem_1fr]">
         <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
-          <form className="flex flex-col gap-4" action="/catalog" method="get">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-600">Filtre</h2>
-              <Link
-                href="/catalog"
-                className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"
-              >
-                Reset
-              </Link>
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="catalog-search" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Cauta produse
-              </label>
-              <input
-                id="catalog-search"
-                name="search"
-                defaultValue={query.search}
-                placeholder="Cauta in colectie..."
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="catalog-category" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Categorie
-              </label>
-              <select
-                id="catalog-category"
-                name="category"
-                defaultValue={selectedGroup.id}
-                className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-              >
-                {categoryGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {selectedGroup.children.length > 0 ? (
-              <div className="space-y-2">
-                <label htmlFor="catalog-subcategory" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Subcategorie
-                </label>
-                <select
-                  id="catalog-subcategory"
-                  name="subcategory"
-                  defaultValue={query.subcategory}
-                  className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-                >
-                  <option value="Toate">Toate</option>
-                  {selectedGroup.children.map((child) => (
-                    <option key={child.id} value={child.id}>
-                      {child.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <input type="hidden" name="subcategory" value="Toate" />
-            )}
-
-            <div className="space-y-2">
-              <label htmlFor="catalog-sort" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Sortare
-              </label>
-              <select
-                id="catalog-sort"
-                name="sort"
-                defaultValue={selectedSort}
-                className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-              >
-                {sortOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="catalog-per-page" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Produse pe pagina
-              </label>
-              <select
-                id="catalog-per-page"
-                name="perPage"
-                defaultValue={String(query.perPage)}
-                className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-              >
-                {pageSizeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <input type="hidden" name="page" value="1" />
-
-            <button
-              type="submit"
-              className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-2xl bg-indigo-600 px-5 text-sm font-semibold text-white transition hover:bg-indigo-700"
-            >
-              Aplica filtrele
-            </button>
-          </form>
+          <CatalogFiltersForm
+            key={JSON.stringify(query)}
+            categoryGroups={categoryGroups}
+            search={query.search}
+            category={selectedGroup.id}
+            subcategory={query.subcategory}
+            sort={selectedSort}
+            colorOptions={colorOptions}
+            selectedColors={query.colors.filter((value) => colorOptions.includes(value))}
+            sizeOptions={sizeOptions}
+            selectedSizes={query.sizes.filter((value) => sizeOptions.includes(value))}
+            sortOptions={sortOptions}
+          />
         </aside>
 
         <div>
@@ -345,6 +300,8 @@ export default function CatalogPageContent({
               category={query.category}
               subcategory={query.subcategory}
               sort={query.sort}
+              colors={query.colors}
+              sizes={query.sizes}
             />
           </div>
 
@@ -392,7 +349,7 @@ export default function CatalogPageContent({
                       {product.name}
                     </Link>
                     <p className="line-clamp-2 min-h-[2.75rem] text-sm text-slate-500">
-                      {product.description || 'Material premium pentru proiecte handmade.'}
+                      {toPlainText(product.description) || 'Material premium pentru proiecte handmade.'}
                     </p>
                     {product.category?.name ? (
                       <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
@@ -497,6 +454,12 @@ function buildCatalogHref(
   if (query.subcategory && query.subcategory !== 'Toate') params.set('subcategory', query.subcategory);
   if (query.sort && query.sort !== 'featured') params.set('sort', query.sort);
   if (query.perPage !== 12) params.set('perPage', String(query.perPage));
+  for (const color of query.colors) {
+    params.append('colors', color);
+  }
+  for (const size of query.sizes) {
+    params.append('sizes', size);
+  }
   if (page > 1) params.set('page', String(page));
 
   const nextQuery = params.toString();
@@ -525,7 +488,9 @@ function sortProducts(left: Product, right: Product, sort: string) {
 }
 
 function productSearchText(product: Product) {
-  return `${product.name} ${product.description ?? ''} ${product.category?.name ?? ''}`.toLowerCase();
+  return `${product.name} ${toPlainText(product.description)} ${getAllProductOptionTags(product).join(' ')} ${(product.attributes || [])
+    .map((attribute) => `${attribute.key}: ${attribute.value}`)
+    .join(' ')} ${product.category?.name ?? ''}`.toLowerCase();
 }
 
 function buildCategoryGroups(categories: Category[] = []) {
@@ -597,4 +562,103 @@ function productMatchesCategoryGroup(
       candidate.categoryIds.some((id) => productIds.has(id)) ||
       candidate.categorySlugs.some((slug) => productSlugs.has(slug)),
   );
+}
+
+function normalizeProductOptions(product: Product): ProductOption[] {
+  const apiOptions = Array.isArray(product.options)
+    ? product.options
+    : product.options
+      ? [product.options]
+      : [];
+
+  return apiOptions
+    .map((option) => {
+      const name = String(option.name || 'Optiune').trim();
+      const valueDetails = option.valueDetails || [];
+      const values = option.values || [];
+
+      return {
+        name,
+        values: Array.from(
+          new Set(
+            [
+              ...values.map((value) => String(value || '').trim()),
+              ...valueDetails.map((value) => String(value.value || '').trim()),
+            ].filter(Boolean),
+          ),
+        ),
+      };
+    })
+    .filter((option) => option.name && option.values.length > 0);
+}
+
+function getAllProductOptionTags(product: Product) {
+  return normalizeProductOptions(product).flatMap((option) =>
+    option.values.map((value) => `${option.name}: ${value}`),
+  );
+}
+
+function optionMatchesNames(option: ProductOption, preferredNames: string[]) {
+  return preferredNames.some((name) => option.name.toLowerCase().includes(name));
+}
+
+function textMatchesTerm(text: string, term: string) {
+  return new RegExp(`(^|[^a-z0-9])${term}([^a-z0-9]|$)`, 'i').test(text);
+}
+
+function getTextColorValues(product: Product) {
+  return textColorOptions
+    .filter((color) => color.terms.some((term) => textMatchesTerm(productSearchText(product), term)))
+    .map((color) => color.label);
+}
+
+function getTextDimensionValues(product: Product) {
+  return Array.from(
+    new Set(
+      Array.from(productSearchText(product).matchAll(/\b\d+(?:[.,]\d+)?\s?(?:mm|cm|m)\b/gi)).map(
+        ([value]) => value.replace(/\s+/g, '').replace(',', '.'),
+      ),
+    ),
+  );
+}
+
+function getProductFacetValues(product: Product, preferredNames: string[]) {
+  const structuredValues = [
+    ...normalizeProductOptions(product)
+      .filter((option) => optionMatchesNames(option, preferredNames))
+      .flatMap((option) => option.values),
+    ...(product.attributes || [])
+      .filter((attribute) =>
+        preferredNames.some((name) => attribute.key.toLowerCase().includes(name)),
+      )
+      .map((attribute) => attribute.value),
+  ];
+
+  const textValues =
+    preferredNames === colorOptionNames
+      ? getTextColorValues(product)
+      : preferredNames === preferredDimensionNames
+        ? getTextDimensionValues(product)
+        : [];
+
+  return Array.from(new Set([...structuredValues, ...textValues]))
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
+}
+
+function getOptionValuesByName(products: Product[], preferredNames: string[]) {
+  return Array.from(
+    new Set(products.flatMap((product) => getProductFacetValues(product, preferredNames))),
+  ).sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
+}
+
+function productMatchesFacetValues(
+  product: Product,
+  selectedValues: string[],
+  preferredNames: string[],
+) {
+  if (selectedValues.length === 0) return true;
+
+  const productValues = new Set(getProductFacetValues(product, preferredNames));
+  return selectedValues.some((value) => productValues.has(value));
 }

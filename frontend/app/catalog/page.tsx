@@ -70,9 +70,46 @@ function parseSingleParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
 
+function parseMultiParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+
+  const single = String(value || '').trim();
+  return single ? [single] : [];
+}
+
 function parsePositiveInteger(value: string, fallback: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeCategoryQuery(
+  rawCategory: string,
+  rawSubcategory: string,
+  categories: Category[],
+) {
+  const category = rawCategory.trim() || 'Toate';
+  const subcategory = rawSubcategory.trim() || 'Toate';
+
+  if (category === 'Toate') {
+    return { category, subcategory };
+  }
+
+  const matchedCategory = categories.find((item) => item.slug === category);
+  if (!matchedCategory || matchedCategory.parentId == null) {
+    return { category, subcategory };
+  }
+
+  const parentCategory = categories.find((item) => item.id === matchedCategory.parentId);
+  if (!parentCategory) {
+    return { category, subcategory };
+  }
+
+  return {
+    category: parentCategory.slug,
+    subcategory: subcategory === 'Toate' ? matchedCategory.slug : subcategory,
+  };
 }
 
 export default async function CatalogPage({
@@ -82,13 +119,20 @@ export default async function CatalogPage({
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const [products, categories] = await Promise.all([getProducts(), getCategories()]);
+  const normalizedCategoryQuery = normalizeCategoryQuery(
+    parseSingleParam(resolvedSearchParams.category),
+    parseSingleParam(resolvedSearchParams.subcategory),
+    categories,
+  );
   const query = {
     search: parseSingleParam(resolvedSearchParams.search).trim(),
-    category: parseSingleParam(resolvedSearchParams.category).trim() || 'Toate',
-    subcategory: parseSingleParam(resolvedSearchParams.subcategory).trim() || 'Toate',
+    category: normalizedCategoryQuery.category,
+    subcategory: normalizedCategoryQuery.subcategory,
     sort: parseSingleParam(resolvedSearchParams.sort).trim() || 'featured',
     page: parsePositiveInteger(parseSingleParam(resolvedSearchParams.page), 1),
     perPage: parsePositiveInteger(parseSingleParam(resolvedSearchParams.perPage), 12),
+    colors: parseMultiParam(resolvedSearchParams.colors),
+    sizes: parseMultiParam(resolvedSearchParams.sizes),
   };
 
   return (

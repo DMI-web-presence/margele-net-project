@@ -50,7 +50,9 @@ async function main() {
         ...product,
         name: description.name,
         description: stripHtml(decodeHtml(description.description)),
-        shortDescription: cleanText(description.metaDescription || description.description).slice(0, 500),
+        shortDescription: stripHtml(
+          decodeHtml(description.metaDescription || description.description),
+        ).slice(0, 500),
         slug: normalizeSlug(
           seoUrls.get(product.id) || product.sku || product.model || description.name,
           product.id,

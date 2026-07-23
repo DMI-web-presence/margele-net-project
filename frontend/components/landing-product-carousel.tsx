@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
+import { toPlainText } from '@/lib/plain-text';
 import { getProductImageProps } from '@/lib/product-image-variants';
 import {
   Carousel,
@@ -200,7 +201,7 @@ export default function LandingProductCarousel({
                       {product.name}
                     </Link>
                     <p className="line-clamp-1 text-xs text-slate-600">
-                      {product.description ?? 'Material premium'}
+                      {toPlainText(product.description) || 'Material premium'}
                     </p>
                     <p className="mt-auto text-base font-bold text-slate-950">
                       {priceFormatter.format(Number(product.price))}
