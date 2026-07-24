@@ -9,6 +9,7 @@ export type CartProduct = {
   price: string;
   imageUrl: string | null;
   sku?: string | null;
+  variantId?: number | null;
   selectedSize?: string | null;
 };
 

@@ -42,15 +42,20 @@ type ProductPurchaseControlsProps = {
 };
 
 type ProductVariant = {
+  id?: number;
   optionName: string;
   optionValue: string;
+  optionValues?: Record<string, string> | null;
   legacyOptionValueId?: number | null;
   combinationId?: string | null;
   model?: string | null;
   sku?: string | null;
+  variantPrice?: number | string | null;
   priceDelta?: number | string | null;
   pricePrefix?: string | null;
   quantity?: number;
+  imageUrl?: string | null;
+  isActive?: boolean;
 };
 
 const priceFormatter = new Intl.NumberFormat('ro-RO', {
@@ -62,6 +67,11 @@ const priceFormatter = new Intl.NumberFormat('ro-RO', {
 const applyPriceDelta = (basePrice: number, variant?: ProductVariant) => {
   const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
   if (!variant) return safeBasePrice;
+
+  const variantPrice = Number(variant.variantPrice);
+  if (variant.variantPrice !== null && variant.variantPrice !== undefined && Number.isFinite(variantPrice)) {
+    return Math.max(0, variantPrice);
+  }
 
   const priceDelta = Number(variant.priceDelta ?? 0);
   if (!Number.isFinite(priceDelta)) return safeBasePrice;
@@ -80,7 +90,8 @@ const applyPriceDelta = (basePrice: number, variant?: ProductVariant) => {
 const variantHasPrice = (variant: ProductVariant) => Number.isFinite(Number(variant.priceDelta));
 
 const variantIsAvailable = (variant: ProductVariant) =>
-  variant.quantity === undefined || variant.quantity === null || variant.quantity > 0;
+  variant.isActive !== false &&
+  (variant.quantity === undefined || variant.quantity === null || variant.quantity > 0);
 
 const variantHasFinalPrice = (variant: ProductVariant) =>
   Boolean(variant.combinationId || variant.sku || variant.model) && Number(variant.priceDelta ?? 0) > 0;
@@ -119,6 +130,39 @@ const findBestVariant = (
   );
 };
 
+const normalizeVariantOptionValues = (variant: ProductVariant): Record<string, string> => {
+  const optionValues = variant.optionValues;
+  if (!optionValues || typeof optionValues !== 'object' || Array.isArray(optionValues)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(optionValues)
+      .map(([name, value]) => [name.trim(), String(value || '').trim()] as const)
+      .filter(([name, value]) => name && value),
+  );
+};
+
+const normalizedOptionText = (value: string) => value.trim().toLowerCase();
+
+const variantMatchesSelections = (
+  variant: ProductVariant,
+  selections: Record<string, string | null>,
+) => {
+  const optionValues = normalizeVariantOptionValues(variant);
+  const selectedEntries = Object.entries(selections).filter(
+    (entry): entry is [string, string] => Boolean(entry[1]),
+  );
+
+  return selectedEntries.every(([selectedName, selectedValue]) =>
+    Object.entries(optionValues).some(
+      ([optionName, optionValue]) =>
+        normalizedOptionText(optionName) === normalizedOptionText(selectedName) &&
+        normalizedOptionText(optionValue) === normalizedOptionText(selectedValue),
+    ),
+  );
+};
+
 export default function ProductPurchaseControls({
   product,
   productDetails,
@@ -139,7 +183,7 @@ export default function ProductPurchaseControls({
     Object.fromEntries(
       groups.map((group) => {
         const selectedValue =
-          group.options.length === 1 || !hasImageOptionGroups
+          group.options.length === 1
             ? group.options[0]?.value ?? null
             : null;
 
@@ -158,7 +202,17 @@ export default function ProductPurchaseControls({
     .filter((group) => !group.options.some((option) => option.imageUrl))
     .map((group) => group.options.find((option) => option.value === selectedOptions[group.name]))
     .filter(Boolean) as PurchaseOption[];
-  const selectedVariant =
+  const hasCompleteSelection = groups
+    .filter((group) => group.options.length > 0)
+    .every((group) => Boolean(selectedOptions[group.name]));
+  const combinationVariants = variants.filter(
+    (variant) => Object.keys(normalizeVariantOptionValues(variant)).length > 0,
+  );
+  const availableCombinationVariants = combinationVariants.filter(variantIsAvailable);
+  const selectedCombinationVariant = hasCompleteSelection
+    ? availableCombinationVariants.find((variant) => variantMatchesSelections(variant, selectedOptions))
+    : undefined;
+  const legacySelectedVariant =
     selectedNonImageOptions
       .map((option) =>
         findBestVariant(variants, (variant) => {
@@ -187,27 +241,31 @@ export default function ProductPurchaseControls({
             (!variant.combinationId || variant.combinationId.includes(String(selectedImageValueId))),
         )
       : undefined);
+  const selectedVariant =
+    combinationVariants.length > 0 ? selectedCombinationVariant : legacySelectedVariant;
   const basePrice = Number(product.price);
   const lowestVariantPrice = getLowestVariantPrice(basePrice, variants);
-  const hasCompleteSelection = groups
-    .filter((group) => group.options.length > 0)
-    .every((group) => Boolean(selectedOptions[group.name]));
   const missingRequiredGroups = groups
     .filter((group) => group.options.length > 0)
     .filter((group) => !selectedOptions[group.name])
     .map((group) => group.name);
   const hasMissingRequiredGroups = missingRequiredGroups.length > 0;
+  const hasUnavailableCombination =
+    combinationVariants.length > 0 && hasCompleteSelection && !selectedCombinationVariant;
   const selectionNoticeText =
     missingRequiredGroups.length > 0
       ? `Alege ${missingRequiredGroups.map((name) => name.toLowerCase()).join(' si ')} pentru a adauga produsul in cos.`
+      : hasUnavailableCombination
+        ? 'Combinatia selectata nu este disponibila momentan.'
       : '';
   const hasVariablePrice =
     new Set(getBuyablePricedVariants(variants).map((variant) => applyPriceDelta(basePrice, variant).toFixed(2))).size >
     1;
-  const shouldShowFromPrice = hasVariablePrice && !hasCompleteSelection;
+  const shouldShowFromPrice = hasVariablePrice && (!hasCompleteSelection || hasUnavailableCombination);
   const currentPrice = shouldShowFromPrice ? lowestVariantPrice : applyPriceDelta(basePrice, selectedVariant);
   const currentPriceText = `${shouldShowFromPrice ? 'De la ' : ''}${priceFormatter.format(currentPrice)}`;
   const currentSku = selectedVariant?.sku || null;
+  const currentVariantId = selectedVariant?.id ?? null;
   const [quantity, setQuantity] = useState(1);
   const cartOption = Object.entries(selectedOptions)
     .filter(([, value]) => Boolean(value))
@@ -235,6 +293,20 @@ export default function ProductPurchaseControls({
     const isImageOptionGroup = group.options.some((option) => option.imageUrl);
     const shouldWaitForImageOption = !isImageOptionGroup && hasImageOptionGroups && !hasSelectedImageOption;
     const isMissingRequiredGroup = showSelectionNotice && missingRequiredGroups.includes(group.name);
+    const combinationDisabledValues =
+      combinationVariants.length > 0
+        ? group.options
+            .filter((option) => {
+              const candidateSelections = {
+                ...selectedOptions,
+                [group.name]: option.value,
+              };
+              return !availableCombinationVariants.some((variant) =>
+                variantMatchesSelections(variant, candidateSelections),
+              );
+            })
+            .map((option) => option.value)
+        : [];
 
     return (
       <SizeSelector
@@ -266,7 +338,9 @@ export default function ProductPurchaseControls({
             : {}
         }
         disabledValues={
-          !isImageOptionGroup && selectedImageValueId
+          combinationVariants.length > 0
+            ? combinationDisabledValues
+            : !isImageOptionGroup && selectedImageValueId
             ? group.options
                 .filter((option) => {
                   const optionValueId = option.legacyOptionValueId;
@@ -301,6 +375,33 @@ export default function ProductPurchaseControls({
               ...current,
               [group.name]: value,
             };
+
+            if (combinationVariants.length > 0) {
+              const compatibleSelections: Record<string, string | null> = {
+                [group.name]: value,
+              };
+
+              for (const dependentGroup of groups) {
+                if (dependentGroup.name === group.name) continue;
+                const currentValue = current[dependentGroup.name];
+                if (!currentValue) {
+                  compatibleSelections[dependentGroup.name] = null;
+                  continue;
+                }
+
+                const candidateSelections = {
+                  ...compatibleSelections,
+                  [dependentGroup.name]: currentValue,
+                };
+                compatibleSelections[dependentGroup.name] = availableCombinationVariants.some(
+                  (variant) => variantMatchesSelections(variant, candidateSelections),
+                )
+                  ? currentValue
+                  : null;
+              }
+
+              return compatibleSelections;
+            }
 
             if (!isImageOptionGroup) {
               return nextOptions;
@@ -370,10 +471,14 @@ export default function ProductPurchaseControls({
       <div className="flex items-center gap-2">
         <Button
           type="button"
-          variant={hasMissingRequiredGroups ? 'secondary' : 'primary'}
-          className={hasMissingRequiredGroups ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100' : ''}
+          variant={hasMissingRequiredGroups || hasUnavailableCombination ? 'secondary' : 'primary'}
+          className={
+            hasMissingRequiredGroups || hasUnavailableCombination
+              ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+              : ''
+          }
           onClick={(event) => {
-            if (hasMissingRequiredGroups) {
+            if (hasMissingRequiredGroups || hasUnavailableCombination) {
               setShowSelectionNotice(true);
               return;
             }
@@ -381,9 +486,10 @@ export default function ProductPurchaseControls({
             addToCart(
               {
                 ...product,
-                imageUrl: selectedImageOption?.imageUrl ?? product.imageUrl,
+                imageUrl: selectedVariant?.imageUrl ?? selectedImageOption?.imageUrl ?? product.imageUrl,
                 price: currentPrice.toFixed(2),
                 sku: currentSku,
+                variantId: currentVariantId,
                 selectedSize: cartOption || null,
               },
               event.currentTarget,
@@ -391,7 +497,11 @@ export default function ProductPurchaseControls({
             );
           }}
         >
-          {hasMissingRequiredGroups ? 'Selecteaza optiunile' : 'Adauga in cos'}
+          {hasMissingRequiredGroups
+            ? 'Selecteaza optiunile'
+            : hasUnavailableCombination
+              ? 'Combinatie indisponibila'
+              : 'Adauga in cos'}
         </Button>
         <ProductFavoriteIconButton product={product} />
       </div>

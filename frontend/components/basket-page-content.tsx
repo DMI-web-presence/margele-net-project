@@ -278,7 +278,10 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
             ...item.product,
             name: product?.name ?? item.product.name,
             imageUrl: item.product.imageUrl ?? product?.imageUrl ?? null,
-            price: product?.price ?? item.product.price,
+            price:
+              item.product.variantId || item.product.selectedSize
+                ? item.product.price
+                : product?.price ?? item.product.price,
             sku: item.product.sku ?? product?.sku ?? null,
             description: product?.description ?? null,
           },

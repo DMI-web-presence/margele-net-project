@@ -1,5 +1,8 @@
 import CatalogPageContent from '@/components/catalog-page-content';
+
 export const dynamic = 'force-dynamic';
+
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
 
 type Product = {
   id: number;
@@ -24,7 +27,7 @@ type Category = {
 
 async function getProducts(): Promise<Product[]> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/products?view=lite', {
+    const res = await fetch(`${backendUrl}/products?view=lite`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });
@@ -47,7 +50,7 @@ async function getProducts(): Promise<Product[]> {
 
 async function getCategories(): Promise<Category[]> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/categories', {
+    const res = await fetch(`${backendUrl}/categories`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });
@@ -114,7 +117,7 @@ function normalizeCategoryQuery(
   };
 }
 
-export default async function CatalogPage({
+export default async function NoutatiPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -130,7 +133,7 @@ export default async function CatalogPage({
     search: parseSingleParam(resolvedSearchParams.search).trim(),
     category: normalizedCategoryQuery.category,
     subcategory: normalizedCategoryQuery.subcategory,
-    sort: parseSingleParam(resolvedSearchParams.sort).trim() || 'featured',
+    sort: parseSingleParam(resolvedSearchParams.sort).trim() || 'newest',
     page: parsePositiveInteger(parseSingleParam(resolvedSearchParams.page), 1),
     perPage: parsePositiveInteger(parseSingleParam(resolvedSearchParams.perPage), 12),
     colors: parseMultiParam(resolvedSearchParams.colors),
@@ -139,7 +142,18 @@ export default async function CatalogPage({
 
   return (
     <main className="px-10 py-8 sm:px-20 lg:px-32">
-      <CatalogPageContent products={products} categories={categories} query={query} />
+      <CatalogPageContent
+        basePath="/noutati"
+        products={products}
+        categories={categories}
+        intro={{
+          eyebrow: 'Noutati',
+          title: 'Ultimele produse adaugate',
+          description:
+            'Descopera rapid cele mai noi margele, accesorii si materiale creative intrate in catalog.',
+        }}
+        query={query}
+      />
     </main>
   );
 }

@@ -6,14 +6,6 @@ export const formatCategoryLabel = (value: string) => {
   const isUppercase = letters.length > 0 && letters === letters.toUpperCase();
   if (!isUppercase) return name;
 
-  const smallWords = new Set(['de', 'din', 'si', 'sau', 'cu', 'pentru', 'la']);
-
-  return name
-    .toLowerCase()
-    .split(' ')
-    .map((word, index) => {
-      if (index > 0 && smallWords.has(word)) return word;
-      return word.charAt(0).toUpperCase() + word.slice(1);
-    })
-    .join(' ');
+  const sentenceCaseName = name.toLocaleLowerCase('ro-RO');
+  return sentenceCaseName.charAt(0).toLocaleUpperCase('ro-RO') + sentenceCaseName.slice(1);
 };

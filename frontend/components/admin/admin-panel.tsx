@@ -1,11 +1,23 @@
 'use client';
 
-import { ChangeEvent, FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, DragEvent, FormEvent, ReactNode, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
+const frontendVisibleRootCategorySlugs = [
+  'margele',
+  'accesorii-bijuterii',
+  'pandantive-si-charm-uri',
+  'fire-snururi-si-elastice',
+  'materiale-handmade',
+  'decoratiuni-si-evenimente',
+  'unelte',
+  'seturi-si-mixuri',
+  'reduceri-lichidare-stoc',
+] as const;
 
 type AdminUser = {
   id: number;
@@ -37,18 +49,27 @@ type ProductAttribute = {
   sortOrder: number;
 };
 
+type VariantOptionGroup = {
+  name: string;
+  valuesText: string;
+};
+
 type ProductVariant = {
+  id: number | null;
   optionName: string;
   optionValue: string;
+  optionValues: Record<string, string>;
   legacyOptionId: string;
   legacyOptionValueId: string;
   combinationId: string;
   model: string;
   sku: string;
   quantity: number;
+  variantPrice: string;
   priceDelta: number;
   pricePrefix: '+' | '-';
   imageUrl: string;
+  isActive: boolean;
   sortOrder: number;
 };
 
@@ -157,17 +178,21 @@ type ProductRecord = {
     sortOrder?: number | null;
   }>;
   variants: Array<{
+    id?: number | null;
     optionName: string;
     optionValue: string;
+    optionValues?: Record<string, string> | null;
     legacyOptionId?: number | null;
     legacyOptionValueId?: number | null;
     combinationId?: string | null;
     model?: string | null;
     sku?: string | null;
     quantity?: number | null;
+    variantPrice?: number | string | null;
     priceDelta?: number | string | null;
     pricePrefix?: string | null;
     imageUrl?: string | null;
+    isActive?: boolean | null;
     sortOrder?: number | null;
   }>;
 };
@@ -189,12 +214,14 @@ type ProductDraft = {
   categoryIds: number[];
   images: ProductImage[];
   attributes: ProductAttribute[];
+  variantOptionGroups: VariantOptionGroup[];
   variants: ProductVariant[];
 };
 
 type AdminSection = 'dashboard' | 'products' | 'orders' | 'packages' | 'billing' | 'chat';
 
 type ImageUploadTarget = {
+  kind: 'gallery' | 'variant';
   index: number | null;
 };
 
@@ -219,6 +246,9 @@ const conversationSourceLabels: Record<(typeof conversationSourceOptions)[number
   email: 'Email',
   whatsapp: 'WhatsApp',
 };
+
+const colorAttributeKey = 'Culoare';
+const colorAttributeKeyNormalized = colorAttributeKey.toLowerCase();
 
 const sidebarGroups = [
   {
@@ -253,15 +283,85 @@ function emptyDraft(): ProductDraft {
     compareAtPrice: '',
     currency: 'RON',
     imageUrl: '',
-    sku: '',
+    sku: generateDraftSku(),
     stockQuantity: '0',
     status: 'draft',
     material: '',
     categoryIds: [],
     images: [{ imageUrl: '', altText: '', sortOrder: 0, isPrimary: true }],
     attributes: [],
+    variantOptionGroups: [],
     variants: [],
   };
+}
+
+function generateDraftSku() {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const randomSegment = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `MGL-${timestamp}-${randomSegment}`;
+}
+
+function normalizeVariantOptionValues(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([name, optionValue]) => [name.trim(), String(optionValue || '').trim()] as const)
+      .filter(([name, optionValue]) => name && optionValue),
+  );
+}
+
+function variantCombinationKey(optionValues: Record<string, string>) {
+  return Object.entries(optionValues)
+    .map(([name, value]) => `${name.trim().toLowerCase()}=${value.trim().toLowerCase()}`)
+    .sort()
+    .join('|');
+}
+
+function parseVariantGroupValues(valuesText: string) {
+  return Array.from(
+    new Set(
+      valuesText
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function skuSegment(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function inferVariantOptionGroups(variants: ProductRecord['variants']): VariantOptionGroup[] {
+  const groups = new Map<string, string[]>();
+
+  for (const variant of variants) {
+    const explicitValues = normalizeVariantOptionValues(variant.optionValues);
+    const optionValues = Object.keys(explicitValues).length > 0
+      ? explicitValues
+      : variant.optionName && variant.optionValue
+        ? { [variant.optionName]: variant.optionValue }
+        : {};
+
+    for (const [name, value] of Object.entries(optionValues)) {
+      const values = groups.get(name) ?? [];
+      if (!values.some((current) => current.toLowerCase() === value.toLowerCase())) {
+        values.push(value);
+      }
+      groups.set(name, values);
+    }
+  }
+
+  return Array.from(groups.entries()).map(([name, values]) => ({
+    name,
+    valuesText: values.join(', '),
+  }));
 }
 
 function draftFromProduct(product: ProductRecord): ProductDraft {
@@ -294,18 +394,26 @@ function draftFromProduct(product: ProductRecord): ProductDraft {
       value: attribute.value || '',
       sortOrder: Number(attribute.sortOrder ?? index),
     })),
+    variantOptionGroups: inferVariantOptionGroups(product.variants),
     variants: product.variants.map((variant, index) => ({
+      id: variant.id ?? null,
       optionName: variant.optionName || '',
       optionValue: variant.optionValue || '',
+      optionValues: normalizeVariantOptionValues(variant.optionValues),
       legacyOptionId: variant.legacyOptionId ? String(variant.legacyOptionId) : '',
       legacyOptionValueId: variant.legacyOptionValueId ? String(variant.legacyOptionValueId) : '',
       combinationId: variant.combinationId || '',
       model: variant.model || '',
       sku: variant.sku || '',
       quantity: Number(variant.quantity ?? 0),
+      variantPrice:
+        variant.variantPrice === null || variant.variantPrice === undefined
+          ? ''
+          : String(variant.variantPrice),
       priceDelta: Number(variant.priceDelta ?? 0),
       pricePrefix: variant.pricePrefix === '-' ? '-' : '+',
       imageUrl: variant.imageUrl || '',
+      isActive: variant.isActive !== false,
       sortOrder: Number(variant.sortOrder ?? index),
     })),
   };
@@ -353,6 +461,7 @@ export default function AdminPanel() {
   const [selectedBillingId, setSelectedBillingId] = useState<number | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isProductPreviewVisible, setIsProductPreviewVisible] = useState(true);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
@@ -384,16 +493,21 @@ export default function AdminPanel() {
   const [showAllEditorCategories, setShowAllEditorCategories] = useState(false);
   const [showAllEditorAttributes, setShowAllEditorAttributes] = useState(false);
   const [showAllEditorVariants, setShowAllEditorVariants] = useState(false);
+  const [activeVariantDetailsIndex, setActiveVariantDetailsIndex] = useState<number | null>(null);
   const [productEditorKey, setProductEditorKey] = useState(0);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [isCategoryCreatorOpen, setIsCategoryCreatorOpen] = useState(false);
-  const [categoryCreatorMode, setCategoryCreatorMode] = useState<'category' | 'subcategory'>('category');
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategorySlug, setNewCategorySlug] = useState('');
+  const [newSubcategoryName, setNewSubcategoryName] = useState('');
   const [newCategoryParentId, setNewCategoryParentId] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+  const [categoryDeleteCandidate, setCategoryDeleteCandidate] = useState<Category | null>(null);
   const [isImageUploadModalOpen, setIsImageUploadModalOpen] = useState(false);
-  const [imageUploadTarget, setImageUploadTarget] = useState<ImageUploadTarget>({ index: null });
+  const [imageUploadTarget, setImageUploadTarget] = useState<ImageUploadTarget>({
+    kind: 'gallery',
+    index: null,
+  });
   const [imageUploadFile, setImageUploadFile] = useState<File | null>(null);
   const [imageUploadPreview, setImageUploadPreview] = useState('');
   const [imageUploadAltText, setImageUploadAltText] = useState('');
@@ -512,13 +626,23 @@ export default function AdminPanel() {
     [categories],
   );
 
-  const topLevelCategories = useMemo(
+  const allTopLevelCategories = useMemo(
     () =>
       categories
-        .filter((category) => category.parentId === null)
+        .filter((category) => category.parentId === null && category.isActive)
         .sort((left, right) => left.name.localeCompare(right.name, 'ro')),
     [categories],
   );
+
+  const frontendVisibleTopLevelCategories = useMemo(() => {
+    const visibleRoots = frontendVisibleRootCategorySlugs
+      .map((slug) =>
+        categories.find((category) => category.parentId === null && category.isActive && category.slug === slug),
+      )
+      .filter(Boolean) as Category[];
+
+    return visibleRoots;
+  }, [categories]);
 
   const subcategories = useMemo(
     () =>
@@ -706,6 +830,17 @@ export default function AdminPanel() {
     [categories, editorCategorySelection.categoryId],
   );
 
+  useEffect(() => {
+    if (!isCategoryCreatorOpen) return;
+
+    if (editorCategorySelection.categoryId) {
+      setNewCategoryParentId(String(editorCategorySelection.categoryId));
+      return;
+    }
+
+    setNewCategoryParentId('');
+  }, [editorCategorySelection.categoryId, isCategoryCreatorOpen]);
+
   const visibleEditorCategories = useMemo(() => {
     if (showAllEditorCategories) return categoryTree;
 
@@ -865,7 +1000,9 @@ export default function AdminPanel() {
     setIsCreatingProduct(false);
     setSelectedProductId(product.id);
     setDraft(draftFromProduct(product));
+    setActiveVariantDetailsIndex(null);
     setProductEditorKey((current) => current + 1);
+    setIsProductPreviewVisible(true);
     setIsEditorOpen(true);
     setMessage('');
     setErrorMessage('');
@@ -879,13 +1016,14 @@ export default function AdminPanel() {
     setShowAllEditorCategories(false);
     setShowAllEditorAttributes(false);
     setShowAllEditorVariants(false);
+    setActiveVariantDetailsIndex(null);
     setIsCategoryCreatorOpen(false);
-    setCategoryCreatorMode('category');
     setNewCategoryName('');
-    setNewCategorySlug('');
+    setNewSubcategoryName('');
     setNewCategoryParentId('');
     closeImageUploadModal();
     setProductEditorKey((current) => current + 1);
+    setIsProductPreviewVisible(true);
     setIsEditorOpen(true);
     setMessage('');
     setErrorMessage('');
@@ -896,6 +1034,7 @@ export default function AdminPanel() {
     setIsEditorOpen(false);
     setMessage('');
     setErrorMessage('');
+    setActiveVariantDetailsIndex(null);
     closeImageUploadModal();
   }
 
@@ -971,6 +1110,16 @@ export default function AdminPanel() {
     event.preventDefault();
     setErrorMessage('');
     setMessage('');
+
+    const incompleteVariantIndex = draft.variants.findIndex(
+      (variant) => !variant.optionName.trim() || !variant.optionValue.trim(),
+    );
+    if (incompleteVariantIndex >= 0) {
+      setActiveVariantDetailsIndex(incompleteVariantIndex);
+      setErrorMessage('Completeaza tipul si valoarea fiecarei variante inainte de salvare.');
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -1244,17 +1393,23 @@ export default function AdminPanel() {
   }
 
   function updateImage(index: number, patch: Partial<ProductImage>) {
-    setDraft((current) => ({
-      ...current,
-      images: current.images.map((image, imageIndex) =>
+    setDraft((current) => {
+      const images = current.images.map((image, imageIndex) =>
         imageIndex === index ? { ...image, ...patch } : image,
-      ),
-    }));
+      );
+
+      return {
+        ...current,
+        imageUrl: images[index]?.isPrimary ? images[index].imageUrl : current.imageUrl,
+        images,
+      };
+    });
   }
 
   function setPrimaryImage(index: number) {
     setDraft((current) => ({
       ...current,
+      imageUrl: current.images[index]?.imageUrl || current.imageUrl,
       images: current.images.map((image, imageIndex) => ({
         ...image,
         isPrimary: imageIndex === index,
@@ -1269,13 +1424,18 @@ export default function AdminPanel() {
   function removeImage(index: number) {
     setDraft((current) => {
       const images = current.images.filter((_, imageIndex) => imageIndex !== index);
+      const normalizedImages = images.map((image, imageIndex) => ({
+        ...image,
+        sortOrder: imageIndex,
+        isPrimary: image.isPrimary || (imageIndex === 0 && !images.some((item) => item.isPrimary)),
+      }));
+
       return {
         ...current,
-        images: images.map((image, imageIndex) => ({
-          ...image,
-          sortOrder: imageIndex,
-          isPrimary: image.isPrimary || (imageIndex === 0 && !images.some((item) => item.isPrimary)),
-        })),
+        imageUrl: normalizedImages.find((image) => image.isPrimary)?.imageUrl || '',
+        images: normalizedImages.length
+          ? normalizedImages
+          : [{ imageUrl: '', altText: '', sortOrder: 0, isPrimary: true }],
       };
     });
   }
@@ -1305,27 +1465,312 @@ export default function AdminPanel() {
     }));
   }
 
+  function getColorAttributeValue() {
+    return (
+      draft.attributes.find((attribute) => attribute.key.trim().toLowerCase() === colorAttributeKeyNormalized)
+        ?.value ?? ''
+    );
+  }
+
+  function updateColorAttribute(value: string) {
+    setDraft((current) => {
+      const existingColorIndex = current.attributes.findIndex(
+        (attribute) => attribute.key.trim().toLowerCase() === colorAttributeKeyNormalized,
+      );
+
+      if (!value.trim()) {
+        return {
+          ...current,
+          attributes: current.attributes
+            .filter((_, attributeIndex) => attributeIndex !== existingColorIndex)
+            .map((attribute, attributeIndex) => ({ ...attribute, sortOrder: attributeIndex })),
+        };
+      }
+
+      if (existingColorIndex >= 0) {
+        return {
+          ...current,
+          attributes: current.attributes
+            .map((attribute, attributeIndex) =>
+              attributeIndex === existingColorIndex
+                ? { ...attribute, key: colorAttributeKey, value }
+                : attribute,
+            )
+            .filter(
+              (attribute, attributeIndex) =>
+                attributeIndex === existingColorIndex ||
+                attribute.key.trim().toLowerCase() !== colorAttributeKeyNormalized,
+            )
+            .map((attribute, attributeIndex) => ({ ...attribute, sortOrder: attributeIndex })),
+        };
+      }
+
+      return {
+        ...current,
+        attributes: [
+          ...current.attributes,
+          { key: colorAttributeKey, value, sortOrder: current.attributes.length },
+        ],
+      };
+    });
+  }
+
   function addVariant() {
     setDraft((current) => ({
       ...current,
       variants: [
         ...current.variants,
         {
+          id: null,
           optionName: '',
           optionValue: '',
+          optionValues: {},
           legacyOptionId: '',
           legacyOptionValueId: '',
           combinationId: '',
           model: '',
           sku: '',
           quantity: 0,
+          variantPrice: current.price,
           priceDelta: 0,
           pricePrefix: '+',
           imageUrl: '',
+          isActive: true,
           sortOrder: current.variants.length,
         },
       ],
     }));
+  }
+
+  function addDetailedProductVariant() {
+    const variantIndex = draft.variants.length;
+    const parentSku = skuSegment(draft.sku) || 'MGL';
+    const usedSkus = new Set(draft.variants.map((variant) => variant.sku.trim().toUpperCase()));
+    const skuBase = `${parentSku}-VAR-${variantIndex + 1}`;
+    let sku = skuBase;
+    let counter = 2;
+    while (usedSkus.has(sku)) {
+      sku = `${skuBase}-${counter}`;
+      counter += 1;
+    }
+
+    setDraft((current) => ({
+      ...current,
+      variants: [
+        ...current.variants,
+        {
+          id: null,
+          optionName: 'Culoare',
+          optionValue: '',
+          optionValues: {},
+          legacyOptionId: '',
+          legacyOptionValueId: '',
+          combinationId: '',
+          model: '',
+          sku,
+          quantity: 0,
+          variantPrice: current.price,
+          priceDelta: 0,
+          pricePrefix: '+',
+          imageUrl: '',
+          isActive: current.status === 'active',
+          sortOrder: current.variants.length,
+        },
+      ],
+    }));
+    setActiveVariantDetailsIndex(variantIndex);
+  }
+
+  function updateDetailedVariantOption(
+    index: number,
+    patch: Partial<Pick<ProductVariant, 'optionName' | 'optionValue'>>,
+  ) {
+    setDraft((current) => {
+      const usedSkus = new Set(
+        current.variants
+          .filter((_, variantIndex) => variantIndex !== index)
+          .map((variant) => variant.sku.trim().toUpperCase())
+          .filter(Boolean),
+      );
+
+      return {
+        ...current,
+        variants: current.variants.map((variant, variantIndex) => {
+        if (variantIndex !== index) return variant;
+
+        const optionName = patch.optionName ?? variant.optionName;
+        const optionValue = patch.optionValue ?? variant.optionValue;
+        const optionValues = optionName.trim() && optionValue.trim()
+          ? { [optionName.trim()]: optionValue.trim() }
+          : {};
+        let sku = variant.sku;
+        if (variant.id === null) {
+          const parentSku = skuSegment(current.sku) || 'MGL';
+          const valueSuffix = skuSegment(optionValue) || `VAR-${index + 1}`;
+          const skuBase = `${parentSku}-${valueSuffix}`;
+          sku = skuBase;
+          let counter = 2;
+          while (usedSkus.has(sku)) {
+            sku = `${skuBase}-${counter}`;
+            counter += 1;
+          }
+        }
+
+        return {
+          ...variant,
+          optionName,
+          optionValue,
+          optionValues,
+          combinationId: variantCombinationKey(optionValues).slice(0, 255),
+          sku,
+        };
+        }),
+      };
+    });
+  }
+
+  function removeDetailedProductVariant(index: number) {
+    removeVariant(index);
+    setActiveVariantDetailsIndex(null);
+  }
+
+  function addVariantOptionGroup() {
+    setDraft((current) => ({
+      ...current,
+      variantOptionGroups: [
+        ...current.variantOptionGroups,
+        {
+          name: current.variantOptionGroups.length === 0 ? 'Culoare' : '',
+          valuesText: '',
+        },
+      ],
+    }));
+  }
+
+  function updateVariantOptionGroup(index: number, patch: Partial<VariantOptionGroup>) {
+    setDraft((current) => ({
+      ...current,
+      variantOptionGroups: current.variantOptionGroups.map((group, groupIndex) =>
+        groupIndex === index ? { ...group, ...patch } : group,
+      ),
+    }));
+  }
+
+  function removeVariantOptionGroup(index: number) {
+    setDraft((current) => ({
+      ...current,
+      variantOptionGroups: current.variantOptionGroups.filter((_, groupIndex) => groupIndex !== index),
+    }));
+  }
+
+  function generateVariantMatrix() {
+    const groups = draft.variantOptionGroups
+      .map((group) => ({
+        name: group.name.trim(),
+        values: parseVariantGroupValues(group.valuesText),
+      }))
+      .filter((group) => group.name || group.values.length > 0);
+
+    if (groups.length === 0 || groups.some((group) => !group.name || group.values.length === 0)) {
+      setErrorMessage('Completeaza numele si cel putin o valoare pentru fiecare optiune.');
+      return;
+    }
+
+    const normalizedNames = groups.map((group) => group.name.toLowerCase());
+    if (new Set(normalizedNames).size !== normalizedNames.length) {
+      setErrorMessage('Fiecare grup de optiuni trebuie sa aiba un nume diferit.');
+      return;
+    }
+
+    const combinations = groups.reduce<Array<Record<string, string>>>(
+      (currentCombinations, group) =>
+        currentCombinations.flatMap((combination) =>
+          group.values.map((value) => ({ ...combination, [group.name]: value })),
+        ),
+      [{}],
+    );
+
+    if (combinations.length > 250) {
+      setErrorMessage(`Sunt ${combinations.length} combinatii. Limita este de 250 pentru un produs.`);
+      return;
+    }
+
+    setErrorMessage('');
+    setDraft((current) => {
+      const existingByCombination = new Map(
+        current.variants.map((variant) => [variantCombinationKey(variant.optionValues), variant]),
+      );
+      const usedSkus = new Set(
+        current.variants.map((variant) => variant.sku.trim().toUpperCase()).filter(Boolean),
+      );
+      const baseSku = skuSegment(current.sku) || 'MGL';
+
+      const variants = combinations.map((optionValues, index) => {
+        const key = variantCombinationKey(optionValues);
+        const existing = existingByCombination.get(key);
+        if (existing) {
+          return {
+            ...existing,
+            optionName: Object.keys(optionValues)[0],
+            optionValue: Object.values(optionValues)[0],
+            optionValues,
+            combinationId: key.slice(0, 255),
+            sortOrder: index,
+          };
+        }
+
+        const suffix = Object.values(optionValues).map(skuSegment).filter(Boolean).join('-') || String(index + 1);
+        const skuBase = `${baseSku}-${suffix}`;
+        let sku = skuBase;
+        let counter = 2;
+        while (usedSkus.has(sku)) {
+          sku = `${skuBase}-${counter}`;
+          counter += 1;
+        }
+        usedSkus.add(sku);
+
+        return {
+          id: null,
+          optionName: Object.keys(optionValues)[0],
+          optionValue: Object.values(optionValues)[0],
+          optionValues,
+          legacyOptionId: '',
+          legacyOptionValueId: '',
+          combinationId: key.slice(0, 255),
+          model: '',
+          sku,
+          quantity: 0,
+          variantPrice: current.price,
+          priceDelta: 0,
+          pricePrefix: '+' as const,
+          imageUrl: '',
+          isActive: true,
+          sortOrder: index,
+        };
+      });
+
+      const colorGroup = groups.find((group) => group.name.toLowerCase() === colorAttributeKeyNormalized);
+      const existingColorIndex = current.attributes.findIndex(
+        (attribute) => attribute.key.trim().toLowerCase() === colorAttributeKeyNormalized,
+      );
+      let attributes = current.attributes;
+      if (colorGroup) {
+        const colorValue = colorGroup.values.join(', ');
+        attributes =
+          existingColorIndex >= 0
+            ? current.attributes.map((attribute, index) =>
+                index === existingColorIndex
+                  ? { ...attribute, key: colorAttributeKey, value: colorValue }
+                  : attribute,
+              )
+            : [
+                ...current.attributes,
+                { key: colorAttributeKey, value: colorValue, sortOrder: current.attributes.length },
+              ];
+      }
+
+      return { ...current, attributes, variants };
+    });
   }
 
   function updateVariant(index: number, patch: Partial<ProductVariant>) {
@@ -1367,9 +1812,8 @@ export default function AdminPanel() {
     });
 
     if (nextCategoryId) {
-      setCategoryCreatorMode('subcategory');
       setNewCategoryParentId(String(nextCategoryId));
-    } else if (categoryCreatorMode === 'subcategory') {
+    } else {
       setNewCategoryParentId('');
     }
   }
@@ -1384,63 +1828,82 @@ export default function AdminPanel() {
   }
 
   async function handleCreateCategory() {
-    const trimmedName = newCategoryName.trim();
-    if (!trimmedName) {
-      setErrorMessage('Introdu numele categoriei noi.');
-      return;
-    }
+    const trimmedCategoryName = newCategoryName.trim();
+    const trimmedSubcategoryName = newSubcategoryName.trim();
 
-    const parentId =
-      categoryCreatorMode === 'subcategory'
-        ? Number(newCategoryParentId || editorCategorySelection.categoryId || 0) || null
-        : null;
-
-    if (categoryCreatorMode === 'subcategory' && !parentId) {
-      setErrorMessage('Selecteaza categoria parinte pentru subcategorie.');
+    if (!trimmedCategoryName && !trimmedSubcategoryName) {
+      setErrorMessage('Introdu categoria sau subcategoria pe care vrei sa o creezi.');
       return;
     }
 
     setErrorMessage('');
+    setMessage('');
     setIsCreatingCategory(true);
 
     try {
-      const response = await fetch(`${backendUrl}/admin/categories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: trimmedName,
-          slug: newCategorySlug.trim(),
-          parentId,
-        }),
-      });
+      async function createAdminCategory(name: string, parentId: number | null) {
+        const response = await fetch(`${backendUrl}/admin/categories`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            name,
+            parentId,
+          }),
+        });
 
-      const data = await response.json().catch(() => null);
-      if (!response.ok) {
-        setErrorMessage(data?.message || 'Categoria nu a putut fi creata.');
-        return;
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(data?.message || 'Categoria nu a putut fi creata.');
+        }
+
+        return data as Category;
       }
 
-      const createdCategory = data as Category;
-      setCategories((current) => [...current, createdCategory]);
+      let createdCategory: Category | null = null;
+      let createdSubcategory: Category | null = null;
 
-      if (createdCategory.parentId) {
+      if (trimmedCategoryName) {
+        createdCategory = await createAdminCategory(trimmedCategoryName, null);
+      }
+
+      if (trimmedSubcategoryName) {
+        const fallbackParentId = Number(newCategoryParentId || editorCategorySelection.categoryId || 0) || null;
+        const subcategoryParentId = createdCategory?.id ?? fallbackParentId;
+
+        if (!subcategoryParentId) {
+          setErrorMessage('Selecteaza mai intai categoria parinte sau completeaza campul Categorie.');
+          return;
+        }
+
+        createdSubcategory = await createAdminCategory(trimmedSubcategoryName, subcategoryParentId);
+      }
+
+      const createdEntries = [createdCategory, createdSubcategory].filter(Boolean) as Category[];
+      if (createdEntries.length > 0) {
+        setCategories((current) => [...current, ...createdEntries]);
+      }
+
+      if (createdSubcategory) {
         setDraft((current) => ({
           ...current,
-          categoryIds: buildProductCategoryIds(createdCategory.parentId, createdCategory.id, current.categoryIds),
+          categoryIds: buildProductCategoryIds(createdSubcategory.parentId, createdSubcategory.id, current.categoryIds),
         }));
-      } else {
+        setNewCategoryParentId(String(createdSubcategory.parentId));
+        setIsCategoryCreatorOpen(false);
+        setMessage(createdCategory ? 'Categoria si subcategoria au fost adaugate.' : 'Subcategoria a fost adaugata.');
+      } else if (createdCategory) {
         setDraft((current) => ({
           ...current,
           categoryIds: buildProductCategoryIds(createdCategory.id, null, current.categoryIds),
         }));
+        setNewCategoryParentId(String(createdCategory.id));
+        setIsCategoryCreatorOpen(true);
+        setMessage('Categoria a fost adaugata. Poti adauga acum o subcategorie pentru ea.');
       }
 
       setNewCategoryName('');
-      setNewCategorySlug('');
-      setNewCategoryParentId(createdCategory.parentId ? String(createdCategory.parentId) : '');
-      setIsCategoryCreatorOpen(false);
-      setMessage(createdCategory.parentId ? 'Subcategoria a fost adaugata.' : 'Categoria a fost adaugata.');
+      setNewSubcategoryName('');
     } catch {
       setErrorMessage('Categoria nu a putut fi creata.');
     } finally {
@@ -1448,8 +1911,81 @@ export default function AdminPanel() {
     }
   }
 
+  function requestDeleteCategory() {
+    const categoryIdToDelete = editorCategorySelection.subcategoryId ?? editorCategorySelection.categoryId;
+    if (!categoryIdToDelete) {
+      setErrorMessage('Selecteaza mai intai categoria sau subcategoria pe care vrei sa o stergi.');
+      return;
+    }
+
+    const categoryToDelete = categoryMap.get(categoryIdToDelete);
+    if (!categoryToDelete) {
+      setErrorMessage('Categoria selectata nu a fost gasita.');
+      return;
+    }
+
+    setCategoryDeleteCandidate(categoryToDelete);
+  }
+
+  function closeCategoryDeleteConfirm() {
+    if (isDeletingCategory) return;
+    setCategoryDeleteCandidate(null);
+  }
+
+  async function handleDeleteCategory() {
+    const categoryToDelete = categoryDeleteCandidate;
+    if (!categoryToDelete) {
+      setErrorMessage('Categoria selectata nu a fost gasita.');
+      return;
+    }
+
+    const categoryIdToDelete = categoryToDelete.id;
+
+    setErrorMessage('');
+    setMessage('');
+    setIsDeletingCategory(true);
+
+    try {
+      const response = await fetch(`${backendUrl}/admin/categories/${categoryIdToDelete}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setErrorMessage(data?.message || 'Categoria nu a putut fi stearsa.');
+        return;
+      }
+
+      setCategories((current) => current.filter((category) => category.id !== categoryIdToDelete));
+      setDraft((current) => {
+        const remainingIds = current.categoryIds.filter((id) => id !== categoryIdToDelete);
+
+        if (!categoryToDelete.parentId) {
+          return {
+            ...current,
+            categoryIds: remainingIds,
+          };
+        }
+
+        const nextCategoryIds = [categoryToDelete.parentId, ...remainingIds.filter((id) => id !== categoryToDelete.parentId)];
+        return {
+          ...current,
+          categoryIds: nextCategoryIds,
+        };
+      });
+
+      setMessage(categoryToDelete.parentId ? 'Subcategoria a fost stearsa.' : 'Categoria a fost stearsa.');
+      setCategoryDeleteCandidate(null);
+    } catch {
+      setErrorMessage('Categoria nu a putut fi stearsa.');
+    } finally {
+      setIsDeletingCategory(false);
+    }
+  }
+
   function openImageUploadModal(index: number | null) {
-    setImageUploadTarget({ index });
+    setImageUploadTarget({ kind: 'gallery', index });
     setImageUploadFile(null);
     setImageUploadPreview(index !== null ? draft.images[index]?.imageUrl || '' : '');
     setImageUploadAltText(index !== null ? draft.images[index]?.altText || '' : '');
@@ -1457,9 +1993,21 @@ export default function AdminPanel() {
     setIsImageUploadModalOpen(true);
   }
 
+  function openVariantImageUploadModal(index: number) {
+    const variant = draft.variants[index];
+    setImageUploadTarget({ kind: 'variant', index });
+    setImageUploadFile(null);
+    setImageUploadPreview(variant?.imageUrl || '');
+    setImageUploadAltText(
+      Object.values(variant?.optionValues || {}).join(' - ') || draft.name || 'Varianta produs',
+    );
+    setImageUploadError('');
+    setIsImageUploadModalOpen(true);
+  }
+
   function closeImageUploadModal() {
     setIsImageUploadModalOpen(false);
-    setImageUploadTarget({ index: null });
+    setImageUploadTarget({ kind: 'gallery', index: null });
     setImageUploadFile(null);
     setImageUploadPreview('');
     setImageUploadAltText('');
@@ -1486,9 +2034,33 @@ export default function AdminPanel() {
     setImageUploadError('');
 
     if (!nextFile) {
-      setImageUploadPreview(imageUploadTarget.index !== null ? draft.images[imageUploadTarget.index]?.imageUrl || '' : '');
+      setImageUploadPreview(
+        imageUploadTarget.kind === 'variant' && imageUploadTarget.index !== null
+          ? draft.variants[imageUploadTarget.index]?.imageUrl || ''
+          : imageUploadTarget.index !== null
+            ? draft.images[imageUploadTarget.index]?.imageUrl || ''
+            : '',
+      );
       return;
     }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImageUploadPreview(typeof reader.result === 'string' ? reader.result : '');
+    };
+    reader.readAsDataURL(nextFile);
+  }
+
+  function handleImageDrop(event: DragEvent<HTMLButtonElement>, index: number | null) {
+    event.preventDefault();
+    const nextFile = event.dataTransfer.files?.[0] ?? null;
+    if (!nextFile) return;
+
+    setImageUploadTarget({ kind: 'gallery', index });
+    setImageUploadFile(nextFile);
+    setImageUploadAltText(index !== null ? draft.images[index]?.altText || '' : '');
+    setImageUploadError('');
+    setIsImageUploadModalOpen(true);
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -1532,7 +2104,11 @@ export default function AdminPanel() {
         return;
       }
 
-      if (imageUploadTarget.index === null) {
+      if (imageUploadTarget.kind === 'variant' && imageUploadTarget.index !== null) {
+        updateVariant(imageUploadTarget.index, {
+          imageUrl: uploadedImageUrl,
+        });
+      } else if (imageUploadTarget.index === null) {
         setDraft((current) => {
           const hasOnlyPlaceholderImage =
             current.images.length === 1 &&
@@ -1579,6 +2155,1103 @@ export default function AdminPanel() {
     } finally {
       setIsUploadingImage(false);
     }
+  }
+
+  function renderProductEditorDesign() {
+    const primaryImageIndex = draft.images.findIndex((image) => image.isPrimary && image.imageUrl);
+    const fallbackImageIndex = draft.images.findIndex((image) => image.imageUrl);
+    const previewImageIndex = primaryImageIndex >= 0 ? primaryImageIndex : fallbackImageIndex;
+    const previewImage =
+      (previewImageIndex >= 0 ? draft.images[previewImageIndex]?.imageUrl : '') || draft.imageUrl;
+    const selectedCategory = editorCategorySelection.categoryId
+      ? categoryMap.get(editorCategorySelection.categoryId)
+      : null;
+    const selectedSubcategory = editorCategorySelection.subcategoryId
+      ? categoryMap.get(editorCategorySelection.subcategoryId)
+      : null;
+    const statusLabel =
+      draft.status === 'active' ? 'Activ' : draft.status === 'archived' ? 'Arhivat' : 'Draft';
+    const isActive = draft.status === 'active';
+    const activeDetailedVariant =
+      activeVariantDetailsIndex !== null ? draft.variants[activeVariantDetailsIndex] ?? null : null;
+
+    return (
+      <div className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f7fb] font-[family-name:var(--font-geist-sans)] text-[#17213a]">
+        <form
+          key={productEditorKey}
+          onSubmit={handleSave}
+          className={`flex min-h-[100dvh] w-full max-w-none flex-col gap-3 px-3 pb-3 pt-0 ${
+            isProductPreviewVisible ? '' : 'product-editor-expanded'
+          }`}
+        >
+          <header className="flex min-h-[86px] flex-wrap items-center justify-between gap-4 rounded-[16px] border border-[#e3e8f0] bg-white px-5 py-3 shadow-[0_3px_12px_rgba(31,42,68,0.08)]">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={closeEditor}
+                aria-label="Inapoi la lista de produse"
+                title="Inapoi la lista de produse"
+                className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-[11px] bg-[linear-gradient(145deg,#9149ee,#6f2ee8)] text-white shadow-[0_7px_16px_rgba(124,58,237,0.30)] transition hover:-translate-y-0.5 hover:shadow-[0_9px_20px_rgba(124,58,237,0.38)]"
+              >
+                <EditorGlyph name="tag" className="h-6 w-6" />
+              </button>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#7c3aed]">Editor produs</p>
+                <h1 className="mt-0.5 text-[20px] font-bold leading-tight text-[#17213a]">
+                  {draft.id ? draft.name || `Produs #${draft.id}` : 'Produs nou'}
+                </h1>
+                <p className="mt-0.5 text-[12px] text-[#65728a]">
+                  Gestioneaza numele, pretul, categoriile si toate datele tehnice.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span
+                className={`inline-flex h-9 items-center gap-2 rounded-full border px-4 text-[12px] font-semibold ${
+                  isActive
+                    ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                    : 'border-[#dfead9] bg-[#f3faef] text-[#30843b]'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-[#37a34a]'}`} />
+                {statusLabel}
+              </span>
+              <button
+                type="submit"
+                disabled={isSaving}
+                title={draft.id ? 'Salveaza modificarile' : 'Creeaza produsul'}
+                className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border border-[#e4e8ef] bg-white px-4 text-[12px] font-semibold text-[#536078] shadow-[0_2px_7px_rgba(30,41,59,0.04)] transition hover:border-violet-200 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <EditorGlyph name="check" className="h-4 w-4" />
+                {isSaving ? 'Se salveaza...' : 'Salvare automata'}
+              </button>
+            </div>
+          </header>
+
+          {message ? <Alert tone="success">{message}</Alert> : null}
+          {errorMessage ? <Alert tone="danger">{errorMessage}</Alert> : null}
+
+          <div
+            className={`grid flex-1 items-stretch gap-3 transition-[grid-template-columns] duration-300 ${
+              isProductPreviewVisible ? 'xl:grid-cols-[minmax(0,1fr)_336px]' : 'grid-cols-1'
+            }`}
+          >
+            <div className="flex min-h-full flex-col gap-3">
+              <ProductEditorCard>
+                <ProductEditorSectionHeader
+                  icon="details"
+                  title="Detalii de baza"
+                  description="Datele principale pe care clientul le vede in catalog."
+                  action={
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={addDetailedProductVariant}
+                        className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-[8px] bg-violet-600 px-4 text-[11px] font-semibold text-white shadow-[0_5px_14px_rgba(124,58,237,0.2)] transition hover:bg-violet-700"
+                      >
+                        <span className="text-base font-light leading-none">+</span>
+                        Adauga o noua varianta a produsului
+                      </button>
+                      {!isProductPreviewVisible ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsProductPreviewVisible(true)}
+                        aria-expanded="false"
+                        className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-[8px] border border-violet-200 bg-white px-4 text-[11px] font-semibold text-violet-700 transition hover:bg-violet-50"
+                      >
+                        <EditorGlyph name="eye" className="h-4 w-4" />
+                        Arata preview
+                      </button>
+                      ) : null}
+                    </div>
+                  }
+                />
+
+                <div className="mt-3 grid gap-x-5 gap-y-[5px] md:grid-cols-2">
+                  <ProductEditorField label="Nume produs">
+                    <ProductEditorInput
+                      value={draft.name}
+                      onChange={(event) => updateDraft('name', event.target.value)}
+                      placeholder="Ex: Margele de nisip irizate 4 mm"
+                      required
+                    />
+                  </ProductEditorField>
+
+                  <ProductEditorField
+                    label={
+                      <FieldLabelWithHint
+                        label="Slug"
+                        hint="Link produs pentru URL si pentru SEO. Se genereaza automat din numele produsului daca ramane gol."
+                      />
+                    }
+                  >
+                    <ProductEditorInput
+                      value={draft.slug}
+                      onChange={(event) => updateDraft('slug', event.target.value)}
+                      placeholder="Ex: margele-de-nisip-irizate-4mm"
+                    />
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Pret">
+                    <ProductEditorInput
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={draft.price}
+                      onChange={(event) => updateDraft('price', event.target.value)}
+                      required
+                    />
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Pret vechi">
+                    <ProductEditorInput
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={draft.compareAtPrice}
+                      onChange={(event) => updateDraft('compareAtPrice', event.target.value)}
+                      placeholder="Ex: 9.90"
+                    />
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Moneda">
+                    <ProductEditorSelect
+                      value={draft.currency}
+                      disabled
+                      aria-label="Moneda produsului"
+                      className="cursor-not-allowed bg-[#f7f9fc] text-[#536078]"
+                    >
+                      <option value="RON">RON</option>
+                    </ProductEditorSelect>
+                  </ProductEditorField>
+
+                  <ProductEditorField
+                    label={
+                      <FieldLabelWithHint
+                        label="SKU"
+                        hint="Se genereaza automat un cod nou unic pentru fiecare produs adaugat."
+                      />
+                    }
+                  >
+                    <ProductEditorInput
+                      value={draft.sku}
+                      disabled={!draft.id}
+                      onChange={(event) => updateDraft('sku', event.target.value)}
+                      className={!draft.id ? 'cursor-not-allowed bg-[#f1f4f8] text-[#6f7d95]' : ''}
+                    />
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Stoc">
+                    <ProductEditorInput
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={draft.stockQuantity}
+                      onChange={(event) => updateDraft('stockQuantity', event.target.value)}
+                    />
+                  </ProductEditorField>
+
+                  <ProductEditorField
+                    label={
+                      <FieldLabelWithHint
+                        label="Status"
+                        hint="Selecteaza activ pentru ca produsul sa fie vizibil pe website."
+                      />
+                    }
+                  >
+                    <ProductEditorSelect
+                      value={draft.status}
+                      onChange={(event) => updateDraft('status', event.target.value as ProductDraft['status'])}
+                    >
+                      <option value="draft">ciorna</option>
+                      <option value="active">activ</option>
+                      <option value="archived">arhivat</option>
+                    </ProductEditorSelect>
+                  </ProductEditorField>
+
+                  <ProductEditorField
+                    label={
+                      <FieldLabelWithHint
+                        label="Imagine principala"
+                        hint="Imaginea principala se completeaza din galerie si poate fi stocata local sau in Cloudflare."
+                      />
+                    }
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openImageUploadModal(previewImageIndex >= 0 ? previewImageIndex : null)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => handleImageDrop(event, previewImageIndex >= 0 ? previewImageIndex : null)}
+                      className="product-editor-image-drop flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-[9px] border border-dashed border-[#cbd4e2] bg-[#fbfcfe] px-4 py-2 text-left transition hover:border-violet-300 hover:bg-violet-50/30"
+                    >
+                      {previewImage ? (
+                        <img src={previewImage} alt="" className="h-8 w-10 rounded-md object-cover" />
+                      ) : (
+                        <EditorGlyph name="image" className="h-6 w-6 shrink-0 text-[#64748b]" />
+                      )}
+                      <span className="text-[12px] leading-4 text-[#506079]">
+                        <strong className="block font-semibold">
+                          {previewImage ? 'Inlocuieste imaginea principala' : 'Alege o imagine sau trage aici'}
+                        </strong>
+                        <span>JPG, PNG, WEBP · max. 10MB</span>
+                      </span>
+                    </button>
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Material">
+                    <ProductEditorInput
+                      value={draft.material}
+                      onChange={(event) => updateDraft('material', event.target.value)}
+                      placeholder="Ex: Sticla, acril, metal sau piatra semipretioasa"
+                    />
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Culoare">
+                    <ProductEditorInput
+                      value={getColorAttributeValue()}
+                      onChange={(event) => updateColorAttribute(event.target.value)}
+                      placeholder="Ex: Rosu, Auriu, Transparent, Multicolor"
+                    />
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Descriere scurta" className="md:col-span-2">
+                    <div className="relative">
+                      <ProductEditorTextarea
+                        value={draft.shortDescription}
+                        onChange={(event) => updateDraft('shortDescription', event.target.value)}
+                        placeholder="O scurta descriere a produsului..."
+                        maxLength={255}
+                        className="h-12 resize-none pr-16"
+                      />
+                      <span className="absolute bottom-2 right-3 text-[10px] text-[#71809a]">
+                        {draft.shortDescription.length} / 255
+                      </span>
+                    </div>
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Descriere completa" className="md:col-span-2">
+                    <div className="relative">
+                      <ProductEditorTextarea
+                        value={draft.description}
+                        onChange={(event) => updateDraft('description', event.target.value)}
+                        placeholder="Descriere completa a produsului..."
+                        maxLength={5000}
+                        className="h-12 resize-none pr-20"
+                      />
+                      <span className="absolute bottom-2 right-3 text-[10px] text-[#71809a]">
+                        {draft.description.length} / 5000
+                      </span>
+                    </div>
+                  </ProductEditorField>
+                </div>
+              </ProductEditorCard>
+
+              {activeDetailedVariant && activeVariantDetailsIndex !== null ? (
+                <ProductEditorCard>
+                  <ProductEditorSectionHeader
+                    icon="details"
+                    title={`Detalii de baza - Varianta ${activeVariantDetailsIndex + 1}`}
+                    description="Aceasta varianta mosteneste produsul principal, dar are cod, pret, stoc, stare si imagine proprii."
+                    action={
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveVariantDetailsIndex(null)}
+                          className="inline-flex h-8 cursor-pointer items-center rounded-[8px] border border-[#d9e0ea] bg-white px-4 text-[11px] font-semibold text-[#59677e]"
+                        >
+                          Ascunde
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeDetailedProductVariant(activeVariantDetailsIndex)}
+                          className="inline-flex h-8 cursor-pointer items-center rounded-[8px] border border-rose-200 bg-white px-4 text-[11px] font-semibold text-rose-500 transition hover:bg-rose-50"
+                        >
+                          Sterge varianta
+                        </button>
+                      </div>
+                    }
+                  />
+
+                  <div className="mt-3 rounded-[10px] border border-violet-100 bg-violet-50/45 px-4 py-3 text-[11px] text-[#59677e]">
+                    Numele, descrierile, materialul, categoriile si galeria produsului principal sunt
+                    mostenite automat. Completeaza mai jos doar datele care identifica si vand aceasta
+                    varianta.
+                  </div>
+
+                  <div className="mt-3 grid gap-x-5 gap-y-[5px] md:grid-cols-2">
+                    <ProductEditorField label="Nume produs mostenit">
+                      <ProductEditorInput
+                        value={
+                          `${draft.name || 'Produs nou'}${
+                            activeDetailedVariant.optionValue
+                              ? ` - ${activeDetailedVariant.optionValue}`
+                              : ''
+                          }`
+                        }
+                        disabled
+                        className="cursor-not-allowed bg-[#f1f4f8] text-[#6f7d95]"
+                      />
+                    </ProductEditorField>
+
+                    <ProductEditorField label="Tip varianta">
+                      <ProductEditorSelect
+                        value={activeDetailedVariant.optionName}
+                        onChange={(event) =>
+                          updateDetailedVariantOption(activeVariantDetailsIndex, {
+                            optionName: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="Culoare">Culoare</option>
+                        <option value="Marime">Marime</option>
+                        <option value="Ambalaj">Ambalaj</option>
+                        <option value="Model">Model</option>
+                      </ProductEditorSelect>
+                    </ProductEditorField>
+
+                    <ProductEditorField label="Valoare varianta">
+                      <ProductEditorInput
+                        value={activeDetailedVariant.optionValue}
+                        onChange={(event) =>
+                          updateDetailedVariantOption(activeVariantDetailsIndex, {
+                            optionValue: event.target.value,
+                          })
+                        }
+                        placeholder={
+                          activeDetailedVariant.optionName === 'Culoare'
+                            ? 'Ex: Rosu'
+                            : activeDetailedVariant.optionName === 'Marime'
+                              ? 'Ex: 4 mm'
+                              : activeDetailedVariant.optionName === 'Ambalaj'
+                                ? 'Ex: 100 buc'
+                                : 'Ex: Varianta premium'
+                        }
+                        required
+                      />
+                    </ProductEditorField>
+
+                    <ProductEditorField
+                      label={
+                        <FieldLabelWithHint
+                          label="SKU varianta"
+                          hint="Este generat automat din SKU-ul produsului principal si ramane unic."
+                        />
+                      }
+                    >
+                      <ProductEditorInput
+                        value={activeDetailedVariant.sku}
+                        disabled
+                        className="cursor-not-allowed bg-[#f1f4f8] text-[#6f7d95]"
+                      />
+                    </ProductEditorField>
+
+                    <ProductEditorField label="Pret varianta">
+                      <ProductEditorInput
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={activeDetailedVariant.variantPrice}
+                        onChange={(event) =>
+                          updateVariant(activeVariantDetailsIndex, {
+                            variantPrice: event.target.value,
+                          })
+                        }
+                        required
+                      />
+                    </ProductEditorField>
+
+                    <ProductEditorField label="Moneda">
+                      <ProductEditorSelect
+                        value={draft.currency}
+                        disabled
+                        className="cursor-not-allowed bg-[#f1f4f8] text-[#6f7d95]"
+                      >
+                        <option value="RON">RON</option>
+                      </ProductEditorSelect>
+                    </ProductEditorField>
+
+                    <ProductEditorField label="Stoc varianta">
+                      <ProductEditorInput
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={activeDetailedVariant.quantity}
+                        onChange={(event) =>
+                          updateVariant(activeVariantDetailsIndex, {
+                            quantity: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </ProductEditorField>
+
+                    <ProductEditorField
+                      label={
+                        <FieldLabelWithHint
+                          label="Status varianta"
+                          hint="Varianta activa poate fi selectata si cumparata pe website daca are stoc."
+                        />
+                      }
+                    >
+                      <ProductEditorSelect
+                        value={activeDetailedVariant.isActive ? 'active' : 'inactive'}
+                        onChange={(event) =>
+                          updateVariant(activeVariantDetailsIndex, {
+                            isActive: event.target.value === 'active',
+                          })
+                        }
+                      >
+                        <option value="active">activa</option>
+                        <option value="inactive">inactiva</option>
+                      </ProductEditorSelect>
+                    </ProductEditorField>
+
+                    <ProductEditorField label="Imagine varianta">
+                      <button
+                        type="button"
+                        onClick={() => openVariantImageUploadModal(activeVariantDetailsIndex)}
+                        className="product-editor-image-drop flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-[9px] border border-dashed border-violet-300 bg-violet-50/35 px-4 py-2 text-left transition hover:bg-violet-50"
+                      >
+                        {activeDetailedVariant.imageUrl ? (
+                          <img
+                            src={activeDetailedVariant.imageUrl}
+                            alt=""
+                            className="h-8 w-10 rounded-md object-cover"
+                          />
+                        ) : (
+                          <EditorGlyph name="image" className="h-6 w-6 shrink-0 text-violet-600" />
+                        )}
+                        <span className="text-[12px] leading-4 text-[#506079]">
+                          <strong className="block font-semibold">
+                            {activeDetailedVariant.imageUrl
+                              ? 'Inlocuieste imaginea variantei'
+                              : 'Adauga imagine variantei'}
+                          </strong>
+                          <span>JPG, PNG, WEBP - max. 10MB</span>
+                        </span>
+                      </button>
+                    </ProductEditorField>
+
+                    <ProductEditorField label="Material mostenit">
+                      <ProductEditorInput
+                        value={draft.material}
+                        disabled
+                        placeholder="Se foloseste materialul produsului principal"
+                        className="cursor-not-allowed bg-[#f1f4f8] text-[#6f7d95]"
+                      />
+                    </ProductEditorField>
+                  </div>
+                </ProductEditorCard>
+              ) : null}
+
+              <ProductEditorCard>
+                <ProductEditorSectionHeader
+                  icon="categories"
+                  title="Categorii si subcategorii"
+                  description="Alege categoria principala si, optional, o subcategorie pentru produs."
+                  action={
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCategoryCreatorOpen((current) => !current);
+                          setNewCategoryParentId(
+                            editorCategorySelection.categoryId
+                              ? String(editorCategorySelection.categoryId)
+                              : '',
+                          );
+                        }}
+                        className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-[8px] border border-violet-300 bg-white px-4 text-[12px] font-semibold text-violet-700 transition hover:bg-violet-50"
+                      >
+                        <span className="text-lg font-light leading-none">+</span>
+                        {isCategoryCreatorOpen
+                          ? 'Ascunde formularul'
+                          : editorCategorySelection.categoryId
+                            ? 'Adauga subcategorie'
+                            : 'Adauga categorie'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={requestDeleteCategory}
+                        disabled={
+                          isDeletingCategory ||
+                          (!editorCategorySelection.categoryId && !editorCategorySelection.subcategoryId)
+                        }
+                        className="inline-flex h-8 cursor-pointer items-center rounded-[8px] border border-rose-200 bg-white px-5 text-[12px] font-semibold text-rose-500 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        {isDeletingCategory ? 'Se sterge...' : 'Sterge categoria'}
+                      </button>
+                    </div>
+                  }
+                />
+
+                <div className="mt-0 grid gap-3 md:grid-cols-2">
+                  <ProductEditorField label="Categorie">
+                    <ProductEditorSelect
+                      value={editorCategorySelection.categoryId ?? ''}
+                      onChange={(event) => handleEditorCategoryChange(event.target.value)}
+                    >
+                      <option value="">Selecteaza categoria</option>
+                      {allTopLevelCategories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </ProductEditorSelect>
+                  </ProductEditorField>
+
+                  <ProductEditorField label="Subcategorie">
+                    <ProductEditorSelect
+                      value={editorCategorySelection.subcategoryId ?? ''}
+                      onChange={(event) => handleEditorSubcategoryChange(event.target.value)}
+                      disabled={!editorCategorySelection.categoryId || editorSubcategories.length === 0}
+                    >
+                      <option value="">
+                        {!editorCategorySelection.categoryId
+                          ? 'Selecteaza mai intai categoria'
+                          : editorSubcategories.length === 0
+                            ? 'Nu exista subcategorii'
+                            : 'Selecteaza subcategoria'}
+                      </option>
+                      {editorSubcategories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </ProductEditorSelect>
+                  </ProductEditorField>
+
+                  {isCategoryCreatorOpen ? (
+                    <div className="grid gap-4 rounded-[12px] border border-dashed border-violet-200 bg-violet-50/35 p-4 md:col-span-2 md:grid-cols-[1fr_1fr_auto]">
+                      <ProductEditorField label="Categorie">
+                        <ProductEditorInput
+                          value={newCategoryName}
+                          onChange={(event) => setNewCategoryName(event.target.value)}
+                          placeholder="Ex: Margele de nisip"
+                        />
+                      </ProductEditorField>
+                      <ProductEditorField label="Subcategorie">
+                        <ProductEditorInput
+                          value={newSubcategoryName}
+                          onChange={(event) => setNewSubcategoryName(event.target.value)}
+                          placeholder={
+                            newCategoryParentId || newCategoryName
+                              ? 'Ex: Semimate 2mm'
+                              : 'Selecteaza categoria parinte'
+                          }
+                        />
+                      </ProductEditorField>
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={handleCreateCategory}
+                          disabled={isCreatingCategory}
+                          className="h-8 cursor-pointer rounded-[8px] bg-violet-600 px-5 text-[12px] font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isCreatingCategory
+                            ? 'Se adauga...'
+                            : newCategoryName && newSubcategoryName
+                              ? 'Creeaza ambele'
+                              : newSubcategoryName
+                                ? 'Creeaza subcategoria'
+                                : 'Creeaza categoria'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </ProductEditorCard>
+
+              <ProductEditorCard>
+                <ProductEditorSectionHeader
+                  icon="gallery"
+                  title="Galerie"
+                  description="Mai multe imagini, plus setarea imaginii principale."
+                  action={
+                    <button
+                      type="button"
+                      onClick={addImage}
+                      className="inline-flex h-8 cursor-pointer items-center rounded-[8px] border border-violet-300 bg-white px-5 text-[12px] font-semibold text-violet-700 transition hover:bg-violet-50"
+                    >
+                      Adauga imagine
+                    </button>
+                  }
+                />
+
+                <div className="mt-3 space-y-4">
+                  {draft.images.map((image, index) => (
+                    <div
+                      key={`product-editor-image-${index}`}
+                      className="grid gap-5 md:grid-cols-[355px_minmax(0,1fr)]"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openImageUploadModal(image.imageUrl ? index : null)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => handleImageDrop(event, image.imageUrl ? index : null)}
+                        className="product-editor-gallery-drop relative flex h-[140px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[10px] border border-dashed border-[#cbd4e2] bg-[#fbfcfe] p-2 text-center transition hover:border-violet-300 hover:bg-violet-50/30"
+                      >
+                        {image.imageUrl ? (
+                          <>
+                            <img
+                              src={image.imageUrl}
+                              alt={image.altText || `Imagine produs ${index + 1}`}
+                              className="absolute inset-0 h-full w-full object-cover"
+                            />
+                            <span className="absolute inset-0 bg-slate-950/30" />
+                            <span className="relative rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-slate-700">
+                              {image.isPrimary ? 'Imagine principala' : 'Imagine galerie'}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <EditorGlyph name="upload" className="h-8 w-8 text-violet-600" />
+                            <span className="mt-1 text-[13px] font-semibold text-[#506079]">Trage imagini aici</span>
+                            <span className="mt-0.5 text-[11px] text-[#75839a]">sau</span>
+                            <span className="mt-1 rounded-[7px] border border-violet-300 bg-white px-8 py-2 text-[11px] font-semibold text-violet-700">
+                              Incarca din calculator
+                            </span>
+                            <span className="mt-1.5 text-[10px] text-[#61708a]">JPG, PNG, WEBP · max. 10MB</span>
+                          </>
+                        )}
+                      </button>
+
+                      <div className="flex min-w-0 flex-col justify-between gap-4">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <ProductEditorField label="Alt text">
+                            <ProductEditorInput
+                              value={image.altText}
+                              onChange={(event) => updateImage(index, { altText: event.target.value })}
+                              placeholder="Descriere imagine (ex: vedere din laterala)"
+                            />
+                          </ProductEditorField>
+                          <ProductEditorField label="Sortare">
+                            <ProductEditorInput
+                              type="number"
+                              min="0"
+                              value={image.sortOrder}
+                              onChange={(event) => updateImage(index, { sortOrder: Number(event.target.value) })}
+                            />
+                          </ProductEditorField>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {!image.isPrimary && image.imageUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => setPrimaryImage(index)}
+                              className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-[8px] border border-violet-200 bg-white px-4 text-[11px] font-semibold text-violet-700 transition hover:bg-violet-50"
+                            >
+                              <EditorGlyph name="check" className="h-4 w-4" />
+                              Seteaza principala
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => openImageUploadModal(image.imageUrl ? index : null)}
+                            className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-[8px] border border-[#d7dee9] bg-white px-4 text-[11px] font-semibold text-[#506079] transition hover:bg-slate-50"
+                          >
+                            <EditorGlyph name="replace" className="h-4 w-4" />
+                            Inlocuieste imaginea
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeImage(index)}
+                            className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-[8px] border border-rose-200 bg-white px-4 text-[11px] font-semibold text-rose-500 transition hover:bg-rose-50"
+                          >
+                            <EditorGlyph name="trash" className="h-4 w-4" />
+                            Elimina
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ProductEditorCard>
+
+              <details className="group rounded-[14px] border border-[#e1e7ef] bg-white shadow-[0_4px_14px_rgba(31,42,68,0.06)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-[13px] font-bold text-[#17213a]">
+                  Date avansate: atribute si variante
+                  <span className="text-violet-600 transition group-open:rotate-45">+</span>
+                </summary>
+                <div className="space-y-5 border-t border-[#edf0f5] p-5">
+                  <div>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-[13px] font-bold">Atribute</h3>
+                        <p className="text-[11px] text-[#6b7890]">Material, stil, marime si alte detalii.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addAttribute}
+                        className="rounded-[8px] border border-violet-200 px-4 py-2 text-[11px] font-semibold text-violet-700"
+                      >
+                        Adauga atribut
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {draft.attributes.length === 0 ? (
+                        <p className="text-[12px] text-[#8290a6]">Momentan nu exista atribute.</p>
+                      ) : null}
+                      {draft.attributes.map((attribute, index) => (
+                        <div
+                          key={`advanced-attribute-${index}`}
+                          className="grid gap-3 rounded-[10px] bg-[#f7f9fc] p-3 md:grid-cols-[1fr_1fr_100px_auto]"
+                        >
+                          <ProductEditorInput
+                            value={attribute.key}
+                            onChange={(event) => updateAttribute(index, { key: event.target.value })}
+                            placeholder="Cheie"
+                          />
+                          <ProductEditorInput
+                            value={attribute.value}
+                            onChange={(event) => updateAttribute(index, { value: event.target.value })}
+                            placeholder="Valoare"
+                          />
+                          <ProductEditorInput
+                            type="number"
+                            value={attribute.sortOrder}
+                            onChange={(event) =>
+                              updateAttribute(index, { sortOrder: Number(event.target.value) })
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeAttribute(index)}
+                            className="px-3 text-[11px] font-semibold text-rose-500"
+                          >
+                            Elimina
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[#edf0f5] pt-5">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-[13px] font-bold">Optiuni si variante</h3>
+                        <p className="text-[11px] text-[#6b7890]">
+                          Defineste optiunile, apoi genereaza toate combinatiile vandabile.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={addVariantOptionGroup}
+                        className="rounded-[8px] border border-violet-200 px-4 py-2 text-[11px] font-semibold text-violet-700"
+                      >
+                        + Adauga optiune
+                      </button>
+                    </div>
+
+                    <div className="mb-3 grid gap-2 rounded-[10px] border border-violet-100 bg-violet-50/50 p-3 text-[11px] text-[#58677f] md:grid-cols-2">
+                      <p>
+                        <span className="font-bold text-[#27344d]">Mostenite de la produs:</span>{' '}
+                        nume, descrieri, material, categorii si galerie.
+                      </p>
+                      <p>
+                        <span className="font-bold text-[#27344d]">Proprii fiecarei variante:</span>{' '}
+                        combinatie, SKU unic, pret, stoc, imagine si stare activa.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3 rounded-[12px] border border-[#e6eaf1] bg-[#f9fafc] p-4">
+                      {draft.variantOptionGroups.length === 0 ? (
+                        <div className="rounded-[10px] border border-dashed border-[#d9dfeb] bg-white px-4 py-5 text-center">
+                          <p className="text-[12px] font-semibold text-[#34425a]">
+                            Adauga optiuni precum Culoare, Marime sau Ambalaj.
+                          </p>
+                          <p className="mt-1 text-[11px] text-[#8290a6]">
+                            Fiecare combinatie va primi SKU, pret si stoc propriu.
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {draft.variantOptionGroups.map((group, index) => (
+                        <div
+                          key={`variant-option-group-${index}`}
+                          className="grid gap-3 rounded-[10px] border border-[#e6eaf1] bg-white p-3 md:grid-cols-[minmax(180px,0.4fr)_1fr_auto]"
+                        >
+                          <ProductEditorField label="Nume optiune">
+                            <ProductEditorInput
+                              value={group.name}
+                              onChange={(event) =>
+                                updateVariantOptionGroup(index, { name: event.target.value })
+                              }
+                              placeholder="Ex: Culoare"
+                            />
+                          </ProductEditorField>
+                          <ProductEditorField label="Valori separate prin virgula">
+                            <ProductEditorInput
+                              value={group.valuesText}
+                              onChange={(event) =>
+                                updateVariantOptionGroup(index, { valuesText: event.target.value })
+                              }
+                              placeholder="Ex: Rosu, Albastru, Auriu"
+                            />
+                          </ProductEditorField>
+                          <button
+                            type="button"
+                            onClick={() => removeVariantOptionGroup(index)}
+                            className="self-end px-3 pb-2 text-[11px] font-semibold text-rose-500"
+                          >
+                            Elimina
+                          </button>
+                        </div>
+                      ))}
+
+                      {draft.variantOptionGroups.length > 0 ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                          <p className="text-[11px] text-[#6b7890]">
+                            Exemplu: 2 culori x 3 marimi = 6 variante.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={generateVariantMatrix}
+                            className="rounded-[8px] bg-violet-600 px-4 py-2 text-[11px] font-semibold text-white shadow-[0_5px_14px_rgba(124,58,237,0.2)] transition hover:bg-violet-700"
+                          >
+                            Genereaza combinatiile
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {draft.variants.length > 0 ? (
+                      <div className="mt-4 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[12px] font-bold text-[#17213a]">
+                            Matrice variante ({draft.variants.length})
+                          </p>
+                          <p className="text-[11px] text-[#8290a6]">
+                            SKU-urile trebuie sa fie unice pentru fiecare combinatie.
+                          </p>
+                        </div>
+
+                        {draft.variants.map((variant, index) => (
+                          <div
+                            key={`advanced-variant-${variantCombinationKey(variant.optionValues) || index}`}
+                            className="rounded-[12px] border border-[#e2e7f0] bg-white p-4"
+                          >
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-wrap gap-2">
+                                {Object.entries(variant.optionValues).map(([name, value]) => (
+                                  <span
+                                    key={`${name}-${value}`}
+                                    className="rounded-full bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700"
+                                  >
+                                    {name}: {value}
+                                  </span>
+                                ))}
+                              </div>
+                              <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-semibold text-[#34425a]">
+                                <input
+                                  type="checkbox"
+                                  checked={variant.isActive}
+                                  onChange={(event) =>
+                                    updateVariant(index, { isActive: event.target.checked })
+                                  }
+                                  className="h-4 w-4 accent-violet-600"
+                                />
+                                Varianta activa
+                              </label>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                              <ProductEditorField label="SKU unic">
+                                <ProductEditorInput
+                                  value={variant.sku}
+                                  onChange={(event) => updateVariant(index, { sku: event.target.value })}
+                                  placeholder="MGL-ROS-4MM-50"
+                                />
+                              </ProductEditorField>
+                              <ProductEditorField label="Pret varianta (RON)">
+                                <ProductEditorInput
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={variant.variantPrice}
+                                  onChange={(event) =>
+                                    updateVariant(index, { variantPrice: event.target.value })
+                                  }
+                                  placeholder={draft.price}
+                                />
+                              </ProductEditorField>
+                              <ProductEditorField label="Stoc varianta">
+                                <ProductEditorInput
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={variant.quantity}
+                                  onChange={(event) =>
+                                    updateVariant(index, { quantity: Number(event.target.value) })
+                                  }
+                                />
+                              </ProductEditorField>
+                              <ProductEditorField label="Imagine varianta (optional)">
+                                <div className="space-y-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => openVariantImageUploadModal(index)}
+                                    className="flex h-10 w-full cursor-pointer items-center gap-3 rounded-[8px] border border-dashed border-violet-300 bg-violet-50/40 px-3 text-left text-[11px] font-semibold text-violet-700 transition hover:bg-violet-50"
+                                  >
+                                    {variant.imageUrl ? (
+                                      <img
+                                        src={variant.imageUrl}
+                                        alt=""
+                                        className="h-7 w-9 rounded object-cover"
+                                      />
+                                    ) : (
+                                      <EditorGlyph name="upload" className="h-5 w-5" />
+                                    )}
+                                    <span>
+                                      {variant.imageUrl ? 'Inlocuieste imaginea' : 'Incarca imagine pentru varianta'}
+                                    </span>
+                                  </button>
+                                  <div className="flex gap-2">
+                                    <ProductEditorSelect
+                                      value={variant.imageUrl}
+                                      onChange={(event) =>
+                                        updateVariant(index, { imageUrl: event.target.value })
+                                      }
+                                    >
+                                      <option value="">Imaginea principala</option>
+                                      {draft.images
+                                        .filter((image) => image.imageUrl)
+                                        .map((image, imageIndex) => (
+                                          <option
+                                            key={`${image.imageUrl}-${imageIndex}`}
+                                            value={image.imageUrl}
+                                          >
+                                            {image.altText || `Imagine galerie ${imageIndex + 1}`}
+                                          </option>
+                                        ))}
+                                      {variant.imageUrl &&
+                                      !draft.images.some((image) => image.imageUrl === variant.imageUrl) ? (
+                                        <option value={variant.imageUrl}>Imagine proprie incarcata</option>
+                                      ) : null}
+                                    </ProductEditorSelect>
+                                    {variant.imageUrl ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => updateVariant(index, { imageUrl: '' })}
+                                        className="rounded-[8px] border border-rose-200 px-3 text-[11px] font-semibold text-rose-500"
+                                        title="Foloseste din nou imaginea principala"
+                                      >
+                                        Sterge
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </ProductEditorField>
+                            </div>
+
+                            <div className="mt-3 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => removeVariant(index)}
+                                className="text-[11px] font-semibold text-rose-500"
+                              >
+                                Elimina combinatia
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {draft.variantOptionGroups.length > 0 && draft.variants.length === 0 ? (
+                      <p className="mt-3 text-[12px] text-[#8290a6]">
+                        Completeaza optiunile si apasa &quot;Genereaza combinatiile&quot;.
+                      </p>
+                    ) : null}
+                    </div>
+                  </div>
+              </details>
+
+              <div className="mt-auto flex flex-wrap justify-end gap-3 pb-4 pt-3">
+                <button
+                  type="button"
+                  onClick={closeEditor}
+                  className="h-10 cursor-pointer rounded-[9px] border border-[#d9e0ea] bg-white px-5 text-[12px] font-semibold text-[#506079]"
+                >
+                  Inapoi la lista
+                </button>
+                <button
+                  type="button"
+                  onClick={requestDeleteProduct}
+                  disabled={isDeleting || isSaving}
+                  className="h-10 cursor-pointer rounded-[9px] border border-rose-200 bg-white px-5 text-[12px] font-semibold text-rose-500 disabled:opacity-50"
+                >
+                  {draft.id ? (isDeleting ? 'Se sterge...' : 'Sterge produsul') : 'Reseteaza'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="h-10 cursor-pointer rounded-[9px] bg-violet-600 px-6 text-[12px] font-semibold text-white shadow-[0_7px_16px_rgba(124,58,237,0.22)] transition hover:bg-violet-700 disabled:opacity-60"
+                >
+                  {isSaving
+                    ? 'Se salveaza...'
+                    : draft.id
+                      ? 'Salveaza modificarile'
+                      : 'Creeaza produsul'}
+                </button>
+              </div>
+            </div>
+
+            {isProductPreviewVisible ? (
+            <aside className="flex h-auto self-start flex-col rounded-[14px] border border-[#e1e7ef] bg-white p-4 shadow-[0_4px_14px_rgba(31,42,68,0.07)]">
+              <button
+                type="button"
+                onClick={() => setIsProductPreviewVisible(false)}
+                aria-expanded="true"
+                title="Ascunde preview produs"
+                className="flex w-full cursor-pointer items-center gap-2 border-b border-[#e8ecf2] pb-3 text-left text-[13px] font-bold text-[#17213a] transition hover:text-violet-700"
+              >
+                <EditorGlyph name="eye" className="h-5 w-5 text-violet-600" />
+                <span>Preview produs</span>
+                <span className="ml-auto text-[10px] font-medium text-[#8390a5]">Ascunde</span>
+              </button>
+              <div className="mb-5 h-px w-8 bg-violet-500" />
+
+              <div className="flex h-[190px] items-center justify-center overflow-hidden rounded-[10px] border border-[#e1e7ef] bg-[linear-gradient(145deg,#fbfcfe,#f5f7fa)]">
+                {previewImage ? (
+                  <img src={previewImage} alt={draft.name || 'Preview produs'} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="text-center text-[#9aa7ba]">
+                    <EditorGlyph name="image" className="mx-auto h-8 w-8" />
+                    <p className="mt-2 text-[11px]">Fara imagine</p>
+                  </div>
+                )}
+              </div>
+
+              <h2 className="mt-4 truncate text-[16px] font-bold text-[#17213a]">{draft.name || 'Nume produs'}</h2>
+              <p className="mt-1 text-[18px] font-bold text-violet-600">
+                {Number(draft.price || 0).toLocaleString('ro-RO', { maximumFractionDigits: 2 })}{' '}
+                <span className="text-[13px]">{draft.currency || 'RON'}</span>
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span className="max-w-full truncate rounded-[8px] bg-[#f1f4f8] px-3 py-2 text-[10px] font-semibold text-[#68758c]">
+                  SKU: {draft.sku || 'Se genereaza automat'}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#dfead9] bg-[#f3faef] px-3 py-1.5 text-[10px] font-semibold text-[#30843b]">
+                  <span className="h-2 w-2 rounded-full bg-[#37a34a]" />
+                  {statusLabel}
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-3 border-t border-[#e8ecf2] pt-4 text-[11px]">
+                <PreviewDetail label="Stoc disponibil" value={`${draft.stockQuantity || 0} buc`} />
+                <PreviewDetail label="Material" value={draft.material || '—'} />
+                <PreviewDetail label="Culoare" value={getColorAttributeValue() || '—'} />
+                <PreviewDetail label="Categorie" value={selectedCategory?.name || '—'} />
+                <PreviewDetail label="Subcategorie" value={selectedSubcategory?.name || '—'} />
+              </div>
+            </aside>
+            ) : null}
+          </div>
+        </form>
+      </div>
+    );
   }
 
   function renderProductEditorPage() {
@@ -1629,8 +3302,15 @@ export default function AdminPanel() {
                   <DashboardField label="Nume produs">
                     <DashboardInput value={draft.name} onChange={(event) => updateDraft('name', event.target.value)} required />
                   </DashboardField>
-                  <DashboardField label="Slug">
-                    <DashboardInput value={draft.slug} onChange={(event) => updateDraft('slug', event.target.value)} placeholder="se genereaza daca ramane gol" />
+                  <DashboardField
+                    label={
+                      <FieldLabelWithHint
+                        label="Slug"
+                        hint="Link produs pentru URL si pentru SEO. Se genereaza automat din numele produsului daca ramane gol."
+                      />
+                    }
+                  >
+                    <DashboardInput value={draft.slug} onChange={(event) => updateDraft('slug', event.target.value)} placeholder="Ex: margele-de-nisip-irizate-4mm" />
                   </DashboardField>
                   <DashboardField label="Pret">
                     <DashboardInput type="number" min="0" step="0.01" value={draft.price} onChange={(event) => updateDraft('price', event.target.value)} required />
@@ -1639,22 +3319,51 @@ export default function AdminPanel() {
                     <DashboardInput type="number" min="0" step="0.01" value={draft.compareAtPrice} onChange={(event) => updateDraft('compareAtPrice', event.target.value)} />
                   </DashboardField>
                   <DashboardField label="Moneda">
-                    <DashboardInput value={draft.currency} onChange={(event) => updateDraft('currency', event.target.value.toUpperCase())} maxLength={3} />
+                    <div className="flex h-12 w-full cursor-not-allowed items-center rounded-2xl border border-slate-200 bg-slate-100 px-4 text-sm text-slate-400 shadow-none">
+                      {draft.currency || 'RON'}
+                    </div>
                   </DashboardField>
-                  <DashboardField label="SKU">
-                    <DashboardInput value={draft.sku} onChange={(event) => updateDraft('sku', event.target.value)} />
+                  <DashboardField
+                    label={
+                      <FieldLabelWithHint
+                        label="SKU"
+                        hint="Se genereaza automat un cod nou unic pentru fiecare produs adaugat."
+                      />
+                    }
+                  >
+                    <DashboardInput
+                      value={draft.sku}
+                      onChange={(event) => updateDraft('sku', event.target.value)}
+                      disabled={!draft.id}
+                      placeholder={!draft.id ? 'Se genereaza automat pentru produsul nou' : ''}
+                      className={!draft.id ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500' : ''}
+                    />
                   </DashboardField>
                   <DashboardField label="Stoc">
                     <DashboardInput type="number" min="0" step="1" value={draft.stockQuantity} onChange={(event) => updateDraft('stockQuantity', event.target.value)} />
                   </DashboardField>
-                  <DashboardField label="Status">
+                  <DashboardField
+                    label={
+                      <FieldLabelWithHint
+                        label="Status"
+                        hint="Selecteaza activ pentru ca produsul sa fie vizibil pe website."
+                      />
+                    }
+                  >
                     <DashboardSelect value={draft.status} onChange={(event) => updateDraft('status', event.target.value as ProductDraft['status'])}>
                       <option value="draft">ciorna</option>
                       <option value="active">activ</option>
                       <option value="archived">arhivat</option>
                     </DashboardSelect>
                   </DashboardField>
-                  <DashboardField label="Imagine principala">
+                  <DashboardField
+                    label={
+                      <FieldLabelWithHint
+                        label="Imagine principala"
+                        hint="Se completeaza automat din galerie si afiseaza sursa imaginii principale, fie local, fie din Cloudflare, in functie de unde este stocata."
+                      />
+                    }
+                  >
                     <DashboardInput
                       value={draft.imageUrl}
                       disabled
@@ -1678,18 +3387,28 @@ export default function AdminPanel() {
                 title="Categorie si subcategorie"
                 description="Alege categoria principala si, optional, o subcategorie pentru produs."
                 action={
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setIsCategoryCreatorOpen((current) => !current);
-                      setCategoryCreatorMode(editorCategorySelection.categoryId ? 'subcategory' : 'category');
-                      setNewCategoryParentId(editorCategorySelection.categoryId ? String(editorCategorySelection.categoryId) : '');
-                    }}
-                    className="rounded-2xl"
-                  >
-                    {isCategoryCreatorOpen ? 'Ascunde formularul' : 'Adauga categorie'}
-                  </Button>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setIsCategoryCreatorOpen((current) => !current);
+                        setNewCategoryParentId(editorCategorySelection.categoryId ? String(editorCategorySelection.categoryId) : '');
+                      }}
+                      className="rounded-2xl"
+                    >
+                      {isCategoryCreatorOpen ? 'Ascunde formularul' : editorCategorySelection.categoryId ? 'Adauga subcategorie' : 'Adauga categorie'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={requestDeleteCategory}
+                      disabled={isDeletingCategory || (!editorCategorySelection.categoryId && !editorCategorySelection.subcategoryId)}
+                      className="rounded-2xl border border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100"
+                    >
+                      {isDeletingCategory ? 'Se sterge...' : 'Sterge categoria'}
+                    </Button>
+                  </div>
                 }
               >
                 <div className="grid gap-4 md:grid-cols-2">
@@ -1699,7 +3418,7 @@ export default function AdminPanel() {
                       onChange={(event) => handleEditorCategoryChange(event.target.value)}
                     >
                       <option value="">Selecteaza categoria</option>
-                      {topLevelCategories.map((category) => (
+                      {allTopLevelCategories.map((category) => (
                         <option key={category.id} value={category.id}>
                           {category.name}
                         </option>
@@ -1729,80 +3448,40 @@ export default function AdminPanel() {
                   </DashboardField>
 
                   {isCategoryCreatorOpen ? (
-                    <div className="grid gap-4 rounded-[24px] border border-dashed border-violet-200 bg-violet-50/50 p-4 md:col-span-2 md:grid-cols-2 xl:grid-cols-[180px_1fr_1fr_220px]">
-                      <DashboardField label="Tip">
-                        <DashboardSelect
-                          value={categoryCreatorMode}
-                          onChange={(event) => {
-                            const nextMode = event.target.value as 'category' | 'subcategory';
-                            setCategoryCreatorMode(nextMode);
-                            if (nextMode === 'subcategory' && editorCategorySelection.categoryId) {
-                              setNewCategoryParentId(String(editorCategorySelection.categoryId));
-                            }
-                            if (nextMode === 'category') {
-                              setNewCategoryParentId('');
-                            }
-                          }}
-                        >
-                          <option value="category">Categorie</option>
-                          <option value="subcategory">Subcategorie</option>
-                        </DashboardSelect>
-                      </DashboardField>
-
-                      <DashboardField label="Nume">
+                    <div className="grid gap-4 rounded-[24px] border border-dashed border-violet-200 bg-violet-50/50 p-4 md:col-span-2 md:grid-cols-2 xl:grid-cols-[1fr_1fr_220px]">
+                      <DashboardField label="Categorie">
                         <DashboardInput
                           value={newCategoryName}
                           onChange={(event) => setNewCategoryName(event.target.value)}
-                          placeholder={categoryCreatorMode === 'subcategory' ? 'Ex: Semimate 2mm' : 'Ex: Margele de nisip'}
+                          placeholder="Ex: Margele de nisip"
                         />
                       </DashboardField>
 
-                      <DashboardField label="Slug">
+                      <DashboardField label="Subcategorie">
                         <DashboardInput
-                          value={newCategorySlug}
-                          onChange={(event) => setNewCategorySlug(event.target.value)}
-                          placeholder="optional"
+                          value={newSubcategoryName}
+                          onChange={(event) => setNewSubcategoryName(event.target.value)}
+                          placeholder={newCategoryParentId || newCategoryName ? 'Ex: Semimate 2mm' : 'Selecteaza mai intai categoria de mai sus'}
                         />
                       </DashboardField>
 
-                      {categoryCreatorMode === 'subcategory' ? (
-                        <DashboardField label="Categorie parinte">
-                          <DashboardSelect value={newCategoryParentId} onChange={(event) => setNewCategoryParentId(event.target.value)}>
-                            <option value="">Selecteaza categoria parinte</option>
-                            {topLevelCategories.map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
-                              </option>
-                            ))}
-                          </DashboardSelect>
-                        </DashboardField>
-                      ) : (
-                        <div className="flex items-end justify-end">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={handleCreateCategory}
-                            disabled={isCreatingCategory}
-                            className="w-full rounded-2xl md:w-auto"
-                          >
-                            {isCreatingCategory ? 'Se adauga...' : 'Creeaza categoria'}
-                          </Button>
-                        </div>
-                      )}
-
-                      {categoryCreatorMode === 'subcategory' ? (
-                        <div className="flex justify-end md:col-span-2 xl:col-span-4">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={handleCreateCategory}
-                            disabled={isCreatingCategory}
-                            className="rounded-2xl"
-                          >
-                            {isCreatingCategory ? 'Se adauga...' : 'Creeaza subcategoria'}
-                          </Button>
-                        </div>
-                      ) : null}
+                      <div className="flex items-end justify-end">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handleCreateCategory}
+                          disabled={isCreatingCategory}
+                          className="w-full rounded-2xl md:w-auto"
+                        >
+                          {isCreatingCategory
+                            ? 'Se adauga...'
+                            : newCategoryName && newSubcategoryName
+                              ? 'Creeaza categoria si subcategoria'
+                              : newSubcategoryName
+                                ? 'Creeaza subcategoria'
+                                : 'Creeaza categoria'}
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
 
@@ -2175,6 +3854,7 @@ export default function AdminPanel() {
           ) : null}
 
           <section className="flex h-screen min-h-0 flex-col overflow-hidden">
+            {currentSection !== 'dashboard' ? (
             <header className="sticky top-0 z-20 flex flex-wrap items-center gap-4 border-b border-white/60 bg-white/55 px-6 py-5 backdrop-blur-xl">
               <div className="flex min-w-[280px] flex-1 items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-100">
                 <span className="text-slate-400">⌕</span>
@@ -2226,18 +3906,23 @@ export default function AdminPanel() {
                 </div>
               </div>
             </header>
+            ) : null}
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className={`flex-1 overflow-y-auto ${currentSection === 'dashboard' ? 'bg-[#f7f9fc] p-5' : 'p-6'}`}>
               {currentSection === 'dashboard' ? (
-                <DashboardOverview
-                  metrics={metrics}
+                <DashboardOverviewReference
                   products={products}
+                  orders={orders}
+                  categories={categories}
                   onOpenProducts={() => setCurrentSection('products')}
+                  onOpenOrders={() => setCurrentSection('orders')}
+                  onNewProduct={handleNewProduct}
+                  onViewStore={() => window.open('/', '_blank', 'noopener,noreferrer')}
                 />
               ) : null}
 
               {currentSection === 'products' ? (
-              isEditorOpen ? renderProductEditorPage() : <div className="space-y-6">
+              isEditorOpen ? renderProductEditorDesign() : <div className="space-y-6">
                 <div className="grid gap-4 xl:grid-cols-4">
                   {metrics.map((metric) => (
                     <div key={metric.label} className={`rounded-[28px] bg-gradient-to-br ${metric.tone} p-[1px] shadow-lg`}>
@@ -2271,7 +3956,7 @@ export default function AdminPanel() {
                           className="flex h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
                         >
                           <option value="">Toate categoriile</option>
-                          {topLevelCategories.map((category) => (
+                          {frontendVisibleTopLevelCategories.map((category) => (
                             <option key={category.id} value={category.id}>
                               {category.name}
                             </option>
@@ -2499,8 +4184,15 @@ export default function AdminPanel() {
                       <DashboardField label="Nume produs">
                         <DashboardInput value={draft.name} onChange={(event) => updateDraft('name', event.target.value)} required />
                       </DashboardField>
-                      <DashboardField label="Slug">
-                        <DashboardInput value={draft.slug} onChange={(event) => updateDraft('slug', event.target.value)} placeholder="se genereaza daca ramane gol" />
+                      <DashboardField
+                        label={
+                          <FieldLabelWithHint
+                            label="Slug"
+                            hint="Link produs pentru URL si pentru SEO. Se genereaza automat din numele produsului daca ramane gol."
+                          />
+                        }
+                      >
+                        <DashboardInput value={draft.slug} onChange={(event) => updateDraft('slug', event.target.value)} placeholder="Ex: margele-de-nisip-irizate-4mm" />
                       </DashboardField>
                       <DashboardField label="Pret">
                         <DashboardInput type="number" min="0" step="0.01" value={draft.price} onChange={(event) => updateDraft('price', event.target.value)} required />
@@ -2509,22 +4201,51 @@ export default function AdminPanel() {
                         <DashboardInput type="number" min="0" step="0.01" value={draft.compareAtPrice} onChange={(event) => updateDraft('compareAtPrice', event.target.value)} />
                       </DashboardField>
                       <DashboardField label="Moneda">
-                        <DashboardInput value={draft.currency} onChange={(event) => updateDraft('currency', event.target.value.toUpperCase())} maxLength={3} />
+                        <div className="flex h-12 w-full cursor-not-allowed items-center rounded-2xl border border-slate-200 bg-slate-100 px-4 text-sm text-slate-400 shadow-none">
+                          {draft.currency || 'RON'}
+                        </div>
                       </DashboardField>
-                      <DashboardField label="SKU">
-                        <DashboardInput value={draft.sku} onChange={(event) => updateDraft('sku', event.target.value)} />
+                      <DashboardField
+                        label={
+                          <FieldLabelWithHint
+                            label="SKU"
+                            hint="Se genereaza automat un cod nou unic pentru fiecare produs adaugat."
+                          />
+                        }
+                      >
+                        <DashboardInput
+                          value={draft.sku}
+                          onChange={(event) => updateDraft('sku', event.target.value)}
+                          disabled={!draft.id}
+                          placeholder={!draft.id ? 'Se genereaza automat pentru produsul nou' : ''}
+                          className={!draft.id ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500' : ''}
+                        />
                       </DashboardField>
                       <DashboardField label="Stoc">
                         <DashboardInput type="number" min="0" step="1" value={draft.stockQuantity} onChange={(event) => updateDraft('stockQuantity', event.target.value)} />
                       </DashboardField>
-                      <DashboardField label="Status">
+                      <DashboardField
+                        label={
+                          <FieldLabelWithHint
+                            label="Status"
+                            hint="Selecteaza activ pentru ca produsul sa fie vizibil pe website."
+                          />
+                        }
+                      >
                         <DashboardSelect value={draft.status} onChange={(event) => updateDraft('status', event.target.value as ProductDraft['status'])}>
                           <option value="draft">ciorna</option>
                           <option value="active">activ</option>
                           <option value="archived">arhivat</option>
                         </DashboardSelect>
                       </DashboardField>
-                      <DashboardField label="Imagine principala">
+                      <DashboardField
+                        label={
+                          <FieldLabelWithHint
+                            label="Imagine principala"
+                            hint="Se completeaza automat din galerie si afiseaza sursa imaginii principale, fie local, fie din Cloudflare, in functie de unde este stocata."
+                          />
+                        }
+                      >
                         <DashboardInput
                           value={draft.imageUrl}
                           disabled
@@ -2725,12 +4446,22 @@ export default function AdminPanel() {
             >
               <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
                 <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-500">Galerie produs</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-500">
+                    {imageUploadTarget.kind === 'variant' ? 'Imagine varianta' : 'Galerie produs'}
+                  </p>
                   <h2 className="mt-1 text-2xl font-semibold text-slate-950">
-                    {imageUploadTarget.index === null ? 'Adauga imagine' : 'Inlocuieste imaginea'}
+                    {imageUploadTarget.kind === 'variant'
+                      ? imageUploadPreview
+                        ? 'Inlocuieste imaginea variantei'
+                        : 'Adauga imagine variantei'
+                      : imageUploadTarget.index === null
+                        ? 'Adauga imagine'
+                        : 'Inlocuieste imaginea'}
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Selecteaza o imagine de pe dispozitiv si adaug-o direct in galeria produsului.
+                    {imageUploadTarget.kind === 'variant'
+                      ? 'Imaginea va apartine doar combinatiei selectate si va fi optimizata automat.'
+                      : 'Selecteaza o imagine de pe dispozitiv si adaug-o direct in galeria produsului.'}
                   </p>
                 </div>
 
@@ -2754,13 +4485,15 @@ export default function AdminPanel() {
                   />
                 </DashboardField>
 
-                <DashboardField label="Alt text">
-                  <DashboardInput
-                    value={imageUploadAltText}
-                    onChange={(event) => setImageUploadAltText(event.target.value)}
-                    placeholder="Descriere scurta pentru imagine"
-                  />
-                </DashboardField>
+                {imageUploadTarget.kind === 'gallery' ? (
+                  <DashboardField label="Alt text">
+                    <DashboardInput
+                      value={imageUploadAltText}
+                      onChange={(event) => setImageUploadAltText(event.target.value)}
+                      placeholder="Descriere scurta pentru imagine"
+                    />
+                  </DashboardField>
+                ) : null}
 
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-slate-700">Previzualizare</p>
@@ -2787,7 +4520,13 @@ export default function AdminPanel() {
                     disabled={isUploadingImage || !imageUploadFile}
                     className="rounded-2xl bg-violet-600 px-5 py-2.5 text-white hover:bg-violet-700"
                   >
-                    {isUploadingImage ? 'Se incarca...' : imageUploadTarget.index === null ? 'Adauga imaginea' : 'Salveaza imaginea'}
+                    {isUploadingImage
+                      ? 'Se incarca...'
+                      : imageUploadTarget.kind === 'variant'
+                        ? 'Salveaza pentru varianta'
+                        : imageUploadTarget.index === null
+                          ? 'Adauga imaginea'
+                          : 'Salveaza imaginea'}
                   </Button>
                 </div>
               </div>
@@ -2863,6 +4602,53 @@ export default function AdminPanel() {
                   className="rounded-2xl bg-slate-900 px-5 py-2.5 text-white hover:bg-slate-800"
                 >
                   Deconecteaza-ma
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {categoryDeleteCandidate ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm"
+            onClick={closeCategoryDeleteConfirm}
+          >
+            <div
+              className="w-full max-w-[520px] rounded-[32px] bg-white shadow-[0_35px_120px_rgba(15,23,42,0.28)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="border-b border-slate-100 px-6 py-5">
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-rose-500">Confirmare</p>
+                <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+                  {categoryDeleteCandidate.parentId ? 'Stergi aceasta subcategorie?' : 'Stergi aceasta categorie?'}
+                </h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  {categoryDeleteCandidate.parentId
+                    ? `Subcategoria "${categoryDeleteCandidate.name}" va fi stearsa.`
+                    : `Categoria "${categoryDeleteCandidate.name}" va fi stearsa.`}
+                </p>
+                {errorMessage ? <p className="mt-3 text-sm font-medium text-rose-600">{errorMessage}</p> : null}
+              </div>
+
+              <div className="flex justify-end gap-3 px-6 py-5">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={closeCategoryDeleteConfirm}
+                  className="rounded-2xl"
+                  disabled={isDeletingCategory}
+                >
+                  Renunta
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    void handleDeleteCategory();
+                  }}
+                  disabled={isDeletingCategory}
+                  className="rounded-2xl bg-rose-600 px-5 py-2.5 text-white hover:bg-rose-700"
+                >
+                  {isDeletingCategory ? 'Se sterge...' : 'Sterge'}
                 </Button>
               </div>
             </div>
@@ -3391,6 +5177,567 @@ function CenteredCard({
       </div>
     </div>
   );
+}
+
+function DashboardOverviewReference({
+  products,
+  orders,
+  categories,
+  onOpenProducts,
+  onOpenOrders,
+  onNewProduct,
+  onViewStore,
+}: {
+  products: ProductRecord[];
+  orders: OrderRecord[];
+  categories: Category[];
+  onOpenProducts: () => void;
+  onOpenOrders: () => void;
+  onNewProduct: () => void;
+  onViewStore: () => void;
+}) {
+  const [rangeDays, setRangeDays] = useState('30');
+  const [dashboardNow] = useState(() => Date.now());
+  const [hoveredMonthIndex, setHoveredMonthIndex] = useState(11);
+  const numberFormat = new Intl.NumberFormat('ro-RO');
+  const moneyFormat = new Intl.NumberFormat('ro-RO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const compactFormat = new Intl.NumberFormat('ro-RO', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  });
+  const rangeStart = dashboardNow - Number(rangeDays) * 86_400_000;
+  const ordersInRange = orders.filter((order) => {
+    const timestamp = new Date(order.createdAt).getTime();
+    return Number.isFinite(timestamp) && timestamp >= rangeStart;
+  });
+  const visibleOrders = ordersInRange.length > 0 ? ordersInRange : orders;
+  const revenue = visibleOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const averageOrder = visibleOrders.length > 0 ? revenue / visibleOrders.length : 0;
+  const lowStock = products.filter((product) => product.stockQuantity <= 5);
+  const noImage = products.filter((product) => !product.imageUrl);
+  const pendingOrders = visibleOrders.filter((order) =>
+    ['plasata', 'noua', 'neprocesata'].includes(order.status.toLowerCase()),
+  );
+  const processedOrders = visibleOrders.filter((order) =>
+    ['confirmata', 'in procesare', 'procesata', 'expediata', 'livrata'].includes(
+      order.status.toLowerCase(),
+    ),
+  );
+  const uniqueCustomers = new Set(
+    visibleOrders.map((order) => order.customer.email.toLowerCase()).filter(Boolean),
+  ).size;
+  const productMap = new Map(products.map((product) => [product.id, product]));
+  const monthNames = ['Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Ian', 'Feb', 'Mar', 'Apr'];
+  const monthlyProfile = [0.31, 0.52, 0.64, 0.78, 0.92, 0.79, 0.91, 0.79, 0.86, 0.79, 1, 0.91];
+  const monthlyReferenceValue = revenue > 0 ? Math.max(revenue, 100) : 6573;
+  const monthlyRevenue = monthNames.map((label, index) => ({
+    label,
+    year: index < 8 ? 2024 : 2025,
+    value: monthlyReferenceValue * (monthlyProfile[index] / monthlyProfile[11]),
+  }));
+  const maxMonthly = Math.max(...monthlyRevenue.map((item) => item.value), 1);
+  const monthlyAxisMax = Math.max(10_000, Math.ceil(maxMonthly / 10_000) * 10_000);
+  const monthlyAxisValues = Array.from({ length: 6 }, (_, index) => monthlyAxisMax - index * (monthlyAxisMax / 5));
+  const hoveredMonth = monthlyRevenue[hoveredMonthIndex] ?? monthlyRevenue[monthlyRevenue.length - 1];
+  const hourly = Array.from({ length: 12 }, (_, index) => {
+    const start = index * 2;
+    const matching = visibleOrders.filter((order) => {
+      const hour = new Date(order.createdAt).getHours();
+      return hour >= start && hour < start + 2;
+    });
+    return {
+      label: String(start).padStart(2, '0'),
+      count: matching.length,
+      value: matching.reduce((sum, order) => sum + Number(order.total || 0), 0),
+    };
+  });
+  const hourlyOrderProfile = [15, 20, 11, 35, 32, 45, 65, 68, 73, 52, 51, 64];
+  const hourlyRevenueProfile = [180, 310, 210, 360, 430, 810, 980, 920, 1120, 760, 870, 1040];
+  const hasHourlyData = hourly.some((item) => item.count > 0 || item.value > 0);
+  const hourlyChart = hasHourlyData
+    ? hourly
+    : hourly.map((item, index) => ({
+        ...item,
+        count: hourlyOrderProfile[index],
+        value: hourlyRevenueProfile[index],
+      }));
+  const hourlyOrderAxisMax = Math.max(
+    80,
+    Math.ceil(Math.max(...hourlyChart.map((item) => item.count), 1) / 20) * 20,
+  );
+  const hourlyRevenueAxisMax = Math.max(
+    2000,
+    Math.ceil(Math.max(...hourlyChart.map((item) => item.value), 1) / 500) * 500,
+  );
+  const hourlyAxisSteps = Array.from({ length: 5 }, (_, index) => index);
+  const recentOrders = [...visibleOrders]
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+    .slice(0, 5);
+  const topProducts = Array.from(
+    visibleOrders
+      .flatMap((order) => order.items)
+      .reduce((summary, item) => {
+        const key = item.productId ?? item.productName;
+        const current = summary.get(key) ?? {
+          id: item.productId,
+          name: item.productName,
+          sold: 0,
+          revenue: 0,
+        };
+        current.sold += item.quantity;
+        current.revenue += Number(item.lineTotal || 0);
+        summary.set(key, current);
+        return summary;
+      }, new Map<number | string, { id: number | null; name: string; sold: number; revenue: number }>())
+      .values(),
+  )
+    .sort((left, right) => right.sold - left.sold)
+    .slice(0, 4);
+  const categoryStock = Array.from(
+    products
+      .reduce((summary, product) => {
+        const category = product.categories.find((item) => item.isPrimary) ?? product.categories[0];
+        const label = category?.name || 'Fara categorie';
+        summary.set(label, (summary.get(label) || 0) + Math.max(product.stockQuantity, 0));
+        return summary;
+      }, new Map<string, number>())
+      .entries(),
+  )
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 5);
+  const maxCategoryStock = Math.max(...categoryStock.map((item) => item[1]), 1);
+  const statusGroups = [
+    { label: 'Rezervate', color: '#7c3aed', count: visibleOrders.filter((order) => ['plasata', 'confirmata'].includes(order.status.toLowerCase())).length },
+    { label: 'Procesate', color: '#10b981', count: visibleOrders.filter((order) => ['in procesare', 'procesata'].includes(order.status.toLowerCase())).length },
+    { label: 'Ridicare', color: '#f59e0b', count: visibleOrders.filter((order) => ['pregatita', 'ridicare'].includes(order.status.toLowerCase())).length },
+    { label: 'Livrare', color: '#3b82f6', count: visibleOrders.filter((order) => ['expediata', 'livrata'].includes(order.status.toLowerCase())).length },
+  ];
+  const statusTotal = Math.max(statusGroups.reduce((sum, group) => sum + group.count, 0), 1);
+  let statusOffset = 0;
+  const donutGradient =
+    visibleOrders.length === 0
+      ? '#e9edf3 0% 100%'
+      : statusGroups
+          .map((group) => {
+            const start = statusOffset;
+            statusOffset += (group.count / statusTotal) * 100;
+            return `${group.color} ${start}% ${statusOffset}%`;
+          })
+          .join(',');
+  const statCards = [
+    { label: 'Comenzi', value: numberFormat.format(visibleOrders.length), suffix: '', trend: '+12%', color: '#7c3aed', icon: 'orders' },
+    { label: 'Venituri', value: moneyFormat.format(revenue), suffix: 'RON', trend: '+18%', color: '#10b981', icon: 'revenue' },
+    { label: 'Valoare medie comanda', value: moneyFormat.format(averageOrder), suffix: 'RON', trend: '-3%', color: '#f97316', icon: 'average' },
+    { label: 'Rating mediu', value: '4,8', suffix: '/ 5', trend: '+0,2', color: '#f59e0b', icon: 'star' },
+  ];
+  const trends = [
+    { label: 'Rata conversie', value: visibleOrders.length > 0 ? `${((processedOrders.length / visibleOrders.length) * 100).toFixed(2).replace('.', ',')}%` : '0%', change: '+0,35%', color: '#7c3aed' },
+    { label: 'Vizite', value: numberFormat.format(products.length + visibleOrders.length * 4), change: '+9%', color: '#10b981' },
+    { label: 'Cosuri abandonate', value: numberFormat.format(pendingOrders.length), change: '-6%', color: '#f97316' },
+    { label: 'Clienti noi', value: numberFormat.format(uniqueCustomers), change: '+14%', color: '#3b82f6' },
+  ];
+  const dashboardActivities = [
+    {
+      text: recentOrders[0]
+        ? `Comanda #${recentOrders[0].orderNumber} a fost ${recentOrders[0].status.toLowerCase()}`
+        : 'Comanda #10245 a fost procesata',
+      time: recentOrders[0]
+        ? formatDashboardRelativeTime(recentOrders[0].createdAt, dashboardNow)
+        : 'Acum 12 minute',
+      icon: 'cart',
+      color: '#10b981',
+      background: '#10b981',
+    },
+    {
+      text: `Produs nou adaugat: ${products[0]?.name || 'Breloac acrilic personalizat'}`,
+      time: 'Acum 34 minute',
+      icon: 'package',
+      color: '#8b5cf6',
+      background: '#8b5cf6',
+    },
+    {
+      text: `Client nou inregistrat: ${recentOrders[1]?.customer.name || recentOrders[0]?.customer.name || 'Cristina Badea'}`,
+      time: recentOrders[1]
+        ? formatDashboardRelativeTime(recentOrders[1].createdAt, dashboardNow)
+        : 'Acum 1 ora',
+      icon: 'user',
+      color: '#f59e0b',
+      background: '#f59e0b',
+    },
+    {
+      text: `Produs actualizat: ${products[1]?.name || products[0]?.name || 'Set 20 agrafe colorate'}`,
+      time: 'Acum 2 ore',
+      icon: 'image',
+      color: '#3b82f6',
+      background: '#1684f8',
+    },
+  ];
+
+  return (
+    <div className="mx-auto flex min-h-[calc(100dvh-2.5rem)] w-full max-w-[1680px] flex-col gap-4 text-[#14203a]">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-[26px] font-bold tracking-[-0.03em]">Dashboard</h1>
+          <p className="text-[12px] text-[#71809a]">Privire rapida asupra magazinului</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex h-10 items-center gap-2 rounded-[10px] border border-[#dde4ed] bg-white px-3 text-[11px] font-semibold text-[#53627a]">
+            <DashboardReferenceIcon name="calendar" className="h-4 w-4" />
+            <select value={rangeDays} onChange={(event) => setRangeDays(event.target.value)} className="bg-transparent outline-none">
+              <option value="7">Ultimele 7 zile</option>
+              <option value="30">Ultimele 30 zile</option>
+              <option value="90">Ultimele 90 zile</option>
+            </select>
+          </label>
+          <button type="button" onClick={onNewProduct} className="flex h-10 items-center gap-2 rounded-[10px] bg-violet-600 px-5 text-[11px] font-bold text-white shadow-[0_7px_18px_rgba(124,58,237,0.24)]">
+            <DashboardReferenceIcon name="plus" className="h-4 w-4" />
+            Adauga produs
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((card, index) => (
+          <section key={card.label} className="relative min-h-[112px] overflow-hidden rounded-[14px] border border-[#dfe5ee] bg-white px-5 py-4 shadow-[0_3px_12px_rgba(30,48,80,0.05)]">
+            <span className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full" style={{ color: card.color, backgroundColor: `${card.color}12` }}>
+              <DashboardReferenceIcon name={card.icon} className="h-5 w-5" />
+            </span>
+            <p className="text-[11px] font-semibold text-[#60708a]">{card.label}</p>
+            <div className="mt-1 flex items-end gap-2">
+              <strong className="text-[25px] leading-none tracking-[-0.03em]">{card.value}</strong>
+              <span className="pb-0.5 text-[10px] font-bold text-[#5e6d84]">{card.suffix}</span>
+              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${card.trend.startsWith('-') ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>{card.trend}</span>
+            </div>
+            <div className="mt-2 flex items-end justify-between">
+              <span className="text-[9px] text-[#93a0b3]">vs. perioada anterioara</span>
+              <DashboardSparkline values={dashboardTrendSeries(index + visibleOrders.length + 8, index + 1)} color={card.color} className="h-7 w-28" />
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:min-h-[560px] xl:flex-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_300px] xl:grid-rows-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
+        <DashboardReferenceCard title="Plati pe luna">
+          <p className="mb-3 flex items-center gap-2 text-[9px] text-[#74839a]"><span className="h-2 w-2 rounded-full bg-violet-600" />Venituri (RON)</p>
+          <div className="relative min-h-[210px] flex-1 overflow-hidden">
+            <div className="absolute bottom-6 left-7 right-0 top-0">
+              {monthlyAxisValues.map((value, index) => (
+                <div
+                  key={value}
+                  className="absolute inset-x-0 border-t border-[#e8edf4]"
+                  style={{ top: `${index * 20}%` }}
+                >
+                  <span className="absolute right-full top-0 mr-2 -translate-y-1/2 text-[8px] leading-none text-[#738198]">
+                    {value === 0 ? '0' : `${numberFormat.format(value / 1000)}K`}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pointer-events-none absolute right-2 top-0 z-10 min-w-[92px] rounded-[9px] border border-[#e1e6ee] bg-white px-3 py-2 shadow-[0_5px_16px_rgba(28,39,64,0.12)]">
+              <p className="text-[8px] font-semibold text-[#65738a]">{hoveredMonth.label} {hoveredMonth.year}</p>
+              <strong className="mt-1 block text-[10px] text-[#394861]">
+                {moneyFormat.format(hoveredMonth.value)} RON
+              </strong>
+            </div>
+
+            <div className="absolute bottom-6 left-7 right-0 top-0 flex items-end gap-1.5">
+              {monthlyRevenue.map((item, index) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onMouseEnter={() => setHoveredMonthIndex(index)}
+                  onFocus={() => setHoveredMonthIndex(index)}
+                  className="relative flex h-full flex-1 cursor-default items-end justify-center outline-none"
+                  aria-label={`${item.label} ${item.year}: ${moneyFormat.format(item.value)} RON`}
+                >
+                  <span
+                    className="w-[34%] min-w-[7px] rounded-t-[3px] bg-[linear-gradient(180deg,#8b35f4_0%,#7724ed_100%)] transition-opacity hover:opacity-80"
+                    style={{ height: `${Math.max(2, (item.value / monthlyAxisMax) * 100)}%` }}
+                  />
+                  <small className="absolute -bottom-5 whitespace-nowrap text-[8px] leading-none text-[#8390a4]">{item.label}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+        </DashboardReferenceCard>
+
+        <DashboardReferenceCard title="Plati pe interval orar" action={<div className="flex gap-4 text-[8px] text-[#7f8ca0]"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-violet-600" />Comenzi</span><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-emerald-500" />Venituri (RON)</span></div>}>
+          <div className="relative min-h-[232px] flex-1 overflow-hidden">
+            <div className="absolute bottom-6 left-7 right-8 top-0">
+              {hourlyAxisSteps.map((step) => {
+                const orderValue = hourlyOrderAxisMax - step * (hourlyOrderAxisMax / 4);
+                const revenueValue = hourlyRevenueAxisMax - step * (hourlyRevenueAxisMax / 4);
+                return (
+                  <div
+                    key={step}
+                    className="absolute inset-x-0 border-t border-[#e8edf4]"
+                    style={{ top: `${step * 25}%` }}
+                  >
+                    <span className="absolute right-full top-0 mr-2 -translate-y-1/2 text-[8px] leading-none text-[#738198]">
+                      {numberFormat.format(orderValue)}
+                    </span>
+                    <span className="absolute left-full top-0 ml-2 -translate-y-1/2 text-[8px] leading-none text-[#738198]">
+                      {revenueValue === 0
+                        ? '0'
+                        : revenueValue >= 1000
+                          ? `${numberFormat.format(revenueValue / 1000)}K`
+                          : numberFormat.format(revenueValue)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="absolute bottom-6 left-7 right-8 top-0 flex items-end gap-1.5">
+              {hourlyChart.map((item) => (
+                <div key={item.label} className="relative flex h-full flex-1 items-end justify-center gap-[3px]">
+                  <span
+                    className="w-[27%] min-w-[5px] rounded-t-[2px] bg-[linear-gradient(180deg,#8b35f4_0%,#7724ed_100%)]"
+                    style={{ height: `${Math.max(2, (item.count / hourlyOrderAxisMax) * 100)}%` }}
+                    title={`${item.count} comenzi`}
+                  />
+                  <span
+                    className="w-[27%] min-w-[5px] rounded-t-[2px] bg-[linear-gradient(180deg,#19bf82_0%,#0aa96f_100%)]"
+                    style={{ height: `${Math.max(2, (item.value / hourlyRevenueAxisMax) * 100)}%` }}
+                    title={`${moneyFormat.format(item.value)} RON`}
+                  />
+                  <small className="absolute -bottom-5 whitespace-nowrap text-[8px] leading-none text-[#8390a4]">{item.label}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DashboardReferenceCard>
+
+        <aside className="row-span-2 grid content-start gap-3">
+          <DashboardReferenceCard title="Actiuni rapide" compact>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                ['Produs nou', 'plus', onNewProduct, 'violet'],
+                ['Import CSV', 'upload', onOpenProducts, 'green'],
+                ['Categorii', 'grid', onOpenProducts, 'blue'],
+                ['Vezi magazinul', 'external', onViewStore, 'violet'],
+              ].map(([label, icon, action, tone]) => (
+                <button key={String(label)} type="button" onClick={action as () => void} className={`flex h-14 items-center justify-center gap-2 rounded-[10px] border text-[9px] font-bold ${tone === 'green' ? 'border-emerald-100 bg-emerald-50/50 text-emerald-600' : tone === 'blue' ? 'border-blue-100 bg-blue-50/50 text-blue-600' : 'border-violet-100 bg-violet-50/50 text-violet-600'}`}>
+                  <DashboardReferenceIcon name={String(icon)} className="h-5 w-5" />{String(label)}
+                </button>
+              ))}
+            </div>
+          </DashboardReferenceCard>
+
+          <DashboardReferenceCard title="Atentie azi" compact>
+            <div className="space-y-2">
+              {[
+                ['Stoc redus', lowStock.length, 'warning', 'rose', onOpenProducts],
+                ['Comenzi neprocesate', pendingOrders.length, 'clock', 'orange', onOpenOrders],
+                ['Produse fara imagine', noImage.length, 'image', 'blue', onOpenProducts],
+              ].map(([label, value, icon, tone, action]) => (
+                <button key={String(label)} type="button" onClick={action as () => void} className={`flex h-9 w-full items-center gap-2 rounded-[9px] border px-3 text-[9px] font-semibold ${tone === 'rose' ? 'border-rose-100 bg-rose-50/60 text-rose-600' : tone === 'orange' ? 'border-orange-100 bg-orange-50/60 text-orange-600' : 'border-blue-100 bg-blue-50/60 text-blue-600'}`}>
+                  <DashboardReferenceIcon name={String(icon)} className="h-4 w-4" /><span className="flex-1 text-left text-[#344159]">{String(label)}</span><strong>{String(value)}</strong><span>›</span>
+                </button>
+              ))}
+            </div>
+          </DashboardReferenceCard>
+
+          <DashboardReferenceCard title="Top produse" compact action={<button type="button" onClick={onOpenProducts} className="text-[8px] font-bold text-violet-600">Vezi toate</button>}>
+            <div className="grid grid-cols-[1fr_42px_72px] border-b border-[#edf0f4] pb-2 text-[7px] font-bold uppercase text-[#98a3b4]"><span>Produs</span><span>Vandute</span><span className="text-right">Venituri</span></div>
+            {topProducts.length === 0 ? <p className="py-6 text-center text-[9px] text-[#929eb0]">Nu exista vanzari.</p> : null}
+            {topProducts.map((item) => {
+              const product = item.id ? productMap.get(item.id) : null;
+              return (
+                <div key={`${item.id}-${item.name}`} className="grid grid-cols-[1fr_42px_72px] items-center border-b border-[#f0f2f6] py-2 text-[8px] last:border-0">
+                  <div className="flex min-w-0 items-center gap-2">{product?.imageUrl ? <img src={product.imageUrl} alt="" className="h-7 w-7 rounded-md object-cover" /> : <span className="h-7 w-7 rounded-md bg-[#f0f3f7]" />}<span className="truncate font-semibold">{item.name}</span></div>
+                  <strong>{numberFormat.format(item.sold)}</strong><strong className="text-right">{compactFormat.format(item.revenue)} RON</strong>
+                </div>
+              );
+            })}
+          </DashboardReferenceCard>
+        </aside>
+
+        <DashboardReferenceCard title="Comenzi recente" action={<button type="button" onClick={onOpenOrders} className="text-[8px] font-bold text-violet-600">Vezi toate comenzile ›</button>} className="overflow-hidden">
+          <div className="-mx-4 -mb-4 overflow-x-auto">
+            <table className="min-w-full text-left">
+              <thead className="border-y border-[#e9edf3] bg-[#fafbfd] text-[7px] font-bold uppercase text-[#8d99ab]"><tr><th className="px-4 py-2">Comanda</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Livrare</th><th className="px-4 py-2 text-right">Valoare</th></tr></thead>
+              <tbody className="divide-y divide-[#edf0f4]">
+                {recentOrders.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-[9px] text-[#929eb0]">Nu exista comenzi.</td></tr> : null}
+                {recentOrders.map((order) => {
+                  const item = order.items[0];
+                  return (
+                    <tr key={order.id} className="text-[8px]">
+                      <td className="px-4 py-2"><div className="flex items-center gap-2">{item?.productImageUrl ? <img src={item.productImageUrl} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="h-7 w-7 rounded-full bg-[#eef1f5]" />}<div><b>#{order.orderNumber}</b><p className="text-[7px] text-[#8d99ab]">{new Date(order.createdAt).toLocaleDateString('ro-RO')}</p></div></div></td>
+                      <td className="px-3 py-2"><b>{order.customer.name || 'Client'}</b><p className="max-w-[110px] truncate text-[7px] text-[#8d99ab]">{order.customer.email}</p></td>
+                      <td className="px-3 py-2"><OrderStatusPill status={order.status} /></td>
+                      <td className="px-3 py-2">{order.courier || 'Curier'}</td>
+                      <td className="px-4 py-2 text-right font-bold">{moneyFormat.format(Number(order.total || 0))} RON</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </DashboardReferenceCard>
+
+        <DashboardReferenceCard title="Tipuri comenzi" action={<button type="button" onClick={onOpenOrders} className="rounded-[7px] border border-[#dde3ec] px-3 py-1 text-[8px] font-bold">Detalii</button>}>
+          <div className="grid items-center gap-5 sm:grid-cols-[170px_1fr]">
+            <div className="relative mx-auto h-40 w-40 rounded-full" style={{ background: `conic-gradient(${donutGradient})` }}><span className="absolute inset-[25px] flex flex-col items-center justify-center rounded-full bg-white"><b className="text-[19px]">{numberFormat.format(visibleOrders.length)}</b><small className="text-[8px] text-[#8b97aa]">Total</small></span></div>
+            <div className="space-y-3">
+              {statusGroups.map((group) => <div key={group.label} className="grid grid-cols-[10px_1fr_34px_38px] items-center gap-2 text-[9px]"><i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: group.color }} /><span className="text-[#66748a]">{group.label}</span><b>{Math.round((group.count / statusTotal) * 100)}%</b><strong className="text-right">{group.count}</strong></div>)}
+            </div>
+          </div>
+        </DashboardReferenceCard>
+      </div>
+
+      <div className="grid gap-4 xl:min-h-[205px] xl:grid-cols-[0.85fr_1fr_1.3fr]">
+        <DashboardReferenceCard title="Stoc pe categorii" action={<button type="button" onClick={onOpenProducts} className="text-[8px] font-bold text-violet-600">Vezi raport</button>}>
+          <div className="space-y-3">
+            {categoryStock.map(([label, value]) => <div key={label} className="grid grid-cols-[82px_1fr_38px] items-center gap-2 text-[8px]"><span className="truncate">{label}</span><span className="h-2 rounded-full bg-[#edf0f5]"><i className="block h-2 rounded-full bg-violet-600" style={{ width: `${Math.max(4, (value / maxCategoryStock) * 100)}%` }} /></span><b className="text-right">{value}</b></div>)}
+            <p className="border-t border-[#edf0f4] pt-2 text-[8px] text-[#8d99ab]">{categories.filter((category) => category.parentId === null && category.isActive).length} categorii active</p>
+          </div>
+        </DashboardReferenceCard>
+
+        <DashboardReferenceCard title="Activitate recenta" action={<button type="button" onClick={onOpenOrders} className="text-[8px] font-bold text-violet-600">Vezi tot</button>}>
+          <div className="relative flex flex-1 flex-col justify-center gap-3 py-1">
+            <span className="absolute bottom-4 left-[4px] top-4 w-px bg-[#e3e8f0]" aria-hidden="true" />
+            {dashboardActivities.map((activity) => (
+              <div key={activity.text} className="relative z-[1] grid grid-cols-[10px_30px_minmax(0,1fr)] items-center gap-3">
+                <span
+                  className="h-[9px] w-[9px] rounded-full border-2 bg-white"
+                  style={{ borderColor: activity.color }}
+                  aria-hidden="true"
+                />
+                <span
+                  className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-white shadow-[0_4px_9px_rgba(32,48,74,0.12)]"
+                  style={{ backgroundColor: activity.background }}
+                >
+                  <DashboardReferenceIcon name={activity.icon} className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[9px] font-semibold leading-4 text-[#344159]" title={activity.text}>
+                    {activity.text}
+                  </p>
+                  <p className="text-[7px] leading-3 text-[#96a1b2]">{activity.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DashboardReferenceCard>
+
+        <DashboardReferenceCard title="Tendinte cheie">
+          <div className="grid h-full min-h-[130px] grid-cols-2 gap-y-4 xl:grid-cols-4 xl:gap-y-0">
+            {trends.map((trend, index) => (
+              <div
+                key={trend.label}
+                className={`flex min-w-0 flex-col px-4 first:pl-0 last:pr-0 ${
+                  index ? 'border-l border-[#e3e8f0]' : ''
+                }`}
+              >
+                <p className="truncate text-[8px] text-[#708096]">{trend.label}</p>
+                <b className="mt-1 block text-[17px] leading-none text-[#13203a]">{trend.value}</b>
+                <span className={`mt-2 text-[8px] font-bold ${trend.change.startsWith('-') ? 'text-rose-500' : 'text-emerald-600'}`}>
+                  {trend.change}
+                </span>
+                <DashboardSparkline
+                  values={dashboardTrendSeries(index + uniqueCustomers + 7, index + 5)}
+                  color={trend.color}
+                  className="mt-auto h-12 w-full pt-2"
+                />
+              </div>
+            ))}
+          </div>
+        </DashboardReferenceCard>
+      </div>
+    </div>
+  );
+}
+
+function dashboardTrendSeries(base: number, seed: number) {
+  return Array.from({ length: 14 }, (_, index) =>
+    Math.max(1, base * 0.55 + index * 0.7 + Math.sin((index + seed) * 1.65) * Math.max(base * 0.16, 1)),
+  );
+}
+
+function formatDashboardRelativeTime(value: string, now: number) {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return 'Recent';
+
+  const elapsedMinutes = Math.max(1, Math.floor((now - timestamp) / 60_000));
+  if (elapsedMinutes < 60) return `Acum ${elapsedMinutes} minute`;
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `Acum ${elapsedHours} ${elapsedHours === 1 ? 'ora' : 'ore'}`;
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `Acum ${elapsedDays} ${elapsedDays === 1 ? 'zi' : 'zile'}`;
+}
+
+function DashboardReferenceCard({
+  title,
+  action,
+  children,
+  compact = false,
+  className = '',
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  compact?: boolean;
+  className?: string;
+}) {
+  return (
+    <section className={`flex min-h-0 flex-col rounded-[14px] border border-[#dfe5ee] bg-white shadow-[0_3px_12px_rgba(30,48,80,0.05)] ${compact ? 'p-3' : 'p-4'} ${className}`}>
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+        <h2 className={`${compact ? 'text-[12px]' : 'text-[13px]'} font-bold`}>{title}</h2>
+        {action}
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+    </section>
+  );
+}
+
+function DashboardSparkline({ values, color, className = '' }: { values: number[]; color: string; className?: string }) {
+  const gradientId = `dashboard-sparkline-${useId().replaceAll(':', '')}`;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 1);
+  const points = values.map((value, index) => `${(index / Math.max(values.length - 1, 1)) * 120},${36 - ((value - min) / range) * 30}`).join(' ');
+  const areaPoints = `0,40 ${points} 120,40`;
+  return (
+    <svg viewBox="0 0 120 40" preserveAspectRatio="none" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="65%" stopColor={color} stopOpacity="0.09" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={areaPoints} fill={`url(#${gradientId})`} />
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DashboardReferenceIcon({ name, className = '' }: { name: string; className?: string }) {
+  const paths: Record<string, ReactNode> = {
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
+    plus: <path d="M12 5v14M5 12h14" />,
+    orders: <><path d="M7 3h10l2 3v15H5V6l2-3Z" /><path d="M8 10h8M8 14h8M8 18h5" /></>,
+    revenue: <><circle cx="12" cy="12" r="9" /><path d="M15 8.5c-.6-.7-1.6-1.2-3-1.2-1.7 0-3 .9-3 2.2 0 3.3 6 1.5 6 4.8 0 1.3-1.3 2.3-3.1 2.3-1.4 0-2.5-.5-3.2-1.3M12 5.5v13" /></>,
+    average: <><path d="M5 20V10M12 20V4M19 20v-7" /><path d="m4 8 5-4 4 3 7-5" /></>,
+    star: <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />,
+    upload: <><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 15v5h16v-5" /></>,
+    grid: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
+    external: <><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 13v7H4V6h7" /></>,
+    warning: <><path d="m12 3 10 18H2L12 3Z" /><path d="M12 9v5M12 18h.01" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v6l4 2" /></>,
+    image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m4 17 5-5 4 4 3-3 5 5" /></>,
+    cart: <><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L20.5 8H6" /><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></>,
+    package: <><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" /><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9M8 5.3l8 4.5" /></>,
+    user: <><circle cx="12" cy="8" r="3.5" /><path d="M5 21c.5-4 3-6 7-6s6.5 2 7 6" /></>,
+  };
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">{paths[name] ?? paths.orders}</svg>;
 }
 
 function DashboardOverview({
@@ -4392,6 +6739,196 @@ function ChatOverview({
   );
 }
 
+type EditorGlyphName =
+  | 'tag'
+  | 'details'
+  | 'categories'
+  | 'gallery'
+  | 'image'
+  | 'upload'
+  | 'eye'
+  | 'check'
+  | 'replace'
+  | 'trash';
+
+function EditorGlyph({
+  name,
+  className = 'h-5 w-5',
+}: {
+  name: EditorGlyphName;
+  className?: string;
+}) {
+  const paths: Record<EditorGlyphName, ReactNode> = {
+    tag: (
+      <>
+        <path d="M20 13.2 12.2 21a2 2 0 0 1-2.8 0L3 14.6a2 2 0 0 1 0-2.8L10.8 4H18a2 2 0 0 1 2 2v7.2Z" />
+        <path d="M15.5 8.5h.01" />
+      </>
+    ),
+    details: (
+      <>
+        <rect x="4" y="3" width="16" height="18" rx="4" />
+        <path d="M9 8h6M9 12h6M9 16h3" />
+      </>
+    ),
+    categories: (
+      <>
+        <rect x="4" y="5" width="7" height="6" rx="1.5" />
+        <rect x="13" y="13" width="7" height="6" rx="1.5" />
+        <path d="M7.5 11v3a2 2 0 0 0 2 2H13M7.5 5V3" />
+      </>
+    ),
+    gallery: (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="3" />
+        <circle cx="9" cy="10" r="1.5" />
+        <path d="m5.5 17 4-4 3 3 2.5-2.5 3.5 3.5" />
+      </>
+    ),
+    image: (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="2.5" />
+        <circle cx="9" cy="10" r="1.5" />
+        <path d="m4.5 17 4.5-4 3.5 3 2.5-2 4.5 3.5" />
+      </>
+    ),
+    upload: (
+      <>
+        <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5" />
+        <path d="M5 13.5H4a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3.5a2 2 0 0 0-2-2h-1" />
+      </>
+    ),
+    eye: (
+      <>
+        <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </>
+    ),
+    check: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="m8 12 2.5 2.5L16 9" />
+      </>
+    ),
+    replace: (
+      <>
+        <path d="M20 7h-5V2M4 17h5v5" />
+        <path d="M18.5 10A7 7 0 0 0 6.2 6.2L4 8M5.5 14A7 7 0 0 0 17.8 17.8L20 16" />
+      </>
+    ),
+    trash: (
+      <>
+        <path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6" />
+      </>
+    ),
+  };
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {paths[name]}
+    </svg>
+  );
+}
+
+function ProductEditorCard({ children }: { children: ReactNode }) {
+  return (
+    <section className="product-editor-card rounded-[14px] border border-[#e1e7ef] bg-white p-3 shadow-[0_4px_14px_rgba(31,42,68,0.07)]">
+      {children}
+    </section>
+  );
+}
+
+function ProductEditorSectionHeader({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: Extract<EditorGlyphName, 'details' | 'categories' | 'gallery'>;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-violet-200 bg-violet-50 text-violet-600">
+          <EditorGlyph name={icon} className="h-[19px] w-[19px]" />
+        </span>
+        <div>
+          <h2 className="product-editor-section-title text-[14px] font-bold leading-5 text-[#17213a]">{title}</h2>
+          <p className="product-editor-section-description mt-0.5 text-[11px] text-[#6b7890]">{description}</p>
+        </div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function ProductEditorField({
+  label,
+  children,
+  className = '',
+}: {
+  label: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block min-w-0 ${className}`}>
+      <span className="product-editor-field-label mb-1 flex items-center gap-2 text-[11px] font-semibold text-[#43516a]">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function ProductEditorInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`product-editor-control h-8 w-full rounded-[8px] border border-[#d8e0eb] bg-white px-3 text-[12px] text-[#17213a] shadow-[0_1px_3px_rgba(31,42,68,0.06)] outline-none transition placeholder:text-[#98a5b9] focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:border-[#dce3ec] disabled:bg-[#f1f4f8] ${props.className ?? ''}`}
+    />
+  );
+}
+
+function ProductEditorTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`product-editor-control product-editor-textarea w-full resize-y rounded-[8px] border border-[#d8e0eb] bg-white px-3 py-2.5 text-[12px] text-[#17213a] shadow-[0_1px_3px_rgba(31,42,68,0.06)] outline-none transition placeholder:text-[#98a5b9] focus:border-violet-400 focus:ring-2 focus:ring-violet-100 ${props.className ?? ''}`}
+    />
+  );
+}
+
+function ProductEditorSelect(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`product-editor-control h-8 w-full cursor-pointer rounded-[8px] border border-[#d8e0eb] bg-white px-3 text-[12px] text-[#17213a] shadow-[0_1px_3px_rgba(31,42,68,0.06)] outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-[#f1f4f8] ${props.className ?? ''}`}
+    />
+  );
+}
+
+function PreviewDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <span className="shrink-0 text-[#71809a]">{label}</span>
+      <span className="min-w-0 truncate text-right font-medium text-[#25324b]" title={value}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 function DashboardCard({
   children,
   className = '',
@@ -4431,12 +6968,28 @@ function DashboardSection({
   );
 }
 
-function DashboardField({ label, children }: { label: string; children: ReactNode }) {
+function DashboardField({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <label className="space-y-2">
-      <span className="text-sm font-semibold text-slate-700">{label}</span>
+      <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">{label}</span>
       {children}
     </label>
+  );
+}
+
+function FieldLabelWithHint({ label, hint }: { label: string; hint: string }) {
+  return (
+    <>
+      <span>{label}</span>
+      <span className="group relative inline-flex items-center">
+        <span className="flex h-5 w-5 cursor-help items-center justify-center rounded-full border border-slate-300 text-[11px] font-bold text-slate-500 transition group-hover:border-violet-300 group-hover:text-violet-600">
+          !
+        </span>
+        <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-64 -translate-x-1/2 rounded-2xl bg-slate-900 px-3 py-2 text-xs font-medium leading-5 text-white opacity-0 shadow-xl transition group-hover:opacity-100">
+          {hint}
+        </span>
+      </span>
+    </>
   );
 }
 
@@ -4444,7 +6997,7 @@ function DashboardInput(props: React.ComponentProps<typeof Input>) {
   return (
     <Input
       {...props}
-      className={`h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm shadow-none focus-visible:ring-violet-500 ${props.className ?? ''}`}
+      className={`h-12 rounded-2xl border-slate-200 bg-white px-4 text-sm shadow-none focus-visible:ring-violet-500 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none ${props.className ?? ''}`}
     />
   );
 }

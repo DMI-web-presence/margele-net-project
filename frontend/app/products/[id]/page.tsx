@@ -78,15 +78,20 @@ type ProductOptionValue = {
 };
 
 type ProductVariant = {
+  id?: number;
   optionName: string;
   optionValue: string;
+  optionValues?: Record<string, string> | null;
   legacyOptionValueId?: number | null;
   combinationId?: string | null;
   model?: string | null;
   sku?: string | null;
+  variantPrice?: number | string | null;
   priceDelta?: number | string | null;
   pricePrefix?: string | null;
   quantity?: number;
+  imageUrl?: string | null;
+  isActive?: boolean;
 };
 
 const normalizeOptions = (product: Product): ProductOption[] => {
@@ -106,13 +111,7 @@ const normalizeOptions = (product: Product): ProductOption[] => {
           legacyOptionValueId: item.legacyOptionValueId ?? null,
         }))
         .filter((item) => item.value);
-      const isColorOption = name.toLowerCase().includes('culoare');
-      const hasImageChoices = valueDetails.some((item) => item.imageUrl);
-      const visibleValueDetails = isColorOption && hasImageChoices
-        ? valueDetails.filter((item) => item.imageUrl)
-        : isColorOption
-          ? []
-        : valueDetails;
+      const visibleValueDetails = valueDetails;
       const values =
         visibleValueDetails.length > 0
           ? visibleValueDetails.map((item) => item.value)
@@ -124,7 +123,7 @@ const normalizeOptions = (product: Product): ProductOption[] => {
         valueDetails: visibleValueDetails,
       };
     })
-    .filter((option) => option.name && option.values.length > 0 && option.valueDetails.length > 0);
+    .filter((option) => option.name && option.values.length > 0);
 
   if (options.length > 0) {
     return options;
@@ -298,8 +297,20 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
     (similarByCategory.length > 0 ? similarByCategory : similarFallback).slice(0, 9);
   const purchaseOptionGroups = getPurchaseOptionGroups(product);
   const categoryBreadcrumbs = getCategoryBreadcrumbs(product, categories);
+  const combinationVariants = (product.variants || []).filter(
+    (variant) =>
+      variant.isActive !== false &&
+      variant.optionValues &&
+      Object.keys(variant.optionValues).length > 0,
+  );
   const availabilityLabel =
-    product.stockQuantity === undefined || product.stockQuantity > 0 ? 'In stoc' : 'Stoc epuizat';
+    combinationVariants.length > 0
+      ? combinationVariants.some((variant) => Number(variant.quantity || 0) > 0)
+        ? 'In stoc'
+        : 'Stoc epuizat'
+      : product.stockQuantity === undefined || product.stockQuantity > 0
+        ? 'In stoc'
+        : 'Stoc epuizat';
   const productCode = product.sku || `MGL-${String(product.id).padStart(4, '0')}`;
   const materialText = toPlainText(product.material || product.description) || 'Material premium';
 

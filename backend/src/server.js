@@ -6,6 +6,7 @@ const path = require('path');
 const { URL } = require('url');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { Pool } = require('pg');
+const sharp = require('sharp');
 const { createBrevoMailer } = require('./services/brevo-mail');
 
 loadEnv(path.join(__dirname, '..', '.env'));
@@ -130,6 +131,12 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && requestUrl.pathname === '/admin/categories') {
       await handleAdminCategoryCreate(req, res);
+      return;
+    }
+
+    const adminCategoryMatch = requestUrl.pathname.match(/^\/admin\/categories\/(\d+)$/);
+    if (adminCategoryMatch && req.method === 'DELETE') {
+      await handleAdminCategoryDelete(req, res, Number(adminCategoryMatch[1]));
       return;
     }
 
@@ -471,21 +478,33 @@ async function handleAdminProductImageUpload(req, res) {
     return;
   }
 
-  if (fileBuffer.length > 6 * 1024 * 1024) {
-    sendJson(res, 400, { message: 'Imaginea este prea mare. Limita este 6 MB.' });
+  if (fileBuffer.length > 10 * 1024 * 1024) {
+    sendJson(res, 400, { message: 'Imaginea este prea mare. Limita este 10 MB.' });
+    return;
+  }
+
+  let optimizedFileBuffer;
+  try {
+    optimizedFileBuffer = await convertProductImageToJpeg(fileBuffer);
+  } catch {
+    sendJson(res, 400, { message: 'Fisierul incarcat nu este o imagine valida.' });
     return;
   }
 
   const safeBaseName = slugifyFileName(path.parse(fileName).name || 'produs');
-  const extension = mimeTypeToExtension(mimeType);
   const storageResult = await storeProductImage({
-    fileBuffer,
-    mimeType,
-    extension,
+    fileBuffer: optimizedFileBuffer,
+    mimeType: 'image/jpeg',
+    extension: 'jpg',
     safeBaseName,
   });
 
-  sendJson(res, 201, storageResult);
+  sendJson(res, 201, {
+    ...storageResult,
+    width: 1200,
+    height: 1200,
+    mimeType: 'image/jpeg',
+  });
 }
 
 function slugifyFileName(value) {
@@ -498,11 +517,24 @@ function slugifyFileName(value) {
     .slice(0, 80) || 'produs';
 }
 
-function mimeTypeToExtension(mimeType) {
-  if (mimeType === 'image/png') return 'png';
-  if (mimeType === 'image/webp') return 'webp';
-  if (mimeType === 'image/gif') return 'gif';
-  return 'jpg';
+async function convertProductImageToJpeg(fileBuffer) {
+  return sharp(fileBuffer, {
+    failOn: 'error',
+    limitInputPixels: 100_000_000,
+  })
+    .rotate()
+    .resize(1200, 1200, {
+      fit: 'contain',
+      position: 'centre',
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    })
+    .flatten({ background: '#ffffff' })
+    .jpeg({
+      quality: 90,
+      progressive: true,
+      mozjpeg: true,
+    })
+    .toBuffer();
 }
 
 function getMimeTypeForPath(filePath) {
@@ -653,6 +685,56 @@ async function handleProductList(requestUrl, res) {
         p.category_id,
         c.name AS category_name,
         c.slug AS category_slug,
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', linked_category.id,
+                'name', linked_category.name,
+                'slug', linked_category.slug,
+                'isPrimary', product_category.is_primary
+              )
+              ORDER BY product_category.is_primary DESC, linked_category.sort_order ASC, linked_category.name ASC
+            )
+            FROM product_categories product_category
+            JOIN categories linked_category ON linked_category.id = product_category.category_id
+            WHERE product_category.product_id = p.id
+          ),
+          '[]'::jsonb
+        ) AS categories,
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'key', pa.attribute_key,
+                'value', pa.attribute_value,
+                'sortOrder', pa.sort_order
+              )
+              ORDER BY pa.sort_order ASC, pa.id ASC
+            )
+            FROM product_attributes pa
+            WHERE pa.product_id = p.id
+          ),
+          '[]'::jsonb
+        ) AS attributes,
+        COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'optionName', pov.option_name,
+                'optionValue', pov.option_value,
+                'optionValues', pov.option_values,
+                'quantity', pov.quantity,
+                'isActive', pov.is_active,
+                'sortOrder', pov.sort_order
+              )
+              ORDER BY pov.sort_order ASC, pov.id ASC
+            )
+            FROM product_option_values pov
+            WHERE pov.product_id = p.id
+          ),
+          '[]'::jsonb
+        ) AS variants,
         p.created_at
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
@@ -771,12 +853,15 @@ async function handleProductList(requestUrl, res) {
           'legacyOptionId', pov.legacy_option_id,
           'legacyOptionValueId', pov.legacy_option_value_id,
           'combinationId', pov.combination_id,
+          'optionValues', pov.option_values,
           'model', pov.model,
           'sku', pov.sku,
           'quantity', pov.quantity,
+          'variantPrice', pov.variant_price,
           'priceDelta', pov.price_delta,
           'pricePrefix', pov.price_prefix,
           'imageUrl', pov.image_url,
+          'isActive', pov.is_active,
           'sortOrder', pov.sort_order
         )
         ORDER BY pov.sort_order ASC, pov.id ASC
@@ -867,12 +952,15 @@ async function handleProductDetails(res, productIdentifier) {
               'legacyOptionId', pov.legacy_option_id,
               'legacyOptionValueId', pov.legacy_option_value_id,
               'combinationId', pov.combination_id,
+              'optionValues', pov.option_values,
               'model', pov.model,
               'sku', pov.sku,
               'quantity', pov.quantity,
+              'variantPrice', pov.variant_price,
               'priceDelta', pov.price_delta,
               'pricePrefix', pov.price_prefix,
               'imageUrl', pov.image_url,
+              'isActive', pov.is_active,
               'sortOrder', pov.sort_order
             )
           ) FILTER (WHERE pov.id IS NOT NULL),
@@ -1071,6 +1159,81 @@ async function handleAdminCategoryCreate(req, res) {
   sendJson(res, 201, categoryResponse(createdCategory));
 }
 
+async function handleAdminCategoryDelete(req, res, categoryId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('categories'))) {
+    sendJson(res, 501, { message: 'Tabela de categorii nu este disponibila.' });
+    return;
+  }
+
+  const deletedCategory = await withTransaction(async (client) => {
+    const categoryResult = await client.query(
+      `
+        SELECT
+          c.id,
+          c.name,
+          c.parent_id,
+          (
+            SELECT COUNT(*)::int
+            FROM categories child
+            WHERE child.parent_id = c.id
+          ) AS subcategory_count,
+          (
+            SELECT COUNT(DISTINCT p.id)::int
+            FROM products p
+            LEFT JOIN product_categories pc ON pc.product_id = p.id
+            WHERE p.category_id = c.id OR pc.category_id = c.id
+          ) AS product_count
+        FROM categories c
+        WHERE c.id = $1
+        LIMIT 1
+      `,
+      [categoryId],
+    );
+
+    if (categoryResult.rowCount === 0) {
+      const error = new Error('Categoria nu a fost gasita.');
+      error.status = 404;
+      throw error;
+    }
+
+    const category = categoryResult.rows[0];
+    if (Number(category.subcategory_count || 0) > 0) {
+      const error = new Error('Categoria nu poate fi stearsa deoarece are subcategorii.');
+      error.status = 409;
+      throw error;
+    }
+
+    if (Number(category.product_count || 0) > 0) {
+      const error = new Error('Categoria nu poate fi stearsa deoarece este folosita de produse.');
+      error.status = 409;
+      throw error;
+    }
+
+    const deleted = await client.query(
+      'DELETE FROM categories WHERE id = $1 RETURNING id, name, parent_id',
+      [categoryId],
+    );
+
+    return deleted.rows[0];
+  }).catch((error) => {
+    if (error.code === '23503') {
+      const conflict = new Error('Categoria nu poate fi stearsa deoarece este folosita de alte inregistrari.');
+      conflict.status = 409;
+      throw conflict;
+    }
+    throw error;
+  });
+
+  sendJson(res, 200, {
+    id: deletedCategory.id,
+    name: deletedCategory.name || '',
+    parentId: deletedCategory.parent_id ?? null,
+  });
+}
+
 async function handleAdminProductList(req, requestUrl, res) {
   const user = await requireAdmin(req, res);
   if (!user) return;
@@ -1111,6 +1274,7 @@ async function handleAdminProductCreate(req, res) {
 
   const product = await withTransaction(async (client) => {
     const slug = await ensureUniqueProductSlug(client, input.slug || input.name, null);
+    const sku = await ensureUniqueProductSku(client, input.sku || input.slug || input.name, null);
     const inserted = await insertRowWithClient(client, 'products', {
       name: input.name,
       slug,
@@ -1119,7 +1283,7 @@ async function handleAdminProductCreate(req, res) {
       price: input.price,
       compare_at_price: input.compareAtPrice,
       currency: input.currency,
-      sku: input.sku,
+      sku,
       stock_quantity: input.stockQuantity,
       status: input.status,
       image_url: input.imageUrl,
@@ -1151,6 +1315,9 @@ async function handleAdminProductUpdate(req, res, productId) {
 
   const product = await withTransaction(async (client) => {
     const slug = await ensureUniqueProductSlug(client, input.slug || input.name, productId);
+    const sku = input.sku
+      ? await ensureUniqueProductSku(client, input.sku, productId)
+      : existing.sku || await ensureUniqueProductSku(client, input.slug || input.name, productId);
     const updated = await updateRowWithClient(client, 'products', productId, {
       name: input.name,
       slug,
@@ -1159,7 +1326,7 @@ async function handleAdminProductUpdate(req, res, productId) {
       price: input.price,
       compare_at_price: input.compareAtPrice,
       currency: input.currency,
-      sku: input.sku,
+      sku,
       stock_quantity: input.stockQuantity,
       status: input.status,
       image_url: input.imageUrl,
@@ -1446,6 +1613,7 @@ async function adminOrderSelectSql() {
           jsonb_build_object(
             'id', oi.id,
             'productId', oi.product_id,
+            'variantId', oi.variant_id,
             'productName', oi.product_name,
             'productImageUrl', oi.product_image_url,
             'sku', oi.sku,
@@ -1791,12 +1959,15 @@ function adminProductSelectSql() {
           'legacyOptionId', pov.legacy_option_id,
           'legacyOptionValueId', pov.legacy_option_value_id,
           'combinationId', pov.combination_id,
+          'optionValues', pov.option_values,
           'model', pov.model,
           'sku', pov.sku,
           'quantity', pov.quantity,
+          'variantPrice', pov.variant_price,
           'priceDelta', pov.price_delta,
           'pricePrefix', pov.price_prefix,
           'imageUrl', pov.image_url,
+          'isActive', pov.is_active,
           'sortOrder', pov.sort_order
         )
         ORDER BY pov.sort_order ASC, pov.id ASC
@@ -1909,10 +2080,12 @@ function normalizeAdminAttributes(attributes) {
 function normalizeAdminVariants(variants) {
   if (!Array.isArray(variants)) return [];
 
-  return variants
+  const normalizedVariants = variants
     .map((variant, index) => {
-      const optionName = String(variant?.optionName || '').trim();
-      const optionValue = String(variant?.optionValue || '').trim();
+      const optionValues = normalizeVariantOptionValues(variant?.optionValues);
+      const firstOption = Object.entries(optionValues)[0];
+      const optionName = String(firstOption?.[0] || variant?.optionName || '').trim();
+      const optionValue = String(firstOption?.[1] || variant?.optionValue || '').trim();
       if (!optionName || !optionValue) return null;
 
       const pricePrefix = String(variant?.pricePrefix || '+').trim();
@@ -1928,16 +2101,53 @@ function normalizeAdminVariants(variants) {
         legacyOptionId: normalizeNullableInteger(variant?.legacyOptionId),
         legacyOptionValueId: normalizeNullableInteger(variant?.legacyOptionValueId),
         combinationId: cleanOptionalValue(variant?.combinationId),
+        optionValues,
         model: cleanOptionalValue(variant?.model),
         sku: cleanOptionalValue(variant?.sku),
         quantity: normalizeWholeNumber(variant?.quantity ?? 0, 'Cantitatea variantei trebuie sa fie numar intreg.'),
+        variantPrice: normalizeNullableMoney(variant?.variantPrice),
         priceDelta: normalizeMoneyInput(variant?.priceDelta ?? 0, 'Diferenta de pret a variantei nu este valida.'),
         pricePrefix,
         imageUrl: cleanOptionalValue(variant?.imageUrl),
+        isActive: variant?.isActive !== false,
         sortOrder: normalizeWholeNumber(variant?.sortOrder ?? index, 'Ordinea variantelor trebuie sa fie numar intreg.'),
       };
     })
     .filter(Boolean);
+
+  const seenCombinations = new Set();
+  for (const variant of normalizedVariants) {
+    if (Object.keys(variant.optionValues).length === 0) continue;
+    const combinationKey = variantOptionKey(variant.optionValues);
+    if (seenCombinations.has(combinationKey)) {
+      const error = new Error('Aceeasi combinatie de optiuni apare de mai multe ori.');
+      error.status = 400;
+      throw error;
+    }
+    seenCombinations.add(combinationKey);
+  }
+
+  return normalizedVariants;
+}
+
+function normalizeVariantOptionValues(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([name, optionValue]) => [
+        String(name || '').trim(),
+        String(optionValue || '').trim(),
+      ])
+      .filter(([name, optionValue]) => name && optionValue),
+  );
+}
+
+function variantOptionKey(optionValues) {
+  return Object.entries(normalizeVariantOptionValues(optionValues))
+    .map(([name, value]) => `${normalizeOptionText(name)}=${normalizeOptionText(value)}`)
+    .sort()
+    .join('|');
 }
 
 async function assertCategoryIdsExist(categoryIds) {
@@ -1958,7 +2168,7 @@ async function syncProductRelations(client, productId, input) {
   await syncProductCategories(client, productId, input.categoryIds);
   await syncProductImages(client, productId, input.images, input.imageUrl);
   await syncProductAttributes(client, productId, input.attributes);
-  await syncProductVariants(client, productId, input.variants);
+  await syncProductVariants(client, productId, input.variants, input.sku);
 }
 
 async function syncProductCategories(client, productId, categoryIds) {
@@ -2008,10 +2218,20 @@ async function syncProductAttributes(client, productId, attributes) {
   }
 }
 
-async function syncProductVariants(client, productId, variants) {
+async function syncProductVariants(client, productId, variants, productSku) {
   await client.query('DELETE FROM product_option_values WHERE product_id = $1', [productId]);
 
   for (const variant of variants) {
+    const optionSku = Object.values(variant.optionValues)
+      .map((value) => skuify(value))
+      .filter(Boolean)
+      .join('-');
+    const sku = await ensureUniqueVariantSku(
+      client,
+      variant.sku || `${productSku || `MGL-${productId}`}-${optionSku || variant.sortOrder + 1}`,
+      productId,
+    );
+
     await client.query(
       `
         INSERT INTO product_option_values (
@@ -2021,16 +2241,19 @@ async function syncProductVariants(client, productId, variants) {
           legacy_option_id,
           legacy_option_value_id,
           combination_id,
+          option_values,
           model,
           sku,
           quantity,
+          variant_price,
           price_delta,
           price_prefix,
           image_url,
+          is_active,
           sort_order,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP)
       `,
       [
         productId,
@@ -2039,15 +2262,43 @@ async function syncProductVariants(client, productId, variants) {
         variant.legacyOptionId,
         variant.legacyOptionValueId,
         variant.combinationId,
+        JSON.stringify(variant.optionValues),
         variant.model,
-        variant.sku,
+        sku,
         variant.quantity,
+        variant.variantPrice,
         variant.priceDelta,
         variant.pricePrefix,
         variant.imageUrl,
+        variant.isActive,
         variant.sortOrder,
       ],
     );
+  }
+}
+
+async function ensureUniqueVariantSku(db, rawValue, productId) {
+  const base = skuify(rawValue) || `MGL-${productId}-${Date.now()}`;
+  let candidate = base;
+  let counter = 2;
+
+  while (true) {
+    const result = await db.query(
+      `
+        SELECT 1
+        FROM products
+        WHERE sku = $1
+        UNION ALL
+        SELECT 1
+        FROM product_option_values
+        WHERE sku = $1
+        LIMIT 1
+      `,
+      [candidate],
+    );
+    if (result.rowCount === 0) return candidate;
+    candidate = `${base}-${counter}`;
+    counter += 1;
   }
 }
 
@@ -2059,6 +2310,28 @@ async function ensureUniqueProductSlug(db, rawValue, excludeProductId) {
   while (true) {
     const values = [candidate];
     let sql = 'SELECT id FROM products WHERE slug = $1';
+    if (excludeProductId) {
+      values.push(excludeProductId);
+      sql += ' AND id <> $2';
+    }
+    sql += ' LIMIT 1';
+
+    const result = await db.query(sql, values);
+    if (result.rowCount === 0) return candidate;
+
+    candidate = `${base}-${counter}`;
+    counter += 1;
+  }
+}
+
+async function ensureUniqueProductSku(db, rawValue, excludeProductId) {
+  const base = skuify(rawValue) || `MGL-${Date.now()}`;
+  let candidate = base;
+  let counter = 2;
+
+  while (true) {
+    const values = [candidate];
+    let sql = 'SELECT id FROM products WHERE sku = $1';
     if (excludeProductId) {
       values.push(excludeProductId);
       sql += ' AND id <> $2';
@@ -2561,6 +2834,7 @@ async function handleOrderCreate(req, res) {
           INSERT INTO order_items (
             order_id,
             product_id,
+            variant_id,
             product_name,
             product_image_url,
             sku,
@@ -2569,12 +2843,13 @@ async function handleOrderCreate(req, res) {
             quantity,
             line_total
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           RETURNING *
         `,
         [
           order.id,
           item.product_id,
+          item.variant_id,
           item.product_name,
           item.product_image_url,
           item.sku,
@@ -2672,6 +2947,7 @@ async function handleNetopiaPaymentStart(req, res) {
           INSERT INTO order_items (
             order_id,
             product_id,
+            variant_id,
             product_name,
             product_image_url,
             sku,
@@ -2680,12 +2956,13 @@ async function handleNetopiaPaymentStart(req, res) {
             quantity,
             line_total
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           RETURNING *
         `,
         [
           order.id,
           item.product_id,
+          item.variant_id,
           item.product_name,
           item.product_image_url,
           item.sku,
@@ -3131,9 +3408,27 @@ async function buildTrustedOrderItems(rawItems) {
 
     const requestedSku = cleanOptionalValue(productInput.sku || item.sku);
     const selectedOptions = cleanOptionalValue(productInput.selectedSize || item.selectedSize);
-    const selectedVariant = findVariantForCartLine(product.variants, requestedSku, selectedOptions);
-    if ((requestedSku || selectedOptions || productRequiresVariantSelection(product)) && !selectedVariant) {
+    const requestedVariantId = normalizeInteger(productInput.variantId || item.variantId || item.variant_id);
+    const selectedVariant = findVariantForCartLine(
+      product.variants,
+      requestedSku,
+      selectedOptions,
+      requestedVariantId,
+    );
+    if (
+      (requestedVariantId || requestedSku || selectedOptions || productRequiresVariantSelection(product)) &&
+      !selectedVariant
+    ) {
       const error = new Error(`Selectia pentru produsul "${product.name}" nu mai este valida.`);
+      error.status = 400;
+      throw error;
+    }
+    if (
+      selectedVariant &&
+      Object.keys(normalizeVariantOptionValues(selectedVariant.optionValues)).length > 0 &&
+      Number(selectedVariant.quantity || 0) < quantity
+    ) {
+      const error = new Error(`Stoc insuficient pentru varianta selectata a produsului "${product.name}".`);
       error.status = 400;
       throw error;
     }
@@ -3143,6 +3438,7 @@ async function buildTrustedOrderItems(rawItems) {
 
     orderItems.push({
       product_id: product.id,
+      variant_id: selectedVariant?.id || null,
       product_name: product.name,
       product_image_url: cleanOptionalValue(productInput.imageUrl) || product.imageUrl,
       sku: selectedVariant?.sku || product.sku || requestedSku || null,
@@ -3170,16 +3466,20 @@ async function getCheckoutProducts(productIds) {
         COALESCE(
           jsonb_agg(
             jsonb_build_object(
+              'id', pov.id,
               'optionName', pov.option_name,
               'optionValue', pov.option_value,
               'legacyOptionValueId', pov.legacy_option_value_id,
               'combinationId', pov.combination_id,
+              'optionValues', pov.option_values,
               'model', pov.model,
               'sku', pov.sku,
               'quantity', pov.quantity,
+              'variantPrice', pov.variant_price,
               'priceDelta', pov.price_delta,
               'pricePrefix', pov.price_prefix,
               'imageUrl', pov.image_url,
+              'isActive', pov.is_active,
               'sortOrder', pov.sort_order
             )
             ORDER BY pov.sort_order ASC, pov.id ASC
@@ -3218,9 +3518,14 @@ async function getCheckoutProducts(productIds) {
   );
 }
 
-function findVariantForCartLine(variants, requestedSku, selectedOptions) {
+function findVariantForCartLine(variants, requestedSku, selectedOptions, requestedVariantId) {
   const availableVariants = variants.filter(variantIsAvailableForCheckout);
   const candidates = availableVariants.length > 0 ? availableVariants : variants;
+  if (requestedVariantId) {
+    const idMatch = candidates.find((variant) => Number(variant.id) === requestedVariantId);
+    if (idMatch) return idMatch;
+  }
+
   const sku = String(requestedSku || '').trim();
   if (sku) {
     const skuMatch = findBestCheckoutVariant(candidates, (variant) => String(variant.sku || '').trim() === sku);
@@ -3229,6 +3534,21 @@ function findVariantForCartLine(variants, requestedSku, selectedOptions) {
 
   const selectedOptionPairs = parseSelectedOptionPairs(selectedOptions);
   if (selectedOptionPairs.length === 0) return null;
+
+  const exactCombination = findBestCheckoutVariant(candidates, (variant) => {
+    const optionValues = normalizeVariantOptionValues(variant.optionValues);
+    if (Object.keys(optionValues).length === 0) return false;
+
+    return selectedOptionPairs.every(
+      ({ name, value }) =>
+        Object.entries(optionValues).some(
+          ([optionName, optionValue]) =>
+            normalizeOptionText(optionName) === name &&
+            normalizeOptionText(optionValue) === value,
+        ),
+    );
+  });
+  if (exactCombination) return exactCombination;
 
   const selectedOptionVariants = selectedOptionPairs
     .map(({ name, value }) =>
@@ -3314,7 +3634,10 @@ function variantHasCheckoutCode(variant) {
 }
 
 function variantIsAvailableForCheckout(variant) {
-  return variant.quantity === undefined || variant.quantity === null || Number(variant.quantity) > 0;
+  return (
+    variant.isActive !== false &&
+    (variant.quantity === undefined || variant.quantity === null || Number(variant.quantity) > 0)
+  );
 }
 
 function productRequiresVariantSelection(product) {
@@ -3323,6 +3646,12 @@ function productRequiresVariantSelection(product) {
   const finalSkus = new Set();
 
   for (const variant of variants.filter(variantIsAvailableForCheckout)) {
+    const combinationOptions = normalizeVariantOptionValues(variant.optionValues);
+    for (const [optionName, optionValue] of Object.entries(combinationOptions)) {
+      if (!optionValuesByName.has(optionName)) optionValuesByName.set(optionName, new Set());
+      optionValuesByName.get(optionName).add(optionValue);
+    }
+
     const optionName = String(variant.optionName || '').trim();
     const optionValue = String(variant.optionValue || '').trim();
     if (optionName && optionValue) {
@@ -3344,6 +3673,11 @@ function productRequiresVariantSelection(product) {
 function applyCheckoutVariantPrice(basePrice, variant) {
   const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
   if (!variant) return safeBasePrice;
+
+  const variantPrice = Number(variant.variantPrice);
+  if (variant.variantPrice !== null && variant.variantPrice !== undefined && Number.isFinite(variantPrice)) {
+    return Math.max(0, variantPrice);
+  }
 
   const priceDelta = Number(variant.priceDelta ?? 0);
   if (!Number.isFinite(priceDelta)) return safeBasePrice;
@@ -3733,6 +4067,7 @@ function adminOrderResponse(order) {
   const items = normalizeJsonArray(order.items).map((item) => ({
     id: item.id,
     productId: item.productId ?? item.product_id ?? null,
+    variantId: item.variantId ?? item.variant_id ?? null,
     productName: item.productName || item.product_name || '',
     productImageUrl: item.productImageUrl || item.product_image_url || '',
     sku: item.sku || null,
@@ -3771,6 +4106,7 @@ function orderItemResponse(item) {
   return {
     id: item.id,
     productId: item.product_id,
+    variantId: item.variant_id ?? null,
     productName: item.product_name || '',
     productImageUrl: item.product_image_url || '',
     sku: item.sku || null,
@@ -3824,6 +4160,10 @@ function productResponse(product) {
 }
 
 function productCardResponse(product) {
+  const categories = normalizeJsonArray(product.categories);
+  const attributes = normalizeJsonArray(product.attributes);
+  const variants = normalizeJsonArray(product.variants);
+
   return {
     id: product.id,
     name: product.name || '',
@@ -3844,6 +4184,9 @@ function productCardResponse(product) {
             slug: product.category_slug || '',
           }
         : null,
+    categories,
+    attributes,
+    options: productOptionsFromVariants(variants, attributes),
     createdAt: product.created_at || product.createdAt || null,
   };
 }
@@ -3998,28 +4341,28 @@ function productOptionsFromVariants(variants, attributes) {
   const optionMap = new Map();
 
   for (const variant of variants) {
+    const combinationOptions = normalizeVariantOptionValues(variant.optionValues);
+    if (Object.keys(combinationOptions).length > 0) {
+      const optionNames = Object.keys(combinationOptions);
+      const imageOptionName =
+        optionNames.find((name) => normalizeOptionText(name).includes('culoare')) ||
+        optionNames.find((name) => normalizeOptionText(name).includes('color')) ||
+        optionNames[0];
+
+      for (const [name, value] of Object.entries(combinationOptions)) {
+        addProductOptionValue(optionMap, name, value, {
+          ...variant,
+          imageUrl: name === imageOptionName ? variant.imageUrl : null,
+        });
+      }
+      continue;
+    }
+
     const name = String(variant.optionName || '').trim();
     const value = String(variant.optionValue || '').trim();
     if (!name || !value) continue;
 
-    if (!optionMap.has(name)) {
-      optionMap.set(name, new Map());
-    }
-
-    const values = optionMap.get(name);
-    const current = values.get(value);
-    const candidate = {
-      value,
-      imageUrl: variant.imageUrl || null,
-      swatchColor: swatchColorForValue(value),
-      quantity: Number(variant.quantity || 0),
-      sortOrder: Number(variant.sortOrder || 0),
-      legacyOptionValueId: variant.legacyOptionValueId ?? null,
-    };
-
-    if (!current || (!current.imageUrl && candidate.imageUrl)) {
-      values.set(value, candidate);
-    }
+    addProductOptionValue(optionMap, name, value, variant);
   }
 
   return Array.from(optionMap.entries()).map(([name, values]) => {
@@ -4033,6 +4376,27 @@ function productOptionsFromVariants(variants, attributes) {
       valueDetails,
     };
   });
+}
+
+function addProductOptionValue(optionMap, name, value, variant) {
+  if (!optionMap.has(name)) {
+    optionMap.set(name, new Map());
+  }
+
+  const values = optionMap.get(name);
+  const current = values.get(value);
+  const candidate = {
+    value,
+    imageUrl: variant.imageUrl || null,
+    swatchColor: swatchColorForValue(value),
+    quantity: Number(variant.quantity || 0),
+    sortOrder: Number(variant.sortOrder || 0),
+    legacyOptionValueId: variant.legacyOptionValueId ?? null,
+  };
+
+  if (!current || (!current.imageUrl && candidate.imageUrl)) {
+    values.set(value, candidate);
+  }
 }
 
 function swatchColorForValue(value) {
@@ -4350,6 +4714,16 @@ function slugify(value) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 255);
+}
+
+function skuify(value) {
+  const normalized = slugify(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return normalized.slice(0, 80);
 }
 
 function normalizeMoneyInput(value, message) {

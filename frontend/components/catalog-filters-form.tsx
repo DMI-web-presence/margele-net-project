@@ -126,31 +126,6 @@ export default function CatalogFiltersForm({
           </select>
         </div>
 
-        <div className="space-y-2">
-          <label htmlFor="catalog-sort" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            Sortare
-          </label>
-          <select
-            id="catalog-sort"
-            name="sort"
-            value={selectedSort}
-            onChange={(event) => {
-              const form = event.currentTarget.form;
-              const nextSort = event.target.value;
-
-              flushSync(() => setSelectedSort(nextSort));
-              form?.requestSubmit();
-            }}
-            className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
-          >
-            {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {selectedGroup.children.length > 0 ? (
           <div className="space-y-2">
             <label htmlFor="catalog-subcategory" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
@@ -180,6 +155,31 @@ export default function CatalogFiltersForm({
         ) : (
           <input type="hidden" name="subcategory" value="Toate" />
         )}
+
+        <div className="space-y-2">
+          <label htmlFor="catalog-sort" className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            Sortare
+          </label>
+          <select
+            id="catalog-sort"
+            name="sort"
+            value={selectedSort}
+            onChange={(event) => {
+              const form = event.currentTarget.form;
+              const nextSort = event.target.value;
+
+              flushSync(() => setSelectedSort(nextSort));
+              form?.requestSubmit();
+            }}
+            className="w-full cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+          >
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <CheckboxGroup
           title="Culoare"

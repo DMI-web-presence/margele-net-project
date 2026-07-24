@@ -16,6 +16,7 @@ type Product = {
   imageUrl: string | null;
   categoryId: number | null;
   category?: ProductCategory | null;
+  categories?: ProductCategory[];
   attributes?: ProductAttribute[];
   options?: ProductOption[] | ProductOption;
   createdAt: string;
@@ -47,6 +48,7 @@ type Category = {
   parentId: number | null;
   name: string;
   slug: string;
+  sortOrder?: number;
   productCount?: number;
 };
 
@@ -66,6 +68,12 @@ type CategoryGroup = {
 type CatalogPageContentProps = {
   products: Product[];
   categories: Category[];
+  basePath?: string;
+  intro?: {
+    eyebrow: string;
+    title: string;
+    description: string;
+  };
   query: {
     search: string;
     category: string;
@@ -222,6 +230,13 @@ const textColorOptions = [
 export default function CatalogPageContent({
   products,
   categories,
+  basePath = '/catalog',
+  intro = {
+    eyebrow: 'Articole atent selectionate',
+    title: 'Cantitati en-gross',
+    description:
+      'Fiecare material este de calitate superioara, aduse din cele mai bune surse, pentru a te ajuta sa creezi orice iti imaginezi.',
+  },
   query,
 }: CatalogPageContentProps) {
   const categoryGroups = buildCategoryGroups(categories);
@@ -260,13 +275,12 @@ export default function CatalogPageContent({
     <div className="space-y-8">
       <Card className="bg-slate-50 p-8 shadow-sm">
         <div className="max-w-2xl">
-          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Articole atent selectionate</p>
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{intro.eyebrow}</p>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-            Cantitati en-gross
+            {intro.title}
           </h1>
           <p className="mt-4 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
-            Fiecare material este de calitate superioara, aduse din cele mai bune surse, pentru a
-            te ajuta sa creezi orice iti imaginezi.
+            {intro.description}
           </p>
         </div>
       </Card>
@@ -382,8 +396,8 @@ export default function CatalogPageContent({
             </p>
 
             <div className="flex items-center gap-1">
-              <PaginationLink label="|‹" ariaLabel="Prima pagina" href={buildCatalogHref(query, 1)} disabled={currentPage === 1} />
-              <PaginationLink label="‹" ariaLabel="Pagina precedenta" href={buildCatalogHref(query, Math.max(1, currentPage - 1))} disabled={currentPage === 1} />
+              <PaginationLink label="|‹" ariaLabel="Prima pagina" href={buildCatalogHref(query, 1, basePath)} disabled={currentPage === 1} />
+              <PaginationLink label="‹" ariaLabel="Pagina precedenta" href={buildCatalogHref(query, Math.max(1, currentPage - 1), basePath)} disabled={currentPage === 1} />
               {visiblePages.map((page, index) => {
                 const previousPage = visiblePages[index - 1];
                 const showGap = previousPage != null && page - previousPage > 1;
@@ -392,14 +406,14 @@ export default function CatalogPageContent({
                     {showGap ? <span className="px-1 text-slate-400">...</span> : null}
                     <PaginationLink
                       label={String(page)}
-                      href={buildCatalogHref(query, page)}
+                      href={buildCatalogHref(query, page, basePath)}
                       current={page === currentPage}
                     />
                   </span>
                 );
               })}
-              <PaginationLink label="›" ariaLabel="Pagina urmatoare" href={buildCatalogHref(query, Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} />
-              <PaginationLink label="›|" ariaLabel="Ultima pagina" href={buildCatalogHref(query, totalPages)} disabled={currentPage === totalPages} />
+              <PaginationLink label="›" ariaLabel="Pagina urmatoare" href={buildCatalogHref(query, Math.min(totalPages, currentPage + 1), basePath)} disabled={currentPage === totalPages} />
+              <PaginationLink label="›|" ariaLabel="Ultima pagina" href={buildCatalogHref(query, totalPages, basePath)} disabled={currentPage === totalPages} />
             </div>
           </div>
         </div>
@@ -446,6 +460,7 @@ function PaginationLink({
 function buildCatalogHref(
   query: CatalogPageContentProps['query'],
   page: number,
+  basePath = '/catalog',
 ) {
   const params = new URLSearchParams();
 
@@ -463,7 +478,7 @@ function buildCatalogHref(
   if (page > 1) params.set('page', String(page));
 
   const nextQuery = params.toString();
-  return nextQuery ? `/catalog?${nextQuery}` : '/catalog';
+  return nextQuery ? `${basePath}?${nextQuery}` : basePath;
 }
 
 function getProductPrice(product: Product) {
@@ -506,16 +521,52 @@ function buildCategoryGroups(categories: Category[] = []) {
     childrenByParentId.set(category.parentId, children);
   }
 
-  const curatedRoots = curatedRootSlugs
-    .map((slug) => categories.find((category) => category.slug === slug))
-    .filter(Boolean) as Category[];
+  const curatedRootOrder = new Map(curatedRootSlugs.map((slug, index) => [slug, index]));
+  const roots = categories
+    .filter((category) => category.parentId == null && category.slug !== 'uncategorized')
+    .filter((root) => {
+      const children = childrenByParentId.get(root.id) || [];
+      return (
+        (root.productCount ?? 0) > 0 ||
+        children.some((child) => (child.productCount ?? 0) > 0)
+      );
+    })
+    .sort((left, right) => {
+      const leftCuratedOrder = curatedRootOrder.get(left.slug);
+      const rightCuratedOrder = curatedRootOrder.get(right.slug);
 
-  const dynamicGroups = curatedRoots.map((root) => {
+      if (leftCuratedOrder !== undefined || rightCuratedOrder !== undefined) {
+        return (leftCuratedOrder ?? Number.MAX_SAFE_INTEGER) - (rightCuratedOrder ?? Number.MAX_SAFE_INTEGER);
+      }
+
+      return (
+        Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0) ||
+        left.name.localeCompare(right.name, 'ro')
+      );
+    });
+
+  const dynamicGroups = roots.map((root) => {
     const childOrder = curatedCategoryChildrenByRootSlug[root.slug] || [];
-    const allowedChildSlugs = new Set(childOrder);
     const children = (childrenByParentId.get(root.id) || [])
-      .filter((child) => allowedChildSlugs.has(child.slug) && (child.productCount ?? 0) > 0)
-      .sort((left, right) => childOrder.indexOf(left.slug) - childOrder.indexOf(right.slug))
+      .filter((child) => (child.productCount ?? 0) > 0)
+      .sort((left, right) => {
+        const leftCuratedOrder = childOrder.indexOf(left.slug);
+        const rightCuratedOrder = childOrder.indexOf(right.slug);
+        const leftIsCurated = leftCuratedOrder >= 0;
+        const rightIsCurated = rightCuratedOrder >= 0;
+
+        if (leftIsCurated || rightIsCurated) {
+          return (
+            (leftIsCurated ? leftCuratedOrder : Number.MAX_SAFE_INTEGER) -
+            (rightIsCurated ? rightCuratedOrder : Number.MAX_SAFE_INTEGER)
+          );
+        }
+
+        return (
+          Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0) ||
+          left.name.localeCompare(right.name, 'ro')
+        );
+      })
       .map((child) => ({
         id: child.slug || String(child.id),
         label: formatCategoryLabel(child.name),
@@ -543,8 +594,16 @@ function productMatchesCategoryGroup(
   if (group.id === 'Toate') return true;
   if (group.id === 'uncategorized') return product.categoryId == null;
 
-  const productIds = new Set(product.categoryId ? [product.categoryId] : []);
-  const productSlugs = new Set(product.category?.slug ? [product.category.slug] : []);
+  const productCategories = product.categories || [];
+  const productIds = new Set([
+    ...(product.categoryId ? [product.categoryId] : []),
+    ...productCategories.map((category) => category.id),
+    ...(product.category?.id ? [product.category.id] : []),
+  ]);
+  const productSlugs = new Set([
+    ...productCategories.map((category) => category.slug).filter(Boolean),
+    ...(product.category?.slug ? [product.category.slug] : []),
+  ]);
 
   if (selectedSubcategory !== 'Toate') {
     const child = group.children.find((item) => item.id === selectedSubcategory);
@@ -556,7 +615,7 @@ function productMatchesCategoryGroup(
     );
   }
 
-  const candidates = group.children.length > 0 ? group.children : [group];
+  const candidates = [group, ...group.children];
   return candidates.some(
     (candidate) =>
       candidate.categoryIds.some((id) => productIds.has(id)) ||

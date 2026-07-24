@@ -174,6 +174,7 @@ export default function LandingPage({ products }: LandingPageProps) {
         products={newestProducts}
         variant="fresh"
         ctaLabel="Vezi noutatile"
+        ctaHref="/noutati"
       />
       <LandingProductCarousel
         title="Cele mai bine vandute"
