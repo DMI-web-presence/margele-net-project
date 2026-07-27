@@ -80,7 +80,7 @@ export default function FeaturedProductsOrbit({
           <button
             type="button"
             onClick={goPrevious}
-            className="absolute left-0 top-[42%] z-20 inline-flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950 text-xl font-semibold text-white transition hover:bg-[#7b4a75]"
+            className="absolute left-0 top-[42%] z-20 inline-flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950 text-xl font-semibold text-white transition hover:bg-[#4f2048]"
             aria-label="Produs anterior"
           >
             ‹
@@ -89,7 +89,7 @@ export default function FeaturedProductsOrbit({
           <button
             type="button"
             onClick={goNext}
-            className="absolute right-0 top-[42%] z-20 inline-flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950 text-xl font-semibold text-white transition hover:bg-[#7b4a75]"
+            className="absolute right-0 top-[42%] z-20 inline-flex h-12 w-12 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-slate-950 text-xl font-semibold text-white transition hover:bg-[#4f2048]"
             aria-label="Produs urmator"
           >
             ›
@@ -120,7 +120,7 @@ export default function FeaturedProductsOrbit({
             ))}
           </div>
 
-          <div className="absolute left-1/2 top-[42%] z-10 flex h-40 w-40 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#7b4a75] bg-white shadow-xl">
+          <div className="absolute left-1/2 top-[42%] z-10 flex h-40 w-40 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#4f2048] bg-white shadow-xl">
             {activeProduct.imageUrl ? (
               <Image
                 src={activeProduct.imageUrl}
@@ -136,10 +136,10 @@ export default function FeaturedProductsOrbit({
           </div>
 
           <div className="absolute bottom-0 left-1/2 flex w-full max-w-xl -translate-x-1/2 flex-col items-center">
-            <div className="h-0 w-0 border-x-[6px] border-b-[10px] border-x-transparent border-b-[#7b4a75]" />
+            <div className="h-0 w-0 border-x-[6px] border-b-[10px] border-x-transparent border-b-[#4f2048]" />
             <Link
               href={`/products/${activeProduct.id}`}
-              className="mt-5 line-clamp-2 text-2xl font-semibold tracking-tight text-slate-950 transition hover:text-[#7b4a75]"
+              className="mt-5 line-clamp-2 text-2xl font-semibold tracking-tight text-slate-950 transition hover:text-[#4f2048]"
             >
               {activeProduct.name}
             </Link>
@@ -152,14 +152,14 @@ export default function FeaturedProductsOrbit({
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500">Material</p>
-                <p className="mt-1 truncate text-lg font-semibold text-[#7b4a75]">
+                <p className="mt-1 truncate text-lg font-semibold text-[#4f2048]">
                   {toPlainText(activeProduct.description) || 'Premium'}
                 </p>
               </div>
             </div>
             <Link
               href={`/products/${activeProduct.id}`}
-              className="mt-5 inline-flex items-center rounded-full bg-[#7b4a75] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#663b61]"
+              className="mt-5 inline-flex items-center rounded-full bg-[#4f2048] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#401839]"
             >
               Vezi produsul
             </Link>

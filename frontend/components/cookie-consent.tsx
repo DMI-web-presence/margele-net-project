@@ -63,15 +63,15 @@ export default function CookieConsent() {
     <div className="fixed inset-x-0 bottom-0 z-50 px-4 pb-4 sm:px-6 sm:pb-6">
       <section
         aria-label="Preferinte cookie-uri"
-        className="relative mx-auto max-w-[1720px] overflow-hidden rounded-[30px] border border-[#d9ddf3] bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(250,248,255,0.98)_100%)] px-5 py-5 text-[#172554] shadow-[0_24px_90px_rgba(88,28,135,0.12)] backdrop-blur md:px-8 md:py-7"
+        className="relative mx-auto max-w-[1720px] overflow-hidden rounded-[30px] border border-[#d9ddf3] bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(250,248,255,0.98)_100%)] px-5 py-5 text-[#172554] shadow-[0_24px_90px_rgba(79,32,72,0.12)] backdrop-blur md:px-8 md:py-7"
       >
         <div className="absolute inset-x-0 top-0 h-px bg-[#d9ddf3]" />
-        <div className="absolute left-0 top-0 h-[3px] w-[42%] max-w-[810px] rounded-r-full bg-[linear-gradient(90deg,#8b7dff_0%,#3d27ff_100%)]" />
+        <div className="absolute left-0 top-0 h-[3px] w-[42%] max-w-[810px] rounded-r-full bg-[linear-gradient(90deg,#8b436f_0%,#4f2048_100%)]" />
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_auto] xl:items-center xl:gap-8">
           <div className="min-w-0">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.95)_0%,rgba(99,102,241,0.12)_58%,rgba(99,102,241,0.16)_100%)] text-[#4f46e5] shadow-[inset_0_0_0_1px_rgba(129,140,248,0.08)]">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.95)_0%,rgba(99,102,241,0.12)_58%,rgba(99,102,241,0.16)_100%)] text-[#4f2048] shadow-[inset_0_0_0_1px_rgba(129,140,248,0.08)]">
                 <CookieShieldIcon className="h-9 w-9" />
               </div>
 
@@ -88,7 +88,7 @@ export default function CookieConsent() {
 
                 <Link
                   href="/gdpr"
-                  className="inline-flex items-center gap-2.5 text-[0.98rem] font-medium text-[#4f46e5] transition hover:text-[#3827ff]"
+                  className="inline-flex items-center gap-2.5 text-[0.98rem] font-medium text-[#4f2048] transition hover:text-[#401839]"
                 >
                   <span>Pagina GDPR</span>
                   <ArrowUpRightIcon className="h-4 w-4" />
@@ -100,7 +100,7 @@ export default function CookieConsent() {
                       key={item.label}
                       className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-[#d8dcec] bg-white px-4 text-[0.92rem] font-medium text-[#33415c] shadow-[0_10px_30px_rgba(76,81,109,0.06)]"
                     >
-                      <span className="text-[#4f46e5]">{item.icon}</span>
+                      <span className="text-[#4f2048]">{item.icon}</span>
                       <span>{item.label}</span>
                     </span>
                   ))}
@@ -125,7 +125,7 @@ export default function CookieConsent() {
             <button
               type="button"
               onClick={acceptAll}
-              className="inline-flex min-h-[62px] cursor-pointer items-center justify-center gap-2 rounded-[18px] border border-[#5b3fff] bg-[linear-gradient(135deg,#7c3aed_0%,#3d27ff_100%)] px-4.5 text-[0.92rem] font-semibold text-white shadow-[0_16px_38px_rgba(90,48,245,0.34)] transition hover:translate-y-[-1px] hover:shadow-[0_20px_44px_rgba(90,48,245,0.38)] xl:min-w-[176px]"
+              className="inline-flex min-h-[62px] cursor-pointer items-center justify-center gap-2 rounded-[18px] border border-[#6b315c] bg-[linear-gradient(135deg,#4f2048_0%,#4f2048_100%)] px-4.5 text-[0.92rem] font-semibold text-white shadow-[0_16px_38px_rgba(79,32,72,0.34)] transition hover:translate-y-[-1px] hover:shadow-[0_20px_44px_rgba(79,32,72,0.38)] xl:min-w-[176px]"
             >
               <CheckCircleIcon className="h-5 w-5" />
               <span>Accepta toate</span>
@@ -134,7 +134,7 @@ export default function CookieConsent() {
         </div>
 
         {isCustomizing ? (
-          <div className="mt-7 rounded-[26px] border border-[#e2e5f2] bg-[rgba(255,255,255,0.92)] p-5 shadow-[0_16px_40px_rgba(90,48,245,0.06)] sm:p-6">
+          <div className="mt-7 rounded-[26px] border border-[#e2e5f2] bg-[rgba(255,255,255,0.92)] p-5 shadow-[0_16px_40px_rgba(79,32,72,0.06)] sm:p-6">
             <div className="grid gap-3 sm:grid-cols-3">
               <CookieToggle
                 title="Necesare"
@@ -159,7 +159,7 @@ export default function CookieConsent() {
             <div className="mt-4">
               <button
                 type="button"
-                className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#7c3aed_0%,#3d27ff_100%)] px-6 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(90,48,245,0.22)] transition hover:translate-y-[-1px]"
+                className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#4f2048_0%,#4f2048_100%)] px-6 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(79,32,72,0.22)] transition hover:translate-y-[-1px]"
                 onClick={() => savePreferences(preferences)}
               >
                 Salveaza preferintele
@@ -195,7 +195,7 @@ function CookieActionButton({
       {...props}
       className={`inline-flex min-h-[62px] cursor-pointer items-center justify-center gap-2 rounded-[18px] border border-[#d8dcec] bg-white px-4.5 text-[0.92rem] font-semibold text-[#1e293b] shadow-[0_12px_30px_rgba(76,81,109,0.08)] transition hover:translate-y-[-1px] hover:border-[#c8cfe6] hover:shadow-[0_16px_34px_rgba(76,81,109,0.1)] xl:min-w-[176px] ${className ?? ''}`}
     >
-      <span className="text-[#4f46e5]">{icon}</span>
+      <span className="text-[#4f2048]">{icon}</span>
       <span>{children}</span>
     </button>
   );
@@ -217,7 +217,7 @@ function CookieLinkButton({
       href={href}
       className={`inline-flex min-h-[62px] cursor-pointer items-center justify-center gap-2 rounded-[18px] border border-[#d8dcec] bg-white px-4.5 text-[0.92rem] font-semibold text-[#1e293b] shadow-[0_12px_30px_rgba(76,81,109,0.08)] transition hover:translate-y-[-1px] hover:border-[#c8cfe6] hover:shadow-[0_16px_34px_rgba(76,81,109,0.1)] xl:min-w-[164px] ${className ?? ''}`}
     >
-      <span className="text-[#4f46e5]">{icon}</span>
+      <span className="text-[#4f2048]">{icon}</span>
       <span>{children}</span>
     </Link>
   );

@@ -153,7 +153,7 @@ export default function Footer() {
     return null;
   }
   return (
-    <footer className="border-t border-white/10 bg-[linear-gradient(105deg,#02081f_0%,#11103a_48%,#3a1470_100%)] text-white">
+    <footer className="border-t border-white/10 bg-[linear-gradient(105deg,#4f2048_0%,#401839_50%,#241020_100%)] text-white">
       <div className="mx-auto w-full max-w-[1400px] px-6 py-12 sm:px-10 lg:px-16">
         <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr_1.2fr]">
           <div className="space-y-4">

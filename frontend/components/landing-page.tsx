@@ -110,7 +110,7 @@ export default function LandingPage({ products }: LandingPageProps) {
 
                   <Link
                     href="/catalog"
-                    className="group mt-6 inline-flex h-12 items-center gap-3 rounded-full bg-[#6437f3] px-6 text-sm font-bold text-white shadow-[0_12px_25px_rgba(100,55,243,0.25)] transition hover:bg-[#542ce1]"
+                    className="group mt-6 inline-flex h-12 items-center gap-3 rounded-full bg-[#4f2048] px-6 text-sm font-bold text-white shadow-[0_12px_25px_rgba(79,32,72,0.25)] transition hover:bg-[#401839]"
                   >
                     Descopera produsele
                     <svg
@@ -126,7 +126,7 @@ export default function LandingPage({ products }: LandingPageProps) {
                 <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                   {heroBenefits.map((benefit) => (
                     <div key={benefit.title} className="min-w-0">
-                      <div className="text-[#6437f3]">{benefit.icon}</div>
+                      <div className="text-[#4f2048]">{benefit.icon}</div>
                       <h2 className="mt-4 text-sm font-bold leading-5 text-slate-950">
                         {benefit.title}
                       </h2>

@@ -1071,7 +1071,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
                     aria-current={page === safeCurrentPage ? 'page' : undefined}
                     className={`inline-flex h-8 min-w-8 cursor-pointer items-center justify-center rounded-md border px-2 transition ${
                       page === safeCurrentPage
-                        ? 'border-[#7b4a75] bg-white text-[#7b4a75]'
+                        ? 'border-[#4f2048] bg-white text-[#4f2048]'
                         : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >

@@ -9,7 +9,7 @@ const campaigns = [
     description: 'Margele pastel, charm-uri delicate si decoratiuni pentru cadouri de primavara.',
     href: '/catalog?category=paste',
     imageUrl: '/campaign-easter.avif',
-    accentClass: 'bg-[#f6e8f3] text-[#7b4a75]',
+    accentClass: 'bg-[#f6e8f3] text-[#4f2048]',
     unavailable: true,
   },
   {
@@ -50,7 +50,7 @@ export default function CampaignSection() {
       <div className="mx-auto max-w-[1370px] rounded-[1.45rem] border border-slate-200 bg-slate-50 p-5 shadow-[0_10px_35px_rgba(15,23,42,0.05)] sm:p-7">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#7b4a75]">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#4f2048]">
               Campanii
             </p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
@@ -103,7 +103,7 @@ export default function CampaignSection() {
                   className={`mt-5 inline-flex items-center gap-2 text-sm font-bold transition ${
                     isUnavailable
                       ? 'text-slate-400'
-                      : 'text-[#7b4a75] group-hover:translate-x-1'
+                      : 'text-[#4f2048] group-hover:translate-x-1'
                   }`}
                 >
                   {isUnavailable ? 'Disponibil in curand' : 'Descopera selectia'}

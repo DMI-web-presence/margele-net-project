@@ -41,10 +41,10 @@ export default function TransportPageContent() {
         <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="relative overflow-hidden bg-gradient-to-br from-[#f7f3fb] via-white to-[#eef4ff] p-6 sm:p-8 lg:p-10">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(106,60,101,0.10),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(84,67,241,0.12),transparent_38%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(79,32,72,0.10),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(79,32,72,0.12),transparent_38%)]" />
               <div className="relative space-y-6">
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[#6a3c65]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[#4f2048]">
                     Informatii livrare
                   </p>
                   <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
@@ -112,7 +112,7 @@ export default function TransportPageContent() {
             </div>
           </article>
 
-          <article className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-950 to-[#6a3c65] p-6 text-white shadow-sm sm:p-8">
+          <article className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-950 to-[#4f2048] p-6 text-white shadow-sm sm:p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">
               Termen livrare
             </p>

@@ -162,7 +162,7 @@ export default function AboutUsPageContent() {
             </div>
           </article>
 
-          <article className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-950 to-[#6a3c65] p-6 text-white shadow-sm sm:p-8">
+          <article className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-950 to-[#4f2048] p-6 text-white shadow-sm sm:p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">
               Polistiren expandat / extrudat
             </p>
