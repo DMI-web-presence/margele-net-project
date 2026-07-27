@@ -6,6 +6,7 @@
   "scripts": {
     "db:migrate": "node scripts/migrate.js",
     "import:categories": "node scripts/import-categories.js",
+    "import:customers": "node scripts/import-customers.js",
     "import:product-images": "node scripts/import-product-images.js",
     "import:product-options": "node scripts/import-product-options.js",
     "import:products": "node scripts/import-products.js",
