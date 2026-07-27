@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import AccountSidebar from '@/components/account-sidebar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -67,6 +68,36 @@ function OrdersIcon() {
       <path d="M7 9h10l-1 10H8L7 9Z" />
       <path d="M9.5 9V7.5a2.5 2.5 0 0 1 5 0V9" />
     </svg>
+  );
+}
+
+function OrdersLoadingSkeleton() {
+  return (
+    <div className="mt-8 space-y-4">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <article
+          key={index}
+          className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 sm:p-6"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex gap-4">
+              <Skeleton className="mt-6 h-10 w-10 shrink-0 rounded-full" />
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-8 w-72 max-w-full rounded-xl" />
+                <Skeleton className="h-4 w-48" />
+                <Skeleton className="h-7 w-36 rounded-xl" />
+              </div>
+            </div>
+            <div className="space-y-2 lg:text-right">
+              <Skeleton className="h-4 w-16 lg:ml-auto" />
+              <Skeleton className="h-8 w-28 rounded-xl lg:ml-auto" />
+              <Skeleton className="h-4 w-24 lg:ml-auto" />
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -202,7 +233,7 @@ export default function ContComenziPage() {
             </div>
 
             {isLoading ? (
-              <div className="py-16 text-base text-slate-600">Se incarca comenzile...</div>
+              <OrdersLoadingSkeleton />
             ) : loadError ? (
               <div className="py-16 text-base font-semibold text-red-600">{loadError}</div>
             ) : orders.length > 0 ? (

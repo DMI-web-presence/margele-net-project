@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Order = {
   orderNumber: string;
@@ -96,15 +97,27 @@ export default function CheckoutStatusContent() {
   return (
     <main className="px-6 py-16 sm:px-10 lg:px-16">
       <section className="mx-auto max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-          Status plata
-        </p>
-        <h1 className={`mt-3 text-4xl font-semibold tracking-tight ${copy.tone}`}>
-          {isLoading ? 'Se verifica plata...' : error || copy.title}
-        </h1>
-        <p className="mt-4 text-base leading-7 text-slate-600">
-          {error ? 'Te rugam sa verifici pagina de comenzi sau sa incerci din nou.' : copy.body}
-        </p>
+        {isLoading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-11 w-full rounded-xl" />
+            <Skeleton className="h-11 w-3/4 rounded-xl" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+          </div>
+        ) : (
+          <>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Status plata
+            </p>
+            <h1 className={`mt-3 text-4xl font-semibold tracking-tight ${copy.tone}`}>
+              {error || copy.title}
+            </h1>
+            <p className="mt-4 text-base leading-7 text-slate-600">
+              {error ? 'Te rugam sa verifici pagina de comenzi sau sa incerci din nou.' : copy.body}
+            </p>
+          </>
+        )}
 
         {order ? (
           <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">

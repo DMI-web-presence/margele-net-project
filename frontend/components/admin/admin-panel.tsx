@@ -3,6 +3,7 @@
 import { ChangeEvent, DragEvent, FormEvent, ReactNode, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -3715,7 +3716,9 @@ export default function AdminPanel() {
   if (status === 'loading' || isBootstrapping) {
     return (
       <AdminStage>
-        <CenteredCard title="Se incarca panoul" subtitle="Pregatim catalogul si configuratiile de administrare." />
+        <CenteredCard title="Se incarca panoul" subtitle="Pregatim catalogul si configuratiile de administrare.">
+          <AdminLoadingSkeleton />
+        </CenteredCard>
       </AdminStage>
     );
   }
@@ -5175,6 +5178,24 @@ function CenteredCard({
         <p className="mt-3 text-sm leading-6 text-slate-500">{subtitle}</p>
         {children ? <div className="mt-8">{children}</div> : null}
       </div>
+    </div>
+  );
+}
+
+function AdminLoadingSkeleton() {
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-3 gap-3">
+        <Skeleton className="h-20 rounded-2xl bg-violet-100/80" />
+        <Skeleton className="h-20 rounded-2xl bg-violet-100/80" />
+        <Skeleton className="h-20 rounded-2xl bg-violet-100/80" />
+      </div>
+      <div className="space-y-3">
+        <Skeleton className="h-4 w-full bg-violet-100/80" />
+        <Skeleton className="h-4 w-11/12 bg-violet-100/80" />
+        <Skeleton className="h-4 w-4/5 bg-violet-100/80" />
+      </div>
+      <Skeleton className="h-12 w-full rounded-2xl bg-violet-100/80" />
     </div>
   );
 }
