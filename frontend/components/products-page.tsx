@@ -936,17 +936,17 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
             </div>
           </div>
 
-        <div className="mt-6 grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
+        <div className="mt-6 grid items-stretch gap-4 pb-20 sm:grid-cols-2 sm:pb-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
           {paginatedProducts.map((product) => {
             const favorited = isFavorite(product.id);
             const priceInfo = getCatalogPriceInfo(product);
             const shouldSelectVariations = hasSelectablePurchaseVariations(product);
             const cartSku = getAutomaticCartSku(product);
             return (
-            <Card key={product.id} className="flex h-full w-full flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md">
+            <Card key={product.id} className="flex h-full w-full flex-col overflow-hidden rounded-[1.35rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md sm:rounded-[2rem]">
               <div className="relative">
                 <Link href={`/products/${product.id}`} className="group block">
-                  <div className="flex h-72 items-center justify-center bg-slate-100 sm:h-65">
+                  <div className="flex h-48 items-center justify-center bg-slate-100 sm:h-65">
                     {product.imageUrl ? (
                       <Image
                         {...getProductImageProps(product.imageUrl, 'card')}
@@ -982,37 +982,37 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
                   <FavoriteButtonIcon filled={favorited} />
                 </button>
               </div>
-              <div className="flex flex-1 flex-col space-y-3 p-4">
+              <div className="flex flex-1 flex-col space-y-2 p-3 sm:space-y-3 sm:p-4">
                 <div className="space-y-1.5">
                   <Link
                     href={`/products/${product.id}`}
-                    className="line-clamp-2 min-h-[3.5rem] text-base font-semibold text-slate-900 transition hover:text-indigo-600"
+                    className="line-clamp-2 min-h-[2.8rem] text-[0.95rem] font-semibold leading-6 text-slate-900 transition hover:text-indigo-600 sm:min-h-[3.5rem] sm:text-base sm:leading-normal"
                   >
                     {product.name}
                   </Link>
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-6">
+              <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-3 py-3.5 sm:px-4 sm:py-6">
                 <div className="flex min-w-0 flex-col">
                   {priceInfo.hasFromLabel ? (
-                    <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    <span className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-slate-500 sm:text-xs">
                       De la
                     </span>
                   ) : null}
-                  <p className="text-2xl font-semibold leading-tight text-slate-900">
+                  <p className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl">
                     {numberFormatter.format(priceInfo.amount)}
                   </p>
                 </div>
                 {shouldSelectVariations ? (
                   <Link
                     href={`/products/${product.id}`}
-                    className="inline-flex h-9 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-indigo-600 px-4 text-xs font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                    className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-indigo-600 px-5 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 sm:h-9 sm:px-4 sm:text-xs"
                   >
-                    Vezi produsul
+                    Vezi <span className="hidden sm:inline">&nbsp;produsul</span>
                   </Link>
                 ) : (
                   <Button
-                    className="h-9 shrink-0 rounded-xl px-4 text-xs"
+                    className="h-8 shrink-0 rounded-xl px-3 text-xs sm:h-9 sm:px-4"
                     onClick={(event) =>
                       addToCart(
                         {
@@ -1026,7 +1026,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
                       )
                     }
                   >
-                    Adauga in cos
+                    Adauga<span className="hidden sm:inline">&nbsp;in cos</span>
                   </Button>
                 )}
               </div>

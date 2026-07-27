@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import AccountPreviewCard from '@/components/account-preview-card';
 import BasketPreviewCard from '@/components/basket-preview-card';
 import FavoritePreviewCard from '@/components/favorite-preview-card';
@@ -165,6 +165,18 @@ function SearchIcon() {
   );
 }
 
+function MenuIcon({ open = false }: { open?: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current stroke-2">
+      {open ? (
+        <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+      ) : (
+        <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+      )}
+    </svg>
+  );
+}
+
 type CategoryMenuIconName =
   | 'all'
   | 'beads'
@@ -306,6 +318,7 @@ export default function NavBar() {
   const [isBasketPreviewOpen, setIsBasketPreviewOpen] = useState(false);
   const [isFavoritePreviewOpen, setIsFavoritePreviewOpen] = useState(false);
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -313,6 +326,13 @@ export default function NavBar() {
   const [isNavCompact, setIsNavCompact] = useState(false);
   const [isHiddenOnMobile, setIsHiddenOnMobile] = useState(false);
   const [navbarCategories, setNavbarCategories] = useState<NavbarCategory[]>([]);
+  const isMobileMenuOpenRef = useRef(false);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    isMobileMenuOpenRef.current = isMobileMenuOpen;
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -325,7 +345,10 @@ export default function NavBar() {
 
       setIsNavCompact(currentScrollY > 72);
 
-      if (isDesktop) {
+      if (isMobileMenuOpenRef.current) {
+        accumulatedDownScroll = 0;
+        setIsHiddenOnMobile(false);
+      } else if (isDesktop) {
         setIsHiddenOnMobile(false);
       } else if (currentScrollY < 32) {
         accumulatedDownScroll = 0;
@@ -421,6 +444,40 @@ export default function NavBar() {
     return () => controller.abort();
   }, [pathname]);
 
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileMenuOpen]);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+
+      if (
+        mobileMenuRef.current?.contains(target) ||
+        mobileMenuButtonRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setIsMobileMenuOpen(false);
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [isMobileMenuOpen]);
+
   if (pathname?.startsWith('/autentificare')) {
     return null;
   }
@@ -433,6 +490,7 @@ export default function NavBar() {
     router.push(query ? `/catalog?search=${encodeURIComponent(query)}` : '/catalog');
     setSearchQuery('');
     setIsSearchOpen(false);
+    setIsMobileMenuOpen(false);
   };
 
   return (
@@ -446,7 +504,12 @@ export default function NavBar() {
           isNavCompact ? 'h-14 gap-3' : 'h-20 gap-4'
         }`}
       >
-        <Link href="/" className="inline-flex items-center" aria-label="Margele.net">
+        <Link
+          href="/"
+          className="inline-flex items-center"
+          aria-label="Margele.net"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
           <Image
             src="/margelenet-logo-nav-bar-cropped.png"
             alt="Margele.net"
@@ -565,8 +628,28 @@ export default function NavBar() {
         </nav>
 
         <div className="flex items-center justify-end gap-2">
+          <button
+            ref={mobileMenuButtonRef}
+            type="button"
+            aria-label={isMobileMenuOpen ? 'Inchide meniul' : 'Deschide meniul'}
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="mobile-navigation-menu"
+            className={`inline-flex items-center justify-center rounded-full border border-violet-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-violet-300 hover:bg-slate-100 hover:text-slate-900 md:hidden ${
+              isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
+            }`}
+            onClick={() => {
+              setIsHiddenOnMobile(false);
+              setIsMobileMenuOpen((current) => !current);
+              setIsAccountPreviewOpen(false);
+              setIsBasketPreviewOpen(false);
+              setIsFavoritePreviewOpen(false);
+            }}
+          >
+            <MenuIcon open={isMobileMenuOpen} />
+          </button>
+
           <div
-            className="relative"
+            className="relative hidden md:block"
             onMouseEnter={() => setIsAccountPreviewOpen(true)}
             onMouseLeave={() => setIsAccountPreviewOpen(false)}
           >
@@ -658,6 +741,100 @@ export default function NavBar() {
           </div>
         </div>
       </div>
+
+      {isMobileMenuOpen ? (
+        <div
+          ref={mobileMenuRef}
+          id="mobile-navigation-menu"
+          className="border-t border-slate-200 bg-white px-6 pb-5 pt-4 shadow-lg md:hidden"
+        >
+          <div className="mx-auto flex max-w-sm flex-col gap-4">
+            <form
+              onSubmit={handleSearchSubmit}
+              className="flex h-11 items-center overflow-hidden rounded-full border border-violet-200 bg-slate-50 text-slate-700 focus-within:border-violet-400"
+            >
+              <button
+                type="submit"
+                aria-label="Cauta"
+                className="inline-flex h-full shrink-0 items-center justify-center px-4 text-slate-600"
+              >
+                <SearchIcon />
+              </button>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Cauta produse..."
+                className="min-w-0 flex-1 bg-transparent pr-4 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </form>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Link
+                href="/catalog"
+                className="flex h-11 items-center justify-center rounded-full bg-violet-600 px-4 text-sm font-bold text-white shadow-[0_10px_22px_rgba(79,32,72,0.18)]"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Catalog
+              </Link>
+              <Link
+                href="/noutati"
+                className="flex h-11 items-center justify-center rounded-full border border-violet-200 bg-white px-4 text-sm font-bold text-slate-800"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Noutati
+              </Link>
+            </div>
+
+            <Link
+              href={isAuthenticated ? '/cont' : '/autentificare'}
+              className="flex h-12 items-center justify-between rounded-2xl border border-violet-200 bg-white px-4 text-sm font-bold text-slate-800 transition hover:bg-violet-50 hover:text-violet-800"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <span className="inline-flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 text-violet-700">
+                  <AccountIcon />
+                </span>
+                <span>{isAuthenticated ? 'Contul meu' : 'Autentificare'}</span>
+              </span>
+              <span className="text-xs font-semibold text-slate-500">
+                {isAuthenticated ? getAccountInitials(authUser?.name, authUser?.email) : 'Login'}
+              </span>
+            </Link>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-2">
+              <p className="px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                Categorii
+              </p>
+              <div className="max-h-[56vh] overflow-y-auto">
+                <Link
+                  href="/catalog"
+                  className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-violet-700 transition hover:bg-violet-50"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-violet-100 text-violet-700">
+                    <CategoryMenuIcon all />
+                  </span>
+                  <span>Toate categoriile</span>
+                </Link>
+                {categoryMenuGroups.map((category) => (
+                  <Link
+                    key={category.id}
+                    href={category.href}
+                    className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold leading-5 text-slate-800 transition hover:bg-violet-50 hover:text-violet-800"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-slate-100 text-slate-500 transition group-hover:bg-violet-600 group-hover:text-white">
+                      <CategoryMenuIcon slug={category.slug} />
+                    </span>
+                    <span className="min-w-0">{category.label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </header>
   );
 }

@@ -130,9 +130,9 @@ function FooterColumn({
   links: { label: string; href: string }[];
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 text-center lg:text-left">
       <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/90">{title}</h3>
-      <ul className="flex flex-col gap-2 text-sm text-white/75">
+      <ul className="mx-auto flex w-full max-w-xs flex-col items-start gap-2 text-left text-sm text-white/75 lg:mx-0 lg:max-w-none">
         {links.map((item) => (
           <li key={item.label}>
             <Link href={item.href} className="transition hover:text-white">
@@ -156,8 +156,8 @@ export default function Footer() {
     <footer className="border-t border-white/10 bg-[linear-gradient(105deg,#4f2048_0%,#401839_50%,#241020_100%)] text-white">
       <div className="mx-auto w-full max-w-[1400px] px-6 py-12 sm:px-10 lg:px-16">
         <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr_1.2fr]">
-          <div className="space-y-4">
-            <Link href="/" className="inline-flex">
+          <div className="space-y-4 text-center lg:text-left">
+            <Link href="/" className="inline-flex justify-center lg:justify-start">
               <Image
                 src="/margelenet-logo-nav-bar-cropped.png"
                 alt="Margele.net"
@@ -166,10 +166,10 @@ export default function Footer() {
                 className="h-auto w-[220px]"
               />
             </Link>
-            <p className="max-w-xs text-sm leading-6 text-white/70">
+            <p className="mx-auto max-w-xs text-sm leading-6 text-white/70 lg:mx-0">
               Accesorii creative si materiale atent selectate pentru proiectele tale handmade.
             </p>
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center justify-center gap-2 pt-1 lg:justify-start">
               {socialLinks.map((item) => (
                 <a
                   key={item.label}
@@ -188,9 +188,9 @@ export default function Footer() {
 
           <FooterColumn title="Informatii" links={infoLinks} />
 
-          <div className="space-y-4">
+          <div className="space-y-4 text-center lg:text-left">
             <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-white/90">Date contact</h3>
-            <div className="space-y-2.5 text-sm text-white/80">
+            <div className="mx-auto w-fit max-w-xs space-y-2.5 text-left text-sm text-white/80 lg:mx-0 lg:max-w-none">
               <p className="flex items-start gap-2">
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center text-white/75">
                   <ContactIcon icon="location" />
@@ -229,7 +229,10 @@ export default function Footer() {
                 </Link>
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div
+              data-footer-payment-badges
+              className="flex flex-nowrap items-center justify-center gap-2 pt-1 lg:justify-start"
+            >
               <a
                 href="https://anpc.ro/"
                 target="_blank"
@@ -242,7 +245,8 @@ export default function Footer() {
                   alt="ANPC"
                   width={170}
                   height={44}
-                  className="h-auto w-[170px]"
+                  className="h-auto w-[126px] sm:w-[170px]"
+                  style={{ height: 'auto' }}
                 />
               </a>
               <div className="inline-flex rounded-xl border border-white/25 bg-white/10 p-2">
@@ -251,7 +255,8 @@ export default function Footer() {
                   alt="Netopia Payments"
                   width={170}
                   height={44}
-                  className="h-auto w-[140px]"
+                  className="h-auto w-[112px] sm:w-[140px]"
+                  style={{ height: 'auto' }}
                 />
               </div>
             </div>
@@ -260,7 +265,7 @@ export default function Footer() {
       </div>
 
       <div data-footer-presence-bar className="border-t border-white/15 bg-black/20">
-        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-2 px-6 py-4 text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between sm:px-10 lg:px-16">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center gap-2 px-6 py-4 text-center text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between sm:px-10 sm:text-left lg:px-16">
           <p>Pamil srl © 2005 - 2026. Toate drepturile rezervate.</p>
           <p>
             Crafted with ❤️ by{' '}
