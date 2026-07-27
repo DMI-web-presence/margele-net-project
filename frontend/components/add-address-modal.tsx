@@ -6,11 +6,14 @@ export type AddressFormValues = {
   apelativ: string;
   prenume: string;
   nume: string;
+  companie: string;
   tara: string;
   adresa1: string;
   adresa2: string;
   codPostal: string;
   oras: string;
+  judet: string;
+  telefon: string;
   implicitFacturare: boolean;
   implicitLivrare: boolean;
 };
@@ -43,11 +46,14 @@ export default function AddAddressModal({
       apelativ: String(data.get('apelativ') ?? 'Dl.'),
       prenume: String(data.get('prenume') ?? ''),
       nume: String(data.get('nume') ?? ''),
+      companie: String(data.get('companie') ?? ''),
       tara: String(data.get('tara') ?? 'Romania'),
       adresa1: String(data.get('adresa1') ?? ''),
       adresa2: String(data.get('adresa2') ?? ''),
       codPostal: String(data.get('codPostal') ?? ''),
       oras: String(data.get('oras') ?? ''),
+      judet: String(data.get('judet') ?? ''),
+      telefon: String(data.get('telefon') ?? ''),
       implicitFacturare: data.get('implicitFacturare') === 'on',
       implicitLivrare: data.get('implicitLivrare') === 'on',
     };
@@ -134,6 +140,18 @@ export default function AddAddressModal({
           </div>
 
           <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900" htmlFor="companie-adresa">
+              Companie (optional)
+            </label>
+            <input
+              id="companie-adresa"
+              name="companie"
+              defaultValue={initialValues?.companie ?? ''}
+              className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
+            />
+          </div>
+
+          <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-900" htmlFor="tara">
               Tara
             </label>
@@ -171,7 +189,7 @@ export default function AddAddressModal({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-900" htmlFor="cod-postal">
                 Cod postal
@@ -196,6 +214,31 @@ export default function AddAddressModal({
                 className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
               />
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900" htmlFor="judet">
+                Judet
+              </label>
+              <input
+                id="judet"
+                name="judet"
+                required
+                defaultValue={initialValues?.judet ?? ''}
+                className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900" htmlFor="telefon-adresa">
+              Telefon (optional)
+            </label>
+            <input
+              id="telefon-adresa"
+              name="telefon"
+              type="tel"
+              defaultValue={initialValues?.telefon ?? ''}
+              className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
+            />
           </div>
 
           <div className="flex flex-col space-y-3 text-sm text-slate-900">

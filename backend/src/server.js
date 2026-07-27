@@ -8,6 +8,11 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { Pool } = require('pg');
 const sharp = require('sharp');
 const { createBrevoMailer } = require('./services/brevo-mail');
+const {
+  SmartBillError,
+  buildSmartBillInvoicePayload,
+  createSmartBillClient,
+} = require('./services/smartbill');
 
 loadEnv(path.join(__dirname, '..', '.env'));
 loadEnv(path.join(__dirname, '..', '..', 'frontend', '.env'), false, [
@@ -41,6 +46,17 @@ const config = {
   brevoReplyToEmail: process.env.BREVO_REPLY_TO_EMAIL || '',
   brevoReplyToName: process.env.BREVO_REPLY_TO_NAME || '',
   brevoAdminEmail: process.env.BREVO_ADMIN_EMAIL || '',
+  smartbillEnabled: String(process.env.SMARTBILL_ENABLED || '').toLowerCase() === 'true',
+  smartbillBaseUrl:
+    process.env.SMARTBILL_BASE_URL || 'https://ws.smartbill.ro/SBORO/api',
+  smartbillEmail: process.env.SMARTBILL_EMAIL || '',
+  smartbillToken: process.env.SMARTBILL_TOKEN || '',
+  smartbillCompanyVatCode: process.env.SMARTBILL_COMPANY_VAT_CODE || '',
+  smartbillInvoiceSeries: process.env.SMARTBILL_INVOICE_SERIES || '',
+  smartbillTaxName: process.env.SMARTBILL_TAX_NAME || 'Normala',
+  smartbillTaxPercentage: Number(process.env.SMARTBILL_TAX_PERCENTAGE || 21),
+  smartbillDueDays: Number(process.env.SMARTBILL_DUE_DAYS || 0),
+  smartbillSendEmail: String(process.env.SMARTBILL_SEND_EMAIL || '').toLowerCase() === 'true',
   r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || '',
   r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
   r2BucketName: process.env.R2_BUCKET_NAME || '',
@@ -79,6 +95,19 @@ const brevoMailer = createBrevoMailer({
   replyToEmail: config.brevoReplyToEmail,
   replyToName: config.brevoReplyToName,
   adminEmail: config.brevoAdminEmail,
+});
+
+const smartBillClient = createSmartBillClient({
+  enabled: config.smartbillEnabled,
+  baseUrl: config.smartbillBaseUrl,
+  email: config.smartbillEmail,
+  token: config.smartbillToken,
+  companyVatCode: config.smartbillCompanyVatCode,
+  invoiceSeries: config.smartbillInvoiceSeries,
+  taxName: config.smartbillTaxName,
+  taxPercentage: config.smartbillTaxPercentage,
+  dueDays: config.smartbillDueDays,
+  sendEmail: config.smartbillSendEmail,
 });
 
 let userColumnsCache = null;
@@ -157,6 +186,30 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && requestUrl.pathname === '/admin/orders') {
       await handleAdminOrderList(req, requestUrl, res);
+      return;
+    }
+
+    const adminSmartBillPdfMatch = requestUrl.pathname.match(
+      /^\/admin\/orders\/(\d+)\/invoice\/smartbill\/pdf$/,
+    );
+    if (adminSmartBillPdfMatch && req.method === 'GET') {
+      await handleAdminSmartBillInvoicePdf(req, res, Number(adminSmartBillPdfMatch[1]));
+      return;
+    }
+
+    const adminSmartBillSendMatch = requestUrl.pathname.match(
+      /^\/admin\/orders\/(\d+)\/invoice\/smartbill\/send$/,
+    );
+    if (adminSmartBillSendMatch && req.method === 'POST') {
+      await handleAdminSmartBillInvoiceSend(req, res, Number(adminSmartBillSendMatch[1]));
+      return;
+    }
+
+    const adminSmartBillInvoiceMatch = requestUrl.pathname.match(
+      /^\/admin\/orders\/(\d+)\/invoice\/smartbill$/,
+    );
+    if (adminSmartBillInvoiceMatch && req.method === 'POST') {
+      await handleAdminSmartBillInvoiceCreate(req, res, Number(adminSmartBillInvoiceMatch[1]));
       return;
     }
 
@@ -1410,6 +1463,82 @@ async function handleAdminOrderUpdate(req, res, orderId) {
   sendJson(res, 200, updated);
 }
 
+async function handleAdminSmartBillInvoiceCreate(req, res, orderId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const order = await issueSmartBillInvoice(orderId, {
+    sendEmail: config.smartbillSendEmail,
+  });
+  sendJson(res, 200, order);
+}
+
+async function handleAdminSmartBillInvoicePdf(req, res, orderId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  await assertSmartBillSchema();
+  const order = await getAdminOrderById(orderId);
+  if (!order) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  if (!order.smartbillSeries || !order.smartbillNumber) {
+    sendJson(res, 409, { message: 'Comanda nu are o factura SmartBill emisa.' });
+    return;
+  }
+
+  if (isMockSmartBillOrder(order)) {
+    const pdf = buildMockSmartBillPdf(order);
+    await updateRow('orders', orderId, {
+      smartbill_pdf_fetched_at: new Date(),
+      smartbill_error: null,
+    });
+    res.writeHead(200, {
+      'Content-Type': 'application/pdf',
+      'Content-Length': pdf.length,
+      'Content-Disposition': 'inline; filename="Factura-MOCK-0001.pdf"',
+      'Cache-Control': 'private, no-store',
+    });
+    res.end(pdf);
+    return;
+  }
+
+  assertSmartBillConfigured();
+  try {
+    const pdf = await smartBillClient.getInvoicePdf(
+      order.smartbillSeries,
+      order.smartbillNumber,
+    );
+    await updateRow('orders', orderId, {
+      smartbill_pdf_fetched_at: new Date(),
+      smartbill_error: null,
+    });
+
+    const filename = `Factura-${order.smartbillSeries}-${order.smartbillNumber}.pdf`
+      .replace(/[^a-zA-Z0-9._-]/g, '-');
+    res.writeHead(200, {
+      'Content-Type': 'application/pdf',
+      'Content-Length': pdf.length,
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Cache-Control': 'private, no-store',
+    });
+    res.end(pdf);
+  } catch (error) {
+    await recordSmartBillError(orderId, error, { preserveInvoiceStatus: true });
+    throw error;
+  }
+}
+
+async function handleAdminSmartBillInvoiceSend(req, res, orderId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const order = await sendSmartBillInvoiceForOrder(orderId);
+  sendJson(res, 200, order);
+}
+
 async function handleAdminConversationList(req, requestUrl, res) {
   const user = await requireAdmin(req, res);
   if (!user) return;
@@ -1694,6 +1823,13 @@ function buildAdminOrderShipmentSql(orderColumns) {
     field('invoice_issued_at', 'invoice_issued_at'),
     field('billing_company', 'billing_company'),
     field('billing_vat', 'billing_vat'),
+    field('invoice_provider', 'invoice_provider'),
+    field('smartbill_series', 'smartbill_series'),
+    field('smartbill_number', 'smartbill_number'),
+    field('smartbill_pdf_fetched_at', 'smartbill_pdf_fetched_at'),
+    field('smartbill_email_sent_at', 'smartbill_email_sent_at'),
+    field('smartbill_last_attempt_at', 'smartbill_last_attempt_at'),
+    field('smartbill_error', 'smartbill_error'),
   ].join(',\n      ');
 }
 
@@ -1794,7 +1930,14 @@ function normalizeAdminOrderUpdateInput(body, existingOrder) {
   ];
   const allowedPaymentStatuses = ['unpaid', 'pending', 'paid', 'failed', 'refunded'];
   const allowedPackageStatuses = ['nepregatit', 'pregatit', 'impachetat', 'expediat', 'livrat', 'retur'];
-  const allowedInvoiceStatuses = ['negenerata', 'generata', 'trimisa', 'anulata'];
+  const allowedInvoiceStatuses = [
+    'negenerata',
+    'in_generare',
+    'generata',
+    'trimisa',
+    'eroare',
+    'anulata',
+  ];
 
   if (!allowedStatuses.includes(nextStatus)) {
     const error = new Error('Statusul comenzii nu este valid.');
@@ -3004,6 +3147,14 @@ async function handleNetopiaPaymentStart(req, res) {
     });
     const responseOrder = orderResponse(updatedOrder || order, insertedItems);
     void sendOrderEmails({ user, order: responseOrder, items: insertedItems });
+    if (paymentState.paymentStatus === 'paid' && smartBillClient.isConfigured()) {
+      void issueSmartBillInvoice(order.id, {
+        requirePaid: true,
+        sendEmail: config.smartbillSendEmail,
+      }).catch((error) => {
+        console.error(`SmartBill invoice failed for order ${order.order_number}:`, error);
+      });
+    }
 
     sendJson(res, 201, {
       order: responseOrder,
@@ -3075,6 +3226,15 @@ async function handleNetopiaNotify(req, requestUrl, res) {
   });
 
   sendJson(res, 200, { ok: true });
+
+  if (paymentState.paymentStatus === 'paid' && smartBillClient.isConfigured()) {
+    void issueSmartBillInvoice(order.id, {
+      requirePaid: true,
+      sendEmail: config.smartbillSendEmail,
+    }).catch((error) => {
+      console.error(`SmartBill invoice failed for order ${order.order_number}:`, error);
+    });
+  }
 }
 
 async function handleAddressCreate(req, res) {
@@ -3364,7 +3524,7 @@ function buildAddressData(columns, body, userId) {
 }
 
 function validateAddressData(data) {
-  const requiredFields = ['prenume', 'nume', 'tara', 'adresa1', 'cod_postal', 'oras'];
+  const requiredFields = ['prenume', 'nume', 'tara', 'adresa1', 'cod_postal', 'oras', 'judet'];
   for (const field of requiredFields) {
     if (Object.prototype.hasOwnProperty.call(data, field) && !String(data[field] || '').trim()) {
       return 'Completeaza toate campurile obligatorii pentru adresa.';
@@ -3954,6 +4114,351 @@ async function updateOrderPayment(orderId, updates) {
   return updateRow('orders', orderId, updates);
 }
 
+async function issueSmartBillInvoice(orderId, options = {}) {
+  assertSmartBillConfigured();
+  await assertSmartBillSchema();
+
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock($1, $2)', [73119, orderId]);
+    let order = await getAdminOrderById(orderId, client);
+    if (!order) {
+      const error = new Error('Comanda nu a fost gasita.');
+      error.status = 404;
+      throw error;
+    }
+
+    if (options.requirePaid && order.paymentStatus !== 'paid') {
+      const error = new Error('Factura automata poate fi emisa doar dupa confirmarea platii.');
+      error.status = 409;
+      throw error;
+    }
+
+    if (order.smartbillSeries && order.smartbillNumber) {
+      if (options.sendEmail && !order.smartbillEmailSentAt) {
+        order = await sendSmartBillInvoiceWithClient(order, client);
+      }
+      return order;
+    }
+
+    if (order.invoiceNumber && order.invoiceProvider !== 'smartbill') {
+      const error = new Error('Comanda are deja o factura inregistrata manual.');
+      error.status = 409;
+      throw error;
+    }
+
+    const customer = await getSmartBillCustomerForOrder(order, client);
+    const payload = buildSmartBillInvoicePayload(
+      smartBillClient.settings,
+      {
+        order,
+        customer,
+        items: order.items,
+      },
+      new Date(),
+    );
+
+    await updateRowWithClient(client, 'orders', orderId, {
+      invoice_status: 'in_generare',
+      invoice_provider: 'smartbill',
+      smartbill_last_attempt_at: new Date(),
+      smartbill_error: null,
+      smartbill_payload: payload,
+      updated_at: new Date(),
+    });
+
+    const result = await smartBillClient.createInvoice(payload);
+    const invoiceUrl = new URL(
+      `/admin/orders/${orderId}/invoice/smartbill/pdf`,
+      config.backendPublicUrl,
+    ).toString();
+
+    await updateRowWithClient(client, 'orders', orderId, {
+      invoice_number: `${result.series}${result.number}`,
+      invoice_status: 'generata',
+      invoice_url: invoiceUrl,
+      invoice_issued_at: new Date(),
+      invoice_provider: 'smartbill',
+      smartbill_series: result.series,
+      smartbill_number: result.number,
+      smartbill_error: null,
+      smartbill_response: result.raw,
+      updated_at: new Date(),
+    });
+
+    order = await getAdminOrderById(orderId, client);
+    if (options.sendEmail) {
+      try {
+        order = await sendSmartBillInvoiceWithClient(order, client);
+      } catch (error) {
+        await recordSmartBillError(orderId, error, {
+          db: client,
+          preserveInvoiceStatus: true,
+        });
+      }
+    }
+
+    return order;
+  } catch (error) {
+    if (![404, 409].includes(Number(error?.status))) {
+      await recordSmartBillError(orderId, error, { db: client });
+    }
+    throw error;
+  } finally {
+    await client.query('SELECT pg_advisory_unlock($1, $2)', [73119, orderId]).catch(() => {});
+    client.release();
+  }
+}
+
+async function sendSmartBillInvoiceForOrder(orderId) {
+  await assertSmartBillSchema();
+
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock($1, $2)', [73119, orderId]);
+    const order = await getAdminOrderById(orderId, client);
+    if (!order) {
+      const error = new Error('Comanda nu a fost gasita.');
+      error.status = 404;
+      throw error;
+    }
+
+    if (!isMockSmartBillOrder(order)) {
+      assertSmartBillConfigured();
+    }
+
+    try {
+      return await sendSmartBillInvoiceWithClient(order, client);
+    } catch (error) {
+      await recordSmartBillError(orderId, error, {
+        db: client,
+        preserveInvoiceStatus: true,
+      });
+      throw error;
+    }
+  } finally {
+    await client.query('SELECT pg_advisory_unlock($1, $2)', [73119, orderId]).catch(() => {});
+    client.release();
+  }
+}
+
+async function sendSmartBillInvoiceWithClient(order, client) {
+  if (!order?.smartbillSeries || !order?.smartbillNumber) {
+    const error = new Error('Emite factura SmartBill inainte de a o trimite.');
+    error.status = 409;
+    throw error;
+  }
+
+  if (!order.customer?.email) {
+    const error = new Error('Clientul nu are o adresa de email valida.');
+    error.status = 400;
+    throw error;
+  }
+
+  if (isMockSmartBillOrder(order)) {
+    await updateRowWithClient(client, 'orders', order.id, {
+      invoice_status: 'trimisa',
+      smartbill_email_sent_at: new Date(),
+      smartbill_error: null,
+      updated_at: new Date(),
+    });
+    return getAdminOrderById(order.id, client);
+  }
+
+  await smartBillClient.sendInvoiceEmail({
+    series: order.smartbillSeries,
+    number: order.smartbillNumber,
+    to: order.customer.email,
+    subject: `Factura ${order.smartbillSeries}${order.smartbillNumber} - Margele.net`,
+    bodyText: [
+      `Buna ziua${order.customer.name ? `, ${order.customer.name}` : ''},`,
+      '',
+      `Va trimitem factura ${order.smartbillSeries}${order.smartbillNumber} pentru comanda ${order.orderNumber}.`,
+      '',
+      'Va multumim,',
+      'Echipa Margele.net',
+    ].join('\n'),
+  });
+
+  await updateRowWithClient(client, 'orders', order.id, {
+    invoice_status: 'trimisa',
+    smartbill_email_sent_at: new Date(),
+    smartbill_error: null,
+    updated_at: new Date(),
+  });
+  return getAdminOrderById(order.id, client);
+}
+
+function isMockSmartBillOrder(order) {
+  return (
+    order?.orderNumber === 'MOCK-SMARTBILL-001' &&
+    order?.smartbillSeries === 'MOCK' &&
+    order?.smartbillNumber === '0001'
+  );
+}
+
+function buildMockSmartBillPdf(order) {
+  const lines = [
+    'FACTURA SMARTBILL - MOCK',
+    `Serie / numar: ${order.smartbillSeries} ${order.smartbillNumber}`,
+    `Comanda: ${order.orderNumber}`,
+    `Client: ${order.customer?.name || 'Client test'}`,
+    `Total: ${order.total} ${order.currency}`,
+    '',
+    'Document local pentru testarea interfetei.',
+    'Nu reprezinta un document fiscal.',
+  ];
+  const content = [
+    'BT',
+    '/F1 18 Tf',
+    '72 760 Td',
+    ...lines.flatMap((line, index) => [
+      index === 0 ? `(${escapePdfText(line)}) Tj` : '0 -30 Td',
+      ...(index === 0 ? [] : [`(${escapePdfText(line)}) Tj`]),
+    ]),
+    'ET',
+  ].join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${Buffer.byteLength(content, 'ascii')} >>\nstream\n${content}\nendstream`,
+  ];
+  let document = '%PDF-1.4\n';
+  const offsets = [0];
+
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(document, 'ascii'));
+    document += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+
+  const xrefOffset = Buffer.byteLength(document, 'ascii');
+  document += `xref\n0 ${objects.length + 1}\n`;
+  document += '0000000000 65535 f \n';
+  document += offsets
+    .slice(1)
+    .map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`)
+    .join('');
+  document += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+  document += `startxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(document, 'ascii');
+}
+
+function escapePdfText(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
+async function getSmartBillCustomerForOrder(order, db = pool) {
+  const userResult = await db.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [
+    order.customer?.id,
+  ]);
+  const user = userResult.rows[0];
+  if (!user) {
+    throw new SmartBillError('Clientul comenzii nu a fost gasit.', { status: 400 });
+  }
+
+  let address = null;
+  if (await hasTable('addresses')) {
+    const addressResult = await db.query(
+      `
+        SELECT *
+        FROM addresses
+        WHERE user_id = $1
+        ORDER BY implicit_facturare DESC, implicit_livrare DESC, id DESC
+        LIMIT 1
+      `,
+      [user.id],
+    );
+    address = addressResult.rows[0] || null;
+  }
+
+  if (!address) {
+    throw new SmartBillError(
+      'Clientul nu are o adresa de facturare. Adauga adresa in cont inainte de emitere.',
+      { status: 400 },
+    );
+  }
+
+  const companyName =
+    cleanOptionalValue(order.billingCompany) ||
+    cleanOptionalValue(address.companie || address.company) ||
+    cleanOptionalValue(user.company_name);
+  const personName =
+    cleanOptionalValue(`${address.prenume || ''} ${address.nume || ''}`) ||
+    cleanOptionalValue(order.customer?.name);
+  const vatCode =
+    cleanOptionalValue(order.billingVat) ||
+    cleanOptionalValue(user.cui) ||
+    '0';
+  const addressLine = [address.adresa1 || address.address_line_1, address.adresa2 || address.address_line_2]
+    .map(cleanOptionalValue)
+    .filter(Boolean)
+    .join(', ');
+
+  return {
+    name: companyName || personName,
+    vatCode,
+    regCom: cleanOptionalValue(user.trade_register_number),
+    isTaxPayer: /^RO[0-9]+$/i.test(vatCode),
+    address: addressLine,
+    city: cleanOptionalValue(address.oras || address.city),
+    county: cleanOptionalValue(address.judet || address.county),
+    country: cleanOptionalValue(address.tara || address.country) || 'Romania',
+    email: cleanOptionalValue(user.email),
+    phone: cleanOptionalValue(address.telefon || address.phone || user.phone),
+  };
+}
+
+function assertSmartBillConfigured() {
+  if (smartBillClient.isConfigured()) return;
+  throw new SmartBillError(
+    'SmartBill nu este configurat complet. Verifica variabilele SMARTBILL_* din backend/.env.',
+    { status: 503 },
+  );
+}
+
+async function assertSmartBillSchema() {
+  const columns = await getOrderColumns();
+  const requiredColumns = [
+    'invoice_provider',
+    'smartbill_series',
+    'smartbill_number',
+    'smartbill_error',
+    'smartbill_payload',
+    'smartbill_response',
+  ];
+  const missingColumns = requiredColumns.filter((column) => !columns.has(column));
+  if (missingColumns.length === 0) return;
+
+  throw new SmartBillError(
+    'Migrarea SmartBill nu este aplicata. Ruleaza npm run db:migrate in backend.',
+    { status: 503 },
+  );
+}
+
+async function recordSmartBillError(orderId, error, options = {}) {
+  const db = options.db || pool;
+  const message = String(
+    error instanceof Error ? error.message : 'Eroare necunoscuta SmartBill.',
+  ).slice(0, 4000);
+  const updates = {
+    smartbill_error: message,
+    smartbill_last_attempt_at: new Date(),
+    updated_at: new Date(),
+  };
+  if (!options.preserveInvoiceStatus) {
+    updates.invoice_status = 'eroare';
+  }
+
+  await updateRowWithClient(db, 'orders', orderId, updates).catch((updateError) => {
+    console.error(`Could not persist SmartBill error for order ${orderId}:`, updateError);
+  });
+}
+
 async function generateOrderNumber() {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -4093,6 +4598,13 @@ function adminOrderResponse(order) {
     invoiceIssuedAt: order.invoice_issued_at || null,
     billingCompany: order.billing_company || null,
     billingVat: order.billing_vat || null,
+    invoiceProvider: order.invoice_provider || null,
+    smartbillSeries: order.smartbill_series || null,
+    smartbillNumber: order.smartbill_number || null,
+    smartbillPdfFetchedAt: order.smartbill_pdf_fetched_at || null,
+    smartbillEmailSentAt: order.smartbill_email_sent_at || null,
+    smartbillLastAttemptAt: order.smartbill_last_attempt_at || null,
+    smartbillError: order.smartbill_error || null,
     customer: {
       id: order.user_id ?? null,
       name: order.user_name || '',
