@@ -219,14 +219,16 @@ export default function ContAdresePage() {
                             {address.prenume} {address.nume}
                           </p>
                           <p className="mt-4 text-base leading-8 text-slate-900">
+                            {address.companie ? <>{address.companie}<br /></> : null}
                             {address.adresa1}
                             {address.adresa2 ? <>, {address.adresa2}</> : null}
                             <br />
                             {address.codPostal}
                             <br />
-                            {address.oras}
+                            {address.oras}, {address.judet}
                             <br />
                             {address.tara}
+                            {address.telefon ? <><br />{address.telefon}</> : null}
                           </p>
                         </div>
 

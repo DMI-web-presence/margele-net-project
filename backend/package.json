@@ -10,6 +10,9 @@
     "import:product-options": "node scripts/import-product-options.js",
     "import:products": "node scripts/import-products.js",
     "apply:curated-categories": "node scripts/apply-curated-categories.js",
+    "seed:smartbill-mock": "node scripts/seed-smartbill-mock.js",
+    "seed:smartbill-mock:remove": "node scripts/seed-smartbill-mock.js --remove",
+    "test": "node --test",
     "dev": "node src/server.js",
     "start": "node src/server.js"
   },

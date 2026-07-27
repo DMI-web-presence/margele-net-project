@@ -143,6 +143,13 @@ type OrderRecord = {
   invoiceIssuedAt: string | null;
   billingCompany: string | null;
   billingVat: string | null;
+  invoiceProvider: string | null;
+  smartbillSeries: string | null;
+  smartbillNumber: string | null;
+  smartbillPdfFetchedAt: string | null;
+  smartbillEmailSentAt: string | null;
+  smartbillLastAttemptAt: string | null;
+  smartbillError: string | null;
   itemCount: number;
   customer: {
     id: number | null;
@@ -489,6 +496,7 @@ export default function AdminPanel() {
   const [billingDraftInvoiceUrl, setBillingDraftInvoiceUrl] = useState('');
   const [billingDraftCompany, setBillingDraftCompany] = useState('');
   const [billingDraftVat, setBillingDraftVat] = useState('');
+  const [smartBillAction, setSmartBillAction] = useState<'create' | 'pdf' | 'send' | null>(null);
   const [conversationStatusFilter, setConversationStatusFilter] = useState<string>('');
   const [conversationSourceFilter, setConversationSourceFilter] = useState<string>('');
   const [showAllEditorCategories, setShowAllEditorCategories] = useState(false);
@@ -1316,6 +1324,111 @@ export default function AdminPanel() {
       setErrorMessage('Actualizarea datelor financiare a esuat.');
     } finally {
       setIsUpdatingOrder(false);
+    }
+  }
+
+  function applyBillingOrderUpdate(order: OrderRecord) {
+    setOrders((current) => current.map((item) => (item.id === order.id ? order : item)));
+    setBillingDraftPaymentStatus(order.paymentStatus || 'unpaid');
+    setBillingDraftInvoiceStatus(order.invoiceStatus || 'negenerata');
+    setBillingDraftInvoiceNumber(order.invoiceNumber || '');
+    setBillingDraftInvoiceUrl(order.invoiceUrl || '');
+    setBillingDraftCompany(order.billingCompany || '');
+    setBillingDraftVat(order.billingVat || '');
+  }
+
+  async function handleSmartBillCreate() {
+    if (!selectedBillingOrder) return;
+
+    setErrorMessage('');
+    setMessage('');
+    setSmartBillAction('create');
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/admin/orders/${selectedBillingOrder.id}/invoice/smartbill`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        },
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setErrorMessage(data?.message || 'Factura SmartBill nu a putut fi emisa.');
+        return;
+      }
+
+      applyBillingOrderUpdate(data as OrderRecord);
+      setMessage(`Factura ${data.invoiceNumber} a fost emisa in SmartBill.`);
+    } catch {
+      setErrorMessage('Conexiunea cu SmartBill a esuat.');
+    } finally {
+      setSmartBillAction(null);
+    }
+  }
+
+  async function handleSmartBillPdf() {
+    if (!selectedBillingOrder) return;
+
+    setErrorMessage('');
+    setMessage('');
+    setSmartBillAction('pdf');
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/admin/orders/${selectedBillingOrder.id}/invoice/smartbill/pdf`,
+        { credentials: 'include' },
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        setErrorMessage(data?.message || 'PDF-ul facturii nu a putut fi descarcat.');
+        return;
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `Factura-${selectedBillingOrder.invoiceNumber || selectedBillingOrder.orderNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      setMessage('PDF-ul facturii a fost descarcat.');
+    } catch {
+      setErrorMessage('PDF-ul facturii nu a putut fi descarcat.');
+    } finally {
+      setSmartBillAction(null);
+    }
+  }
+
+  async function handleSmartBillSend() {
+    if (!selectedBillingOrder) return;
+
+    setErrorMessage('');
+    setMessage('');
+    setSmartBillAction('send');
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/admin/orders/${selectedBillingOrder.id}/invoice/smartbill/send`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        },
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setErrorMessage(data?.message || 'Factura nu a putut fi trimisa prin SmartBill.');
+        return;
+      }
+
+      applyBillingOrderUpdate(data as OrderRecord);
+      setMessage(`Factura a fost trimisa la ${data.customer.email}.`);
+    } catch {
+      setErrorMessage('Factura nu a putut fi trimisa prin SmartBill.');
+    } finally {
+      setSmartBillAction(null);
     }
   }
 
@@ -4895,6 +5008,9 @@ export default function AdminPanel() {
                 <div className="space-y-6 overflow-y-auto px-6 py-6">
                   {message ? <Alert tone="success">{message}</Alert> : null}
                   {errorMessage ? <Alert tone="danger">{errorMessage}</Alert> : null}
+                  {selectedBillingOrder.smartbillError && !errorMessage ? (
+                    <Alert tone="danger">SmartBill: {selectedBillingOrder.smartbillError}</Alert>
+                  ) : null}
 
                   <div className="grid gap-4 md:grid-cols-4">
                     <DashboardCard className="p-5">
@@ -4910,7 +5026,7 @@ export default function AdminPanel() {
                       <div className="mt-3"><InvoiceStatusPill status={selectedBillingOrder.invoiceStatus} /></div>
                     </DashboardCard>
                     <DashboardCard className="p-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Provider</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Provider plata</p>
                       <p className="mt-3 text-lg font-semibold text-slate-950">{selectedBillingOrder.paymentProvider || 'Manual'}</p>
                     </DashboardCard>
                   </div>
@@ -4933,10 +5049,67 @@ export default function AdminPanel() {
                   </DashboardSection>
 
                   <DashboardSection title="Factura" description="Genereaza si completeaza metadatele financiare pentru client.">
+                    <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">
+                          {selectedBillingOrder.invoiceProvider === 'smartbill'
+                            ? `SmartBill ${selectedBillingOrder.smartbillSeries || ''}${selectedBillingOrder.smartbillNumber || ''}`
+                            : 'SmartBill'}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {selectedBillingOrder.smartbillEmailSentAt
+                            ? `Trimisa pe email la ${formatAdminDate(selectedBillingOrder.smartbillEmailSentAt)}`
+                            : `Destinatar: ${selectedBillingOrder.customer.email || 'email lipsa'}`}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          onClick={() => void handleSmartBillCreate()}
+                          disabled={
+                            smartBillAction !== null ||
+                            Boolean(selectedBillingOrder.smartbillNumber) ||
+                            Boolean(
+                              selectedBillingOrder.invoiceNumber &&
+                              selectedBillingOrder.invoiceProvider !== 'smartbill',
+                            )
+                          }
+                          className="cursor-pointer rounded-2xl bg-emerald-600 px-4 text-white hover:bg-emerald-700"
+                        >
+                          {smartBillAction === 'create' ? 'Se emite...' : 'Emite in SmartBill'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => void handleSmartBillPdf()}
+                          disabled={smartBillAction !== null || !selectedBillingOrder.smartbillNumber}
+                          className="cursor-pointer rounded-2xl"
+                        >
+                          {smartBillAction === 'pdf' ? 'Se descarca...' : 'Descarca PDF'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => void handleSmartBillSend()}
+                          disabled={
+                            smartBillAction !== null ||
+                            !selectedBillingOrder.smartbillNumber ||
+                            !selectedBillingOrder.customer.email
+                          }
+                          className="cursor-pointer rounded-2xl"
+                        >
+                          {smartBillAction === 'send' ? 'Se trimite...' : 'Trimite pe email'}
+                        </Button>
+                      </div>
+                    </div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <DashboardField label="Status factura">
-                        <DashboardSelect value={billingDraftInvoiceStatus} onChange={(event) => setBillingDraftInvoiceStatus(event.target.value)}>
-                          {['negenerata', 'generata', 'trimisa', 'anulata'].map((statusOption) => (
+                        <DashboardSelect
+                          value={billingDraftInvoiceStatus}
+                          onChange={(event) => setBillingDraftInvoiceStatus(event.target.value)}
+                          disabled={selectedBillingOrder.invoiceProvider === 'smartbill'}
+                        >
+                          {['negenerata', 'in_generare', 'generata', 'trimisa', 'eroare', 'anulata'].map((statusOption) => (
                             <option key={statusOption} value={statusOption}>
                               {statusOption}
                             </option>
@@ -4944,10 +5117,10 @@ export default function AdminPanel() {
                         </DashboardSelect>
                       </DashboardField>
                       <DashboardField label="Numar factura">
-                        <DashboardInput value={billingDraftInvoiceNumber} onChange={(event) => setBillingDraftInvoiceNumber(event.target.value)} placeholder="Ex: INV-2026-0012" />
+                        <DashboardInput value={billingDraftInvoiceNumber} onChange={(event) => setBillingDraftInvoiceNumber(event.target.value)} placeholder="Ex: INV-2026-0012" readOnly={selectedBillingOrder.invoiceProvider === 'smartbill'} />
                       </DashboardField>
                       <DashboardField label="Link factura">
-                        <DashboardInput value={billingDraftInvoiceUrl} onChange={(event) => setBillingDraftInvoiceUrl(event.target.value)} placeholder="https://..." />
+                        <DashboardInput value={billingDraftInvoiceUrl} onChange={(event) => setBillingDraftInvoiceUrl(event.target.value)} placeholder="https://..." readOnly={selectedBillingOrder.invoiceProvider === 'smartbill'} />
                       </DashboardField>
                       <DashboardField label="Companie facturare">
                         <DashboardInput value={billingDraftCompany} onChange={(event) => setBillingDraftCompany(event.target.value)} placeholder="Nume companie" />
@@ -7164,17 +7337,23 @@ function InvoiceStatusPill({ status }: { status: string }) {
       ? 'generata'
       : normalized === 'trimisa'
         ? 'trimisa'
-        : normalized === 'anulata'
-          ? 'anulata'
-          : 'negenerata';
+        : normalized === 'in_generare'
+          ? 'in generare'
+          : normalized === 'eroare'
+            ? 'eroare'
+            : normalized === 'anulata'
+              ? 'anulata'
+              : 'negenerata';
   const styles =
     normalized === 'trimisa'
       ? 'bg-sky-100 text-sky-700'
       : normalized === 'generata'
         ? 'bg-emerald-100 text-emerald-700'
-        : normalized === 'anulata'
+        : normalized === 'anulata' || normalized === 'eroare'
           ? 'bg-rose-100 text-rose-700'
-          : 'bg-slate-200 text-slate-700';
+          : normalized === 'in_generare'
+            ? 'bg-amber-100 text-amber-700'
+            : 'bg-slate-200 text-slate-700';
 
   return <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${styles}`}>{label}</span>;
 }
