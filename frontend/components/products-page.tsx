@@ -756,11 +756,11 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
       <section className="grid gap-6 lg:grid-cols-[17rem_1fr]">
         <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-600">Filtre</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-[#4f2048]">Filtre</h2>
             <button
               type="button"
               onClick={resetSideFilters}
-              className="cursor-pointer rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"
+              className="cursor-pointer rounded-full border border-[#4f2048]/25 bg-[#fbf4fb] px-3 py-1.5 text-xs font-semibold text-[#4f2048] shadow-sm transition hover:border-[#4f2048]/45 hover:bg-[#f7edf7]"
             >
               Reset
             </button>

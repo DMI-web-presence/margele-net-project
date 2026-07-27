@@ -279,8 +279,8 @@ function CatalogFilterFields({
             <h2
               className={
                 isMobile
-                  ? 'text-xl font-bold text-slate-900'
-                  : 'text-sm font-semibold uppercase tracking-[0.24em] text-slate-600'
+                  ? 'text-xl font-bold text-[#4f2048]'
+                  : 'text-sm font-semibold uppercase tracking-[0.24em] text-[#4f2048]'
               }
             >
               Filtre
@@ -293,7 +293,7 @@ function CatalogFilterFields({
             <button
               type="submit"
               form="catalog-filter-reset"
-              className="cursor-pointer rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"
+              className="cursor-pointer rounded-full border border-[#4f2048]/25 bg-[#fbf4fb] px-3 py-1.5 text-xs font-semibold text-[#4f2048] shadow-sm transition hover:border-[#4f2048]/45 hover:bg-[#f7edf7]"
               onClick={resetFilters}
             >
               Reset

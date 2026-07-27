@@ -23,48 +23,65 @@ type LandingPageProps = {
 const heroBenefits = [
   {
     title: 'Selectie variata',
-    description: 'Mii de produse pentru bijuterii si decoratiuni.',
-    icon: (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7">
-        <path d="M12 3 3.8 9.2 12 21l8.2-11.8L12 3Z" className="fill-none stroke-current stroke-[1.8]" />
-        <path d="M3.8 9.2h16.4M8.5 9.2 12 21l3.5-11.8M8.5 9.2 12 3l3.5 6.2" className="fill-none stroke-current stroke-[1.8]" />
-      </svg>
-    ),
+    description: 'Peste 750 de produse pentru bijuterii, accesorii si decoratiuni.',
+    icon: 'gem',
   },
   {
-    title: 'Calitate garantata',
-    description: 'Produse atent selectate de la branduri de incredere.',
-    icon: (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7">
-        <circle cx="12" cy="8.5" r="4.5" className="fill-none stroke-current stroke-[1.8]" />
-        <path d="m8.7 13.1-1.1 7 4.4-2.6 4.4 2.6-1.1-7" className="fill-none stroke-current stroke-[1.8]" />
-        <path d="m10.2 8.5 1.2 1.2 2.4-2.6" className="fill-none stroke-current stroke-[1.8]" />
-      </svg>
-    ),
+    title: 'Calitate verificata',
+    description: 'Materiale atent selectate, potrivite pentru proiecte handmade.',
+    icon: 'badge',
   },
   {
     title: 'Suport dedicat',
-    description: 'Iti oferim ajutor si consultanta pentru proiectele tale.',
-    icon: (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7">
-        <path d="M5 13v-2a7 7 0 0 1 14 0v2" className="fill-none stroke-current stroke-[1.8]" />
-        <path d="M5 13h2.2v4H5a2 2 0 0 1-2-2 2 2 0 0 1 2-2ZM19 13h-2.2v4H19a2 2 0 0 0 2-2 2 2 0 0 0-2-2Z" className="fill-none stroke-current stroke-[1.8]" />
-        <path d="M16.8 17.2c-.7 2-2.4 3-4.8 3" className="fill-none stroke-current stroke-[1.8]" />
-      </svg>
-    ),
+    description: 'Te ajutam sa alegi produsele potrivite pentru ideile tale.',
+    icon: 'headset',
   },
   {
     title: 'Livrare rapida',
-    description: 'Comenzi livrate rapid in toata Romania.',
-    icon: (
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7">
-        <path d="M3 6h11v9H3V6ZM14 9h3.8l3.2 3.2V15h-7V9Z" className="fill-none stroke-current stroke-[1.8]" />
-        <circle cx="7" cy="17" r="1.8" className="fill-none stroke-current stroke-[1.8]" />
-        <circle cx="18" cy="17" r="1.8" className="fill-none stroke-current stroke-[1.8]" />
-      </svg>
-    ),
+    description: 'Comenzi pregatite rapid si livrate in toata Romania.',
+    icon: 'truck',
   },
-];
+] as const;
+
+function HeroBenefitIcon({ name }: { name: (typeof heroBenefits)[number]['icon'] }) {
+  const iconClassName = 'h-8 w-8 fill-none stroke-current stroke-[1.65]';
+  const sparkleClassName = 'fill-current stroke-none';
+
+  return (
+    <span className="relative inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#f3e9fb] text-[#6f2172]">
+      {name === 'gem' ? (
+        <svg aria-hidden="true" viewBox="0 0 32 32" className={iconClassName}>
+          <path d="m16 6 8.5 6.4L16 27 7.5 12.4 16 6Z" />
+          <path d="M7.5 12.4h17M11.5 12.4 16 27l4.5-14.6M11.5 12.4 16 6l4.5 6.4" />
+          <path d="M3.8 11h2.4M5 9.8v2.4M25.8 7.8h2.4M27 6.6V9M24.7 23.2h2.2M25.8 22.1v2.2" />
+          <circle cx="8.2" cy="6.7" r="0.8" className={sparkleClassName} />
+          <circle cx="28" cy="16.7" r="0.8" className={sparkleClassName} />
+        </svg>
+      ) : null}
+      {name === 'badge' ? (
+        <svg aria-hidden="true" viewBox="0 0 32 32" className={iconClassName}>
+          <path d="m16 4 2.2 2.2 3.1-.5 1.3 2.9 2.9 1.3-.5 3.1 2.2 2.2-2.2 2.2.5 3.1-2.9 1.3-1.3 2.9-3.1-.5L16 28l-2.2-2.2-3.1.5-1.3-2.9-2.9-1.3.5-3.1-2.2-2.2L7 14.6l-.5-3.1 2.9-1.3 1.3-2.9 3.1.5L16 4Z" />
+          <path d="m12.2 16 2.4 2.4 5.2-5.4" />
+        </svg>
+      ) : null}
+      {name === 'headset' ? (
+        <svg aria-hidden="true" viewBox="0 0 32 32" className={iconClassName}>
+          <path d="M7.5 17.5v-3.2a8.5 8.5 0 0 1 17 0v3.2" />
+          <path d="M7.5 17.3h3.1v6H7.5a2.6 2.6 0 0 1-2.6-2.6v-.8a2.6 2.6 0 0 1 2.6-2.6ZM24.5 17.3h-3.1v6h3.1a2.6 2.6 0 0 0 2.6-2.6v-.8a2.6 2.6 0 0 0-2.6-2.6Z" />
+          <path d="M21.4 23.3c-.8 2.2-2.7 3.3-5.4 3.3h-2" />
+        </svg>
+      ) : null}
+      {name === 'truck' ? (
+        <svg aria-hidden="true" viewBox="0 0 32 32" className={iconClassName}>
+          <path d="M10 10h11v11H10V10ZM21 14h4.1l3.4 3.4V21H21v-7Z" />
+          <path d="M3.5 13h4M2.5 16.5H8M4 20h4" />
+          <circle cx="13" cy="23" r="2.2" />
+          <circle cx="25" cy="23" r="2.2" />
+        </svg>
+      ) : null}
+    </span>
+  );
+}
 
 export default function LandingPage({ products }: LandingPageProps) {
   const newestProducts = [...products].sort((a, b) => b.id - a.id);
@@ -137,7 +154,7 @@ export default function LandingPage({ products }: LandingPageProps) {
                 <div className="mt-10 grid grid-cols-2 gap-x-5 gap-y-7 lg:grid-cols-4">
                   {heroBenefits.map((benefit) => (
                     <div key={benefit.title} className="min-w-0">
-                      <div className="text-[#4f2048]">{benefit.icon}</div>
+                      <HeroBenefitIcon name={benefit.icon} />
                       <h2 className="mt-4 text-sm font-bold leading-5 text-slate-950">
                         {benefit.title}
                       </h2>
