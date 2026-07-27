@@ -104,6 +104,50 @@ function createBrevoMailer(config = {}) {
     });
   }
 
+  async function sendPasswordResetEmail({ user, resetUrl }) {
+    const email = cleanEmail(user?.email);
+    if (!email) {
+      return { skipped: true, reason: 'missing_user_email' };
+    }
+
+    const fullName = String(user?.full_name || user?.fullName || '').trim();
+    const safeResetUrl = String(resetUrl || '').trim();
+    if (!safeResetUrl) {
+      return { skipped: true, reason: 'missing_reset_url' };
+    }
+
+    return sendTransactionalEmail({
+      to: [{ email, name: fullName || undefined }],
+      subject: 'Resetare parola Margele.net',
+      textContent: [
+        `Salut${fullName ? `, ${fullName}` : ''}!`,
+        '',
+        'Am primit o cerere de resetare a parolei pentru contul tau Margele.net.',
+        'Linkul este valabil timp de o ora:',
+        safeResetUrl,
+        '',
+        'Daca nu ai cerut resetarea parolei, poti ignora acest mesaj.',
+        '',
+        'Echipa Margele.net',
+      ].join('\n'),
+      htmlContent: `
+        <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+          <h2 style="margin: 0 0 16px;">Resetare parola</h2>
+          <p style="margin: 0 0 12px;">Salut${fullName ? `, ${escapeHtml(fullName)}` : ''}!</p>
+          <p style="margin: 0 0 16px;">Am primit o cerere de resetare a parolei pentru contul tau <strong>Margele.net</strong>.</p>
+          <p style="margin: 0 0 20px;">
+            <a href="${escapeHtml(safeResetUrl)}" style="display: inline-block; background: #4f2048; color: #ffffff; padding: 12px 18px; border-radius: 12px; text-decoration: none; font-weight: 700;">
+              Reseteaza parola
+            </a>
+          </p>
+          <p style="margin: 0 0 12px;">Linkul este valabil timp de o ora.</p>
+          <p style="margin: 0;">Daca nu ai cerut resetarea parolei, poti ignora acest mesaj.</p>
+        </div>
+      `,
+      tags: ['account', 'password-reset'],
+    });
+  }
+
   async function sendOrderConfirmationEmail({ user, order, items }) {
     const email = cleanEmail(user?.email);
     if (!email) {
@@ -469,6 +513,7 @@ function createBrevoMailer(config = {}) {
     isConfigured,
     sendTransactionalEmail,
     sendWelcomeEmail,
+    sendPasswordResetEmail,
     sendOrderConfirmationEmail,
     sendNewOrderAdminAlert,
     sendReturnRequestAdminAlert,

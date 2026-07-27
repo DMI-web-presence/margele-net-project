@@ -71,6 +71,7 @@ const dbSearchSchemas = ['catalog', 'auth', 'commerce', 'content', 'public'];
 const dbSearchPath = dbSearchSchemas.join(',');
 const uploadRoot = path.join(__dirname, '..', 'uploads');
 const productUploadDir = path.join(uploadRoot, 'products');
+const passwordResetCooldownSeconds = 60;
 
 if (!config.databaseUrl) {
   throw new Error('DATABASE_URL is required. Add it to backend/.env.');
@@ -280,6 +281,16 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && requestUrl.pathname === '/auth/login') {
       await handleLogin(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/auth/password-reset/request') {
+      await handlePasswordResetRequest(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/auth/password-reset/confirm') {
+      await handlePasswordResetConfirm(req, res);
       return;
     }
 
@@ -2675,11 +2686,22 @@ async function handleLogin(req, res) {
 
   const userColumns = await getUserColumns();
   const selectRole = userColumns.has('role') ? ', role' : '';
+  const selectRequiresPasswordReset = userColumns.has('requires_password_reset')
+    ? ', requires_password_reset'
+    : '';
   const result = await pool.query(
-    `SELECT id, full_name, email, password_hash${selectRole} FROM users WHERE lower(email) = lower($1) LIMIT 1`,
+    `SELECT id, full_name, email, password_hash${selectRole}${selectRequiresPasswordReset} FROM users WHERE lower(email) = lower($1) LIMIT 1`,
     [email],
   );
   const user = result.rows[0];
+
+  if (user?.requires_password_reset) {
+    sendJson(res, 403, {
+      code: 'password_reset_required',
+      message: 'Pentru acest cont este necesara resetarea parolei.',
+    });
+    return;
+  }
 
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     sendJson(res, 401, { message: 'Emailul sau parola nu sunt corecte.' });
@@ -2688,6 +2710,155 @@ async function handleLogin(req, res) {
 
   setAuthCookie(res, signToken({ sub: user.id, email: user.email }));
   sendJson(res, 200, { user: publicUser(user) });
+}
+
+async function handlePasswordResetRequest(req, res) {
+  const body = await readJson(req);
+  const email = normalizeEmail(body.email);
+
+  if (!email || !isEmail(email)) {
+    sendJson(res, 400, { message: 'Emailul nu este valid.' });
+    return;
+  }
+
+  const result = await pool.query(
+    'SELECT id, full_name, email FROM users WHERE lower(email) = lower($1) LIMIT 1',
+    [email],
+  );
+  const user = result.rows[0];
+
+  if (user && (await hasTable('password_reset_tokens'))) {
+    const cooldownResult = await pool.query(
+      `
+        SELECT created_at
+        FROM password_reset_tokens
+        WHERE user_id = $1
+          AND used_at IS NULL
+          AND created_at > CURRENT_TIMESTAMP - ($2::int * INTERVAL '1 second')
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [user.id, passwordResetCooldownSeconds],
+    );
+    const activeCooldown = cooldownResult.rows[0]?.created_at;
+    if (activeCooldown) {
+      const elapsedSeconds = Math.floor((Date.now() - new Date(activeCooldown).getTime()) / 1000);
+      const retryAfterSeconds = Math.max(1, passwordResetCooldownSeconds - elapsedSeconds);
+      sendJson(res, 429, {
+        code: 'password_reset_cooldown',
+        message: `Poti cere un nou link peste ${retryAfterSeconds} secunde.`,
+        retryAfterSeconds,
+      });
+      return;
+    }
+
+    const token = crypto.randomBytes(32).toString('base64url');
+    const tokenHash = hashResetToken(token);
+    const resetUrl = new URL('/autentificare/resetare-parola', config.frontendOrigin);
+    resetUrl.searchParams.set('token', token);
+    resetUrl.searchParams.set('email', user.email);
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `
+          UPDATE password_reset_tokens
+          SET used_at = CURRENT_TIMESTAMP
+          WHERE user_id = $1 AND used_at IS NULL
+        `,
+        [user.id],
+      );
+      await client.query(
+        `
+          INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+          VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '1 hour')
+        `,
+        [user.id, tokenHash],
+      );
+    });
+
+    void bestEffortEmail('password reset email', () =>
+      brevoMailer.sendPasswordResetEmail({ user, resetUrl: resetUrl.toString() }),
+    );
+  }
+
+  sendJson(res, 200, {
+    ok: true,
+    message: 'Daca exista un cont pentru aceasta adresa, vei primi un link de resetare.',
+    cooldownSeconds: passwordResetCooldownSeconds,
+  });
+}
+
+async function handlePasswordResetConfirm(req, res) {
+  const body = await readJson(req);
+  const token = String(body.token || '').trim();
+  const password = String(body.password || '');
+  const confirmPassword = String(body.confirmPassword || '');
+
+  if (!token) {
+    sendJson(res, 400, { message: 'Linkul de resetare nu este valid.' });
+    return;
+  }
+
+  if (password.length < 8) {
+    sendJson(res, 400, { message: 'Parola trebuie sa aiba cel putin 8 caractere.' });
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    sendJson(res, 400, { message: 'Parolele nu coincid.' });
+    return;
+  }
+
+  if (!(await hasTable('password_reset_tokens'))) {
+    sendJson(res, 503, { message: 'Resetarea parolei nu este configurata.' });
+    return;
+  }
+
+  const tokenHash = hashResetToken(token);
+  const passwordHash = await hashPassword(password);
+  const updatedUser = await withTransaction(async (client) => {
+    const tokenResult = await client.query(
+      `
+        SELECT prt.id, prt.user_id, u.email
+        FROM password_reset_tokens prt
+        JOIN users u ON u.id = prt.user_id
+        WHERE prt.token_hash = $1
+          AND prt.used_at IS NULL
+          AND prt.expires_at > CURRENT_TIMESTAMP
+        LIMIT 1
+      `,
+      [tokenHash],
+    );
+    const resetToken = tokenResult.rows[0];
+    if (!resetToken) return null;
+
+    const columns = await getUserColumns();
+    const resetFlagUpdate = columns.has('requires_password_reset')
+      ? ', requires_password_reset = false'
+      : '';
+    const userResult = await client.query(
+      `
+        UPDATE users
+        SET password_hash = $1${resetFlagUpdate}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING id, email
+      `,
+      [passwordHash, resetToken.user_id],
+    );
+    await client.query(
+      'UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [resetToken.id],
+    );
+    return userResult.rows[0] || null;
+  });
+
+  if (!updatedUser) {
+    sendJson(res, 400, { message: 'Linkul de resetare este invalid sau a expirat.' });
+    return;
+  }
+
+  setAuthCookie(res, signToken({ sub: updatedUser.id, email: updatedUser.email }));
+  sendJson(res, 200, { ok: true });
 }
 
 async function handleMe(req, res) {
@@ -2803,7 +2974,11 @@ async function handlePasswordUpdate(req, res) {
     return;
   }
 
-  await updateUser(user.id, { password_hash: await hashPassword(nextPassword) });
+  const columns = await getUserColumns();
+  await updateUser(user.id, {
+    password_hash: await hashPassword(nextPassword),
+    ...(columns.has('requires_password_reset') ? { requires_password_reset: false } : {}),
+  });
   sendJson(res, 200, { ok: true });
 }
 
@@ -5357,6 +5532,10 @@ function verifyToken(token) {
 
 function createSignature(value) {
   return crypto.createHmac('sha256', config.jwtSecret).update(value).digest('base64url');
+}
+
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
 }
 
 function base64UrlEncode(value) {

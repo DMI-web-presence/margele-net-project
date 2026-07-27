@@ -48,7 +48,16 @@ function ConectareContent() {
       });
 
       if (!response.ok) {
-        setErrorMessage('Emailul sau parola nu sunt corecte.');
+        const result = (await response.json().catch(() => null)) as {
+          code?: string;
+          message?: string;
+        } | null;
+        if (result?.code === 'password_reset_required') {
+          router.push(`/autentificare/resetare-parola?email=${encodeURIComponent(email)}`);
+          return;
+        }
+
+        setErrorMessage(result?.message ?? 'Emailul sau parola nu sunt corecte.');
         return;
       }
 
