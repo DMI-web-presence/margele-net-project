@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   defaultCookiePreferences,
   readCookiePreferences,
@@ -15,11 +16,15 @@ export default function GdprPageContent() {
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
-    setHasMounted(true);
-    const storedPreferences = readCookiePreferences();
-    if (storedPreferences) {
-      setPreferences(storedPreferences);
-    }
+    const frameId = window.requestAnimationFrame(() => {
+      const storedPreferences = readCookiePreferences();
+      if (storedPreferences) {
+        setPreferences(storedPreferences);
+      }
+      setHasMounted(true);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
   }, []);
 
   const savePreferences = (nextPreferences: CookiePreferences) => {
@@ -70,11 +75,16 @@ export default function GdprPageContent() {
 
           <aside className="rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
             <h2 className="text-xl font-semibold text-slate-950">Preferintele tale</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {hasMounted
-                ? 'Aceasta sectiune reflecta alegerea salvata in browserul tau.'
-                : 'Se incarca preferintele locale.'}
-            </p>
+            {hasMounted ? (
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Aceasta sectiune reflecta alegerea salvata in browserul tau.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            )}
 
             <div className="mt-5 space-y-3">
               <PreferenceRow

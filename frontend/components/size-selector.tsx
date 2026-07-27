@@ -46,20 +46,28 @@ export default function SizeSelector({
 
   useEffect(() => {
     const optionsList = optionsListRef.current;
-    if (!optionsList) {
+    let frameId: number | null = null;
+
+    const resetCollapseState = () => {
       setCanCollapse(false);
       setIsExpanded(false);
       setCollapsedMaxHeight(null);
-      return;
+    };
+
+    if (!optionsList) {
+      frameId = window.requestAnimationFrame(resetCollapseState);
+      return () => {
+        if (frameId !== null) {
+          window.cancelAnimationFrame(frameId);
+        }
+      };
     }
 
     const measureWrap = () => {
       const items = Array.from(optionsList.children) as HTMLElement[];
       const firstItem = items[0];
       if (!firstItem) {
-        setCanCollapse(false);
-        setIsExpanded(false);
-        setCollapsedMaxHeight(null);
+        resetCollapseState();
         return;
       }
 
@@ -81,13 +89,16 @@ export default function SizeSelector({
       }
     };
 
-    measureWrap();
+    frameId = window.requestAnimationFrame(measureWrap);
 
     const resizeObserver = new ResizeObserver(measureWrap);
     resizeObserver.observe(optionsList);
     window.addEventListener('resize', measureWrap);
 
     return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
       resizeObserver.disconnect();
       window.removeEventListener('resize', measureWrap);
     };

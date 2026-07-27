@@ -5,6 +5,7 @@ import AccountSidebar from '@/components/account-sidebar';
 import AddAddressModal, { AddressFormValues } from '@/components/add-address-modal';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -25,6 +26,39 @@ function AddressIcon() {
       <circle cx="8" cy="19" r="1.8" />
       <circle cx="17" cy="19" r="1.8" />
     </svg>
+  );
+}
+
+function AddressesLoadingSkeleton() {
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <Card
+          key={index}
+          className="min-h-[420px] rounded-[1.75rem] border-slate-200 bg-white p-8 shadow-sm"
+        >
+          <div className="space-y-6">
+            <Skeleton className="h-4 w-32" />
+            <div className="space-y-4">
+              <Skeleton className="h-10 w-4/5 rounded-xl" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-56" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <Skeleton className="h-12 w-12 rounded-2xl" />
+              <Skeleton className="h-12 w-28 rounded-2xl" />
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
   );
 }
 
@@ -135,7 +169,7 @@ export default function ContAdresePage() {
 
             <div className="mt-8 rounded-[2rem] border border-slate-200 bg-white px-6 py-6 shadow-sm sm:px-8 sm:py-8">
               {isLoading ? (
-                <div className="py-12 text-base text-slate-600">Se incarca adresele...</div>
+                <AddressesLoadingSkeleton />
               ) : errorMessage ? (
                 <div className="py-12 text-base font-semibold text-red-600">{errorMessage}</div>
               ) : addresses.length === 0 ? (

@@ -3,6 +3,7 @@
 import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import AccountSidebar from '@/components/account-sidebar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -733,6 +734,32 @@ function InfoRow({
   );
 }
 
+function ProfileLoadingSkeleton() {
+  return (
+    <div>
+      {Array.from({ length: 3 }).map((_, index) => (
+        <section
+          key={index}
+          className="grid gap-6 border-b border-slate-200 py-8 lg:grid-cols-[3.5rem_1fr_auto] lg:items-center"
+        >
+          <Skeleton className="h-12 w-12 rounded-full" />
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-6 w-44 rounded-lg" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-6 w-56 rounded-lg" />
+            </div>
+          </div>
+          <Skeleton className="h-12 w-[220px] rounded-2xl lg:justify-self-end" />
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export default function ContDatePersonalePage() {
   const [personalInfo, setPersonalInfo] = useState(emptyPersonalInfo);
   const [isLoading, setIsLoading] = useState(true);
@@ -865,7 +892,7 @@ export default function ContDatePersonalePage() {
 
             <div className="mt-8 rounded-[2rem] border border-slate-200 bg-white px-6 shadow-sm sm:px-8">
               {isLoading ? (
-                <div className="py-12 text-base text-slate-600">Se incarca datele contului...</div>
+                <ProfileLoadingSkeleton />
               ) : loadError ? (
                 <div className="py-12 text-base font-semibold text-red-600">{loadError}</div>
               ) : (
