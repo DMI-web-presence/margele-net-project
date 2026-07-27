@@ -38,7 +38,7 @@ const values = [
 export default function ValuesSection() {
   return (
     <section className="bg-white mb-14">
-      <div className="mx-auto max-w-[1370px] overflow-hidden rounded-[1.35rem] bg-[linear-gradient(105deg,#4f2048_0%,#401839_50%,#241020_100%)] px-8 py-7 text-white shadow-[0_18px_45px_rgba(17,16,58,0.22)] sm:px-10">
+      <div className="mx-auto max-w-[1370px] overflow-hidden bg-[linear-gradient(105deg,#4f2048_0%,#401839_50%,#241020_100%)] px-8 py-7 text-white shadow-[0_18px_45px_rgba(17,16,58,0.22)] sm:rounded-[1.35rem] sm:px-10">
         <div className="text-center">
           <p className="text-xs font-bold uppercase tracking-[0.38em] text-white/65">
             Valorile noastre

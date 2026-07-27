@@ -105,8 +105,8 @@ export default function SimilarProductsSlider({
             </CarouselItem>
           ))}
         </CarouselContent>
-        <CarouselPrevious className="left-0 top-[40%] z-10 -translate-x-1/2 -translate-y-1/2" />
-        <CarouselNext className="right-0 top-[40%] z-10 translate-x-1/2 -translate-y-1/2" />
+        <CarouselPrevious className="left-2 top-[40%] z-10 h-10 w-10 -translate-y-1/2 sm:left-0 sm:h-12 sm:w-12 sm:-translate-x-1/2" />
+        <CarouselNext className="right-2 top-[40%] z-10 h-10 w-10 -translate-y-1/2 sm:right-0 sm:h-12 sm:w-12 sm:translate-x-1/2" />
       </Carousel>
     </section>
   );

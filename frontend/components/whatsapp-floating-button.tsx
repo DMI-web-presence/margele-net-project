@@ -52,16 +52,23 @@ export default function WhatsAppFloatingButton() {
     }
 
     function syncFooterOffset() {
+      const mobileViewport = window.matchMedia('(max-width: 640px)').matches;
       const footerPresenceBar = document.querySelector('[data-footer-presence-bar]');
-      if (!footerPresenceBar) {
-        setBottomOffset(20);
-        return;
+      const viewportHeight = window.innerHeight;
+      const footerRect = footerPresenceBar?.getBoundingClientRect();
+      const presenceOverlap = footerRect ? Math.max(0, viewportHeight - footerRect.top) : 0;
+      let nextBottomOffset = presenceOverlap > 0 ? presenceOverlap + 12 : 20;
+
+      if (mobileViewport) {
+        const paymentBadges = document.querySelector('[data-footer-payment-badges]');
+        const paymentRect = paymentBadges?.getBoundingClientRect();
+        const paymentOverlap = paymentRect ? Math.max(0, viewportHeight - paymentRect.top) : 0;
+        if (paymentOverlap > 0) {
+          nextBottomOffset = Math.max(nextBottomOffset, paymentOverlap + 12);
+        }
       }
 
-      const footerRect = footerPresenceBar.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const overlap = Math.max(0, viewportHeight - footerRect.top);
-      setBottomOffset(overlap > 0 ? overlap + 12 : 20);
+      setBottomOffset(nextBottomOffset);
     }
 
     handleScroll();

@@ -123,7 +123,18 @@ export default function LandingPage({ products }: LandingPageProps) {
                   </Link>
                 </div>
 
-                <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="relative mt-8 min-h-[220px] overflow-hidden rounded-[1rem] border border-slate-100 shadow-[0_14px_32px_rgba(15,23,42,0.08)] sm:min-h-[300px] lg:hidden">
+                  <Image
+                    src="/hero-craft-workspace-products.avif"
+                    alt="Materiale creative, margele si accesorii pentru proiecte handmade"
+                    fill
+                    priority
+                    className="object-cover object-center"
+                    sizes="100vw"
+                  />
+                </div>
+
+                <div className="mt-10 grid grid-cols-2 gap-x-5 gap-y-7 lg:grid-cols-4">
                   {heroBenefits.map((benefit) => (
                     <div key={benefit.title} className="min-w-0">
                       <div className="text-[#4f2048]">{benefit.icon}</div>
@@ -136,17 +147,6 @@ export default function LandingPage({ products }: LandingPageProps) {
                     </div>
                   ))}
                 </div>
-              </div>
-
-              <div className="relative min-h-[320px] overflow-hidden lg:hidden">
-                <Image
-                  src="/hero-craft-workspace-products.avif"
-                  alt="Materiale creative, margele si accesorii pentru proiecte handmade"
-                  fill
-                  priority
-                  className="object-cover object-center"
-                  sizes="100vw"
-                />
               </div>
             </div>
           </div>

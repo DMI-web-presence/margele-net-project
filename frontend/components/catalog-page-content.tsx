@@ -273,17 +273,55 @@ export default function CatalogPageContent({
 
   return (
     <div className="space-y-8">
-      <Card className="bg-slate-50 p-8 shadow-sm">
-        <div className="max-w-2xl">
-          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">{intro.eyebrow}</p>
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-            {intro.title}
-          </h1>
-          <p className="mt-4 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
-            {intro.description}
-          </p>
+      <section className="relative overflow-hidden rounded-[1.35rem] border border-slate-200 bg-[linear-gradient(105deg,#fff_0%,#fbf7ff_48%,#f8fbff_100%)] shadow-sm sm:rounded-[1.75rem]">
+        <div className="grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.2fr_0.8fr] lg:p-10">
+          <div className="relative z-10">
+            <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#4f2048]">{intro.eyebrow}</p>
+            <h1 className="mt-3 max-w-2xl text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
+              {intro.title}
+            </h1>
+            <p className="mt-4 max-w-xl text-sm font-medium leading-7 text-slate-700 sm:text-base">
+              Materiale atent alese, disponibile in cantitati mai mari pentru proiecte creative,
+              ateliere si revanzare.
+            </p>
+
+            <div className="mt-7 hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-4">
+              <WholesaleBenefit icon="discount" title="Discount la volum" text="Preturi mai bune in functie de cantitatea comandata." />
+              <WholesaleBenefit icon="stock" title="Stocuri pentru ateliere" text="Produse disponibile constant in cantitati mari." />
+              <WholesaleBenefit icon="repeat" title="Comenzi recurente" text="Recomandari si livrare programata simplu." />
+              <WholesaleBenefit icon="support" title="Oferta personalizata" text="Ai nevoie de altceva? Cere oferta dedicata." />
+            </div>
+
+            <div className="mt-7 hidden flex-col gap-3 sm:flex sm:flex-row sm:items-center">
+              <Link
+                href="/contact"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#4f2048] px-5 text-sm font-bold text-white shadow-[0_12px_26px_rgba(79,32,72,0.24)] transition hover:bg-[#401839]"
+              >
+                <WholesaleIcon name="bag" />
+                Cere oferta en-gross
+              </Link>
+              <Link
+                href="/cum-cumpar"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold text-slate-900 underline-offset-4 transition hover:text-[#4f2048] hover:underline"
+              >
+                Vezi conditiile
+                <span aria-hidden="true">&gt;</span>
+              </Link>
+            </div>
+          </div>
+
+          <div className="relative aspect-[7/4] overflow-hidden rounded-[1.15rem]">
+            <Image
+              src="/wholesale-atelier-packs.png"
+              alt="Pachete atelier cu margele, accesorii si materiale creative"
+              fill
+              className="object-contain"
+              sizes="(min-width: 1024px) 38vw, 100vw"
+              priority
+            />
+          </div>
         </div>
-      </Card>
+      </section>
 
       <section className="grid gap-6 lg:grid-cols-[17rem_1fr]">
         <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
@@ -299,6 +337,7 @@ export default function CatalogPageContent({
             sizeOptions={sizeOptions}
             selectedSizes={query.sizes.filter((value) => sizeOptions.includes(value))}
             sortOptions={sortOptions}
+            totalProducts={filteredProducts.length}
           />
         </aside>
 
@@ -319,15 +358,15 @@ export default function CatalogPageContent({
             />
           </div>
 
-          <div className="mt-6 grid items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
+          <div className="mt-6 grid items-stretch gap-4 pb-20 sm:grid-cols-2 sm:pb-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
             {paginatedProducts.map((product) => (
               <Card
                 key={product.id}
-                className="flex h-full w-full flex-col overflow-hidden rounded-[2rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md"
+                className="flex h-full w-full flex-col overflow-hidden rounded-[1.35rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md sm:rounded-[2rem]"
               >
                 <div className="relative">
                   <Link href={`/products/${product.id}`} className="group block">
-                    <div className="flex h-72 items-center justify-center bg-slate-100 sm:h-65">
+                    <div className="flex h-48 items-center justify-center bg-slate-100 sm:h-65">
                       {product.imageUrl ? (
                         <Image
                           {...getProductImageProps(product.imageUrl, 'card')}
@@ -354,36 +393,36 @@ export default function CatalogPageContent({
                   </div>
                 </div>
 
-                <div className="flex flex-1 flex-col space-y-3 p-4">
+                <div className="flex flex-1 flex-col space-y-2 p-3 sm:space-y-3 sm:p-4">
                   <div className="space-y-1.5">
                     <Link
                       href={`/products/${product.id}`}
-                      className="line-clamp-2 min-h-[3.5rem] text-base font-semibold text-slate-900 transition hover:text-indigo-600"
+                      className="line-clamp-2 min-h-[2.8rem] text-[0.95rem] font-semibold leading-6 text-slate-900 transition hover:text-indigo-600 sm:min-h-[3.5rem] sm:text-base sm:leading-normal"
                     >
                       {product.name}
                     </Link>
-                    <p className="line-clamp-2 min-h-[2.75rem] text-sm text-slate-500">
+                    <p className="line-clamp-1 min-h-5 text-xs leading-5 text-slate-500 sm:line-clamp-2 sm:min-h-[2.75rem] sm:text-sm">
                       {toPlainText(product.description) || 'Material premium pentru proiecte handmade.'}
                     </p>
                     {product.category?.name ? (
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                      <p className="text-[0.68rem] font-medium uppercase tracking-[0.18em] text-slate-400 sm:text-xs">
                         {formatCategoryLabel(product.category.name)}
                       </p>
                     ) : null}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-4 py-6">
+                <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-3 py-3.5 sm:px-4 sm:py-6">
                   <div className="flex min-w-0 flex-col">
-                    <p className="text-2xl font-semibold leading-tight text-slate-900">
+                    <p className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl">
                       {numberFormatter.format(Number(product.price))}
                     </p>
                   </div>
                   <Link
                     href={`/products/${product.id}`}
-                    className="inline-flex h-9 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-indigo-600 px-4 text-xs font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+                    className="inline-flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-indigo-600 px-5 text-sm font-semibold text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 sm:h-9 sm:px-4 sm:text-xs"
                   >
-                    Vezi produsul
+                    Vezi <span className="hidden sm:inline">&nbsp;produsul</span>
                   </Link>
                 </div>
               </Card>
@@ -454,6 +493,77 @@ function PaginationLink({
     <Link href={href} aria-label={ariaLabel} aria-current={current ? 'page' : undefined} className={className}>
       {label}
     </Link>
+  );
+}
+
+function WholesaleBenefit({
+  icon,
+  title,
+  text,
+}: {
+  icon: WholesaleIconName;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white/75 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)] backdrop-blur">
+      <div className="text-[#4f2048]">
+        <WholesaleIcon name={icon} />
+      </div>
+      <h2 className="mt-3 text-sm font-bold text-slate-950">{title}</h2>
+      <p className="mt-1 text-xs font-medium leading-5 text-slate-600">{text}</p>
+    </div>
+  );
+}
+
+type WholesaleIconName = 'discount' | 'stock' | 'repeat' | 'support' | 'bag';
+
+function WholesaleIcon({ name }: { name: WholesaleIconName }) {
+  const className = 'h-6 w-6 fill-none stroke-current stroke-[1.8]';
+
+  if (name === 'discount') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <path d="m12 2 2.1 3.2 3.8-.2.2 3.8L21.3 11l-3.2 2.1.2 3.8-3.8.2L12 20.3l-2.1-3.2-3.8.2-.2-3.8L2.7 11l3.2-2.1-.2-3.8 3.8-.2L12 2Z" />
+        <path d="m9 15 6-6M9.5 9.5h.01M14.5 14.5h.01" />
+      </svg>
+    );
+  }
+
+  if (name === 'stock') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
+        <path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9" />
+      </svg>
+    );
+  }
+
+  if (name === 'repeat') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <path d="M3 12a8 8 0 0 1 13.7-5.6L19 8.7" />
+        <path d="M19 4v4.7h-4.7M21 12a8 8 0 0 1-13.7 5.6L5 15.3" />
+        <path d="M5 20v-4.7h4.7" />
+      </svg>
+    );
+  }
+
+  if (name === 'support') {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24" className={className}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4.5 20c1.3-3.5 4-5.2 7.5-5.2s6.2 1.7 7.5 5.2" />
+        <path d="M8 11.5c.7 1.3 2 2.1 4 2.1s3.3-.8 4-2.1" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
+      <path d="M6 9h12l-1.2 10H7.2L6 9Z" />
+      <path d="M9 9V7a3 3 0 0 1 6 0v2" />
+    </svg>
   );
 }
 
