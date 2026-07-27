@@ -177,7 +177,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         playFlyToTarget(
           sourceElement,
           'basket-icon-button',
-          'linear-gradient(135deg, #4f46e5, #312e81)',
+          'linear-gradient(135deg, #4f2048, #33112d)',
         );
       },
       toggleFavorite: (product, sourceElement) => {

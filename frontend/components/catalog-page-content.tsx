@@ -436,7 +436,7 @@ function PaginationLink({
   disabled?: boolean;
 }) {
   const className = current
-    ? 'inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-[#7b4a75] bg-white px-2 text-[#7b4a75] transition'
+    ? 'inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-[#4f2048] bg-white px-2 text-[#4f2048] transition'
     : 'inline-flex h-8 min-w-8 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900';
 
   if (disabled) {

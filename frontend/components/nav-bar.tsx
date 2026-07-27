@@ -471,7 +471,7 @@ export default function NavBar() {
           >
             <button
               type="button"
-              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-violet-200 bg-violet-600 font-semibold text-white transition-[height,padding,font-size,background-color,border-color,color,box-shadow] duration-500 ease-out shadow-[0_10px_22px_rgba(124,58,237,0.22)] hover:border-violet-300 hover:bg-violet-700 hover:text-white ${
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-violet-200 bg-violet-600 font-semibold text-white transition-[height,padding,font-size,background-color,border-color,color,box-shadow] duration-500 ease-out shadow-[0_10px_22px_rgba(79,32,72,0.22)] hover:border-violet-300 hover:bg-violet-700 hover:text-white ${
                 isNavCompact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-[13px]'
               }`}
               aria-expanded={isCategoryMenuOpen}

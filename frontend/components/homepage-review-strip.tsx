@@ -71,7 +71,7 @@ function GoogleWordmark() {
 
 function ReviewAvatar({ name }: { name: string }) {
   const initial = name.trim().charAt(0).toUpperCase() || 'M';
-  const palette = ['#7c3aed', '#2563eb', '#0f766e', '#b45309', '#be123c', '#475569'];
+  const palette = ['#4f2048', '#2563eb', '#0f766e', '#b45309', '#be123c', '#475569'];
   const colorIndex =
     Array.from(name).reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length;
 
@@ -110,7 +110,7 @@ export default function HomepageReviewStrip() {
       <div className="mx-auto max-w-[1370px] rounded-[1.45rem] border border-slate-200 bg-[linear-gradient(135deg,#fff7fb_0%,#ffffff_42%,#f7f4ff_100%)] p-6 shadow-[0_12px_38px_rgba(15,23,42,0.06)] sm:p-7 lg:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#7b4a75]">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#4f2048]">
               Ce spun clientii
             </p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
@@ -191,7 +191,7 @@ export default function HomepageReviewStrip() {
         <div className="mt-5 text-center">
           <Link
             href="/despre-noi"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-[#6437f3] transition hover:text-[#542ce1]"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[#4f2048] transition hover:text-[#401839]"
           >
             Vezi mai multe despre noi
             <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">

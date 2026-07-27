@@ -26,7 +26,7 @@ export default function ProductRangeSection() {
   return (
     <section className="bg-white mb-14">
       <div className="mx-auto max-w-[1370px] rounded-[1.45rem] border border-slate-200 bg-white p-5 shadow-[0_10px_35px_rgba(15,23,42,0.06)]">
-        <p className="px-1 text-xs font-bold uppercase tracking-[0.16em] text-[#7b4a75]">
+        <p className="px-1 text-xs font-bold uppercase tracking-[0.16em] text-[#4f2048]">
           Oferim o gama larga de produse
         </p>
 
@@ -51,7 +51,7 @@ export default function ProductRangeSection() {
                 <p className="mt-3 text-sm font-medium leading-6 text-slate-700">
                   {item.description}
                 </p>
-                <span className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#6437f3] transition group-hover:translate-x-1">
+                <span className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#4f2048] transition group-hover:translate-x-1">
                   Descopera gama
                   <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">
                     <path d="M5 12h14M13 6l6 6-6 6" className="fill-none stroke-current stroke-2" />

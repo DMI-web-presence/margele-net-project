@@ -5,7 +5,7 @@ const categoryHighlights = [
     title: 'Margele',
     description: 'Sticla, acril, perle si mixuri pentru bratari, coliere si decoratiuni.',
     href: '/catalog',
-    accent: 'bg-[#f6e8f3] text-[#7b4a75]',
+    accent: 'bg-[#f6e8f3] text-[#4f2048]',
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7 fill-none stroke-current stroke-[1.7]">
         <circle cx="7" cy="12" r="3" />
@@ -61,7 +61,7 @@ export default function CategoryHighlights() {
       <div className="mx-auto w-full max-w-[1400px] px-6 py-12 sm:px-10 lg:px-16">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#7b4a75]">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#4f2048]">
               Categorii populare
             </p>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
@@ -92,7 +92,7 @@ export default function CategoryHighlights() {
                 {category.title}
               </h3>
               <p className="mt-3 text-sm leading-6 text-slate-600">{category.description}</p>
-              <span className="mt-5 inline-flex text-sm font-semibold text-[#7b4a75] transition group-hover:translate-x-1">
+              <span className="mt-5 inline-flex text-sm font-semibold text-[#4f2048] transition group-hover:translate-x-1">
                 Exploreaza categoria
               </span>
             </Link>

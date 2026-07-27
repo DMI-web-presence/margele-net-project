@@ -108,12 +108,12 @@ export default function LandingProductCarousel({
           <div className="flex flex-col items-center justify-center">
             <div className="flex flex-wrap items-center justify-center gap-3">
               {eyebrow ? (
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#7b4a75]">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#4f2048]">
                   {eyebrow}
                 </p>
               ) : null}
               {accentLabel ? (
-                <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-[#6437f3]">
+                <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-[#4f2048]">
                   {accentLabel}
                 </span>
               ) : null}
@@ -135,7 +135,7 @@ export default function LandingProductCarousel({
 
           <Link
             href={ctaHref}
-            className="group inline-flex h-12 w-fit items-center justify-center gap-3 rounded-full bg-[#6437f3] px-6 text-sm font-bold text-white shadow-[0_12px_25px_rgba(100,55,243,0.25)] transition hover:bg-[#542ce1]"
+            className="group inline-flex h-12 w-fit items-center justify-center gap-3 rounded-full bg-[#4f2048] px-6 text-sm font-bold text-white shadow-[0_12px_25px_rgba(79,32,72,0.25)] transition hover:bg-[#401839]"
           >
             {ctaLabel}
             <svg
@@ -196,7 +196,7 @@ export default function LandingProductCarousel({
                   <div className="flex min-h-36 flex-1 flex-col gap-2 p-4">
                     <Link
                       href={`/products/${product.id}`}
-                      className="line-clamp-2 text-sm font-semibold text-slate-950 transition hover:text-[#6437f3]"
+                      className="line-clamp-2 text-sm font-semibold text-slate-950 transition hover:text-[#4f2048]"
                     >
                       {product.name}
                     </Link>

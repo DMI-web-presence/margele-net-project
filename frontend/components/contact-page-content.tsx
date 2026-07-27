@@ -87,7 +87,7 @@ export default function ContactPageContent() {
         <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="relative overflow-hidden bg-gradient-to-br from-[#f7f4ff] via-white to-[#eef7ff] p-6 sm:p-8 lg:p-10">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(84,67,241,0.10),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(33,150,243,0.10),transparent_36%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(79,32,72,0.10),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(33,150,243,0.10),transparent_36%)]" />
               <div className="relative space-y-6">
                 <div className="space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">

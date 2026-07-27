@@ -193,18 +193,18 @@ function EmptyBasketIllustration() {
       <circle cx="270" cy="238" r="16" className="fill-white stroke-slate-900" strokeWidth="7" />
       <path
         d="M292 72c20 4 34 18 38 38M317 54c23 11 39 30 47 55"
-        className="fill-none stroke-[#7b4a75]"
+        className="fill-none stroke-[#4f2048]"
         strokeWidth="7"
         strokeLinecap="round"
       />
       <path
         d="M82 91c-18 6-29 19-33 38M61 70c-22 12-36 31-43 56"
-        className="fill-none stroke-[#7b4a75]"
+        className="fill-none stroke-[#4f2048]"
         strokeWidth="7"
         strokeLinecap="round"
       />
-      <circle cx="96" cy="63" r="8" className="fill-[#7b4a75]" />
-      <circle cx="335" cy="145" r="7" className="fill-[#7b4a75]" />
+      <circle cx="96" cy="63" r="8" className="fill-[#4f2048]" />
+      <circle cx="335" cy="145" r="7" className="fill-[#4f2048]" />
       <circle cx="83" cy="178" r="6" className="fill-slate-300" />
       <circle cx="343" cy="216" r="6" className="fill-slate-300" />
     </svg>

@@ -159,7 +159,7 @@ export default function ReturnPageContent() {
         <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="relative overflow-hidden bg-gradient-to-br from-[#f4f7ff] via-white to-[#fff3f3] p-6 sm:p-8 lg:p-10">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(84,67,241,0.10),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(106,60,101,0.10),transparent_36%)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(79,32,72,0.10),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(79,32,72,0.10),transparent_36%)]" />
               <div className="relative space-y-6">
                 <div className="space-y-3">
                   <Badge className="bg-indigo-100 text-indigo-700">Formular de retragere</Badge>

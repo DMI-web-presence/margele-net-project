@@ -2191,12 +2191,12 @@ export default function AdminPanel() {
                 onClick={closeEditor}
                 aria-label="Inapoi la lista de produse"
                 title="Inapoi la lista de produse"
-                className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-[11px] bg-[linear-gradient(145deg,#9149ee,#6f2ee8)] text-white shadow-[0_7px_16px_rgba(124,58,237,0.30)] transition hover:-translate-y-0.5 hover:shadow-[0_9px_20px_rgba(124,58,237,0.38)]"
+                className="flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-[11px] bg-[linear-gradient(145deg,#723064,#4f2048)] text-white shadow-[0_7px_16px_rgba(79,32,72,0.30)] transition hover:-translate-y-0.5 hover:shadow-[0_9px_20px_rgba(79,32,72,0.38)]"
               >
                 <EditorGlyph name="tag" className="h-6 w-6" />
               </button>
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#7c3aed]">Editor produs</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#4f2048]">Editor produs</p>
                 <h1 className="mt-0.5 text-[20px] font-bold leading-tight text-[#17213a]">
                   {draft.id ? draft.name || `Produs #${draft.id}` : 'Produs nou'}
                 </h1>
@@ -2248,7 +2248,7 @@ export default function AdminPanel() {
                       <button
                         type="button"
                         onClick={addDetailedProductVariant}
-                        className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-[8px] bg-violet-600 px-4 text-[11px] font-semibold text-white shadow-[0_5px_14px_rgba(124,58,237,0.2)] transition hover:bg-violet-700"
+                        className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-[8px] bg-violet-600 px-4 text-[11px] font-semibold text-white shadow-[0_5px_14px_rgba(79,32,72,0.20)] transition hover:bg-violet-700"
                       >
                         <span className="text-base font-light leading-none">+</span>
                         Adauga o noua varianta a produsului
@@ -3007,7 +3007,7 @@ export default function AdminPanel() {
                           <button
                             type="button"
                             onClick={generateVariantMatrix}
-                            className="rounded-[8px] bg-violet-600 px-4 py-2 text-[11px] font-semibold text-white shadow-[0_5px_14px_rgba(124,58,237,0.2)] transition hover:bg-violet-700"
+                            className="rounded-[8px] bg-violet-600 px-4 py-2 text-[11px] font-semibold text-white shadow-[0_5px_14px_rgba(79,32,72,0.20)] transition hover:bg-violet-700"
                           >
                             Genereaza combinatiile
                           </button>
@@ -3186,7 +3186,7 @@ export default function AdminPanel() {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="h-10 cursor-pointer rounded-[9px] bg-violet-600 px-6 text-[12px] font-semibold text-white shadow-[0_7px_16px_rgba(124,58,237,0.22)] transition hover:bg-violet-700 disabled:opacity-60"
+                  className="h-10 cursor-pointer rounded-[9px] bg-violet-600 px-6 text-[12px] font-semibold text-white shadow-[0_7px_16px_rgba(79,32,72,0.22)] transition hover:bg-violet-700 disabled:opacity-60"
                 >
                   {isSaving
                     ? 'Se salveaza...'
@@ -3831,7 +3831,7 @@ export default function AdminPanel() {
                       }}
                       className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
                         (getMenuSection(item.label) === currentSection)
-                          ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(124,58,237,0.12)]'
+                          ? 'bg-violet-50 text-violet-700 shadow-[inset_0_0_0_1px_rgba(79,32,72,0.12)]'
                           : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
@@ -5104,7 +5104,7 @@ function PurpleRail({
   const allItems = groups.flatMap((group) => group.items);
 
   return (
-    <div className="sticky top-0 flex h-screen flex-col items-center bg-[linear-gradient(180deg,#7c3aed_0%,#6d28d9_48%,#5b21b6_100%)] px-3 py-5 text-white">
+    <div className="sticky top-0 flex h-screen flex-col items-center bg-[linear-gradient(180deg,#4f2048_0%,#401839_48%,#33112d_100%)] px-3 py-5 text-white">
       <div className="flex w-full flex-1 flex-col items-center gap-3 overflow-y-auto pb-4 pt-3">
         <div className="flex w-full flex-col items-center gap-3">
           {allItems.map((item) => {
@@ -5310,7 +5310,7 @@ function DashboardOverviewReference({
     .slice(0, 5);
   const maxCategoryStock = Math.max(...categoryStock.map((item) => item[1]), 1);
   const statusGroups = [
-    { label: 'Rezervate', color: '#7c3aed', count: visibleOrders.filter((order) => ['plasata', 'confirmata'].includes(order.status.toLowerCase())).length },
+    { label: 'Rezervate', color: '#4f2048', count: visibleOrders.filter((order) => ['plasata', 'confirmata'].includes(order.status.toLowerCase())).length },
     { label: 'Procesate', color: '#10b981', count: visibleOrders.filter((order) => ['in procesare', 'procesata'].includes(order.status.toLowerCase())).length },
     { label: 'Ridicare', color: '#f59e0b', count: visibleOrders.filter((order) => ['pregatita', 'ridicare'].includes(order.status.toLowerCase())).length },
     { label: 'Livrare', color: '#3b82f6', count: visibleOrders.filter((order) => ['expediata', 'livrata'].includes(order.status.toLowerCase())).length },
@@ -5328,13 +5328,13 @@ function DashboardOverviewReference({
           })
           .join(',');
   const statCards = [
-    { label: 'Comenzi', value: numberFormat.format(visibleOrders.length), suffix: '', trend: '+12%', color: '#7c3aed', icon: 'orders' },
+    { label: 'Comenzi', value: numberFormat.format(visibleOrders.length), suffix: '', trend: '+12%', color: '#4f2048', icon: 'orders' },
     { label: 'Venituri', value: moneyFormat.format(revenue), suffix: 'RON', trend: '+18%', color: '#10b981', icon: 'revenue' },
     { label: 'Valoare medie comanda', value: moneyFormat.format(averageOrder), suffix: 'RON', trend: '-3%', color: '#f97316', icon: 'average' },
     { label: 'Rating mediu', value: '4,8', suffix: '/ 5', trend: '+0,2', color: '#f59e0b', icon: 'star' },
   ];
   const trends = [
-    { label: 'Rata conversie', value: visibleOrders.length > 0 ? `${((processedOrders.length / visibleOrders.length) * 100).toFixed(2).replace('.', ',')}%` : '0%', change: '+0,35%', color: '#7c3aed' },
+    { label: 'Rata conversie', value: visibleOrders.length > 0 ? `${((processedOrders.length / visibleOrders.length) * 100).toFixed(2).replace('.', ',')}%` : '0%', change: '+0,35%', color: '#4f2048' },
     { label: 'Vizite', value: numberFormat.format(products.length + visibleOrders.length * 4), change: '+9%', color: '#10b981' },
     { label: 'Cosuri abandonate', value: numberFormat.format(pendingOrders.length), change: '-6%', color: '#f97316' },
     { label: 'Clienti noi', value: numberFormat.format(uniqueCustomers), change: '+14%', color: '#3b82f6' },
@@ -5392,7 +5392,7 @@ function DashboardOverviewReference({
               <option value="90">Ultimele 90 zile</option>
             </select>
           </label>
-          <button type="button" onClick={onNewProduct} className="flex h-10 items-center gap-2 rounded-[10px] bg-violet-600 px-5 text-[11px] font-bold text-white shadow-[0_7px_18px_rgba(124,58,237,0.24)]">
+          <button type="button" onClick={onNewProduct} className="flex h-10 items-center gap-2 rounded-[10px] bg-violet-600 px-5 text-[11px] font-bold text-white shadow-[0_7px_18px_rgba(79,32,72,0.24)]">
             <DashboardReferenceIcon name="plus" className="h-4 w-4" />
             Adauga produs
           </button>
@@ -5455,7 +5455,7 @@ function DashboardOverviewReference({
                   aria-label={`${item.label} ${item.year}: ${moneyFormat.format(item.value)} RON`}
                 >
                   <span
-                    className="w-[34%] min-w-[7px] rounded-t-[3px] bg-[linear-gradient(180deg,#8b35f4_0%,#7724ed_100%)] transition-opacity hover:opacity-80"
+                    className="w-[34%] min-w-[7px] rounded-t-[3px] bg-[linear-gradient(180deg,#723064_0%,#4f2048_100%)] transition-opacity hover:opacity-80"
                     style={{ height: `${Math.max(2, (item.value / monthlyAxisMax) * 100)}%` }}
                   />
                   <small className="absolute -bottom-5 whitespace-nowrap text-[8px] leading-none text-[#8390a4]">{item.label}</small>
@@ -5496,7 +5496,7 @@ function DashboardOverviewReference({
               {hourlyChart.map((item) => (
                 <div key={item.label} className="relative flex h-full flex-1 items-end justify-center gap-[3px]">
                   <span
-                    className="w-[27%] min-w-[5px] rounded-t-[2px] bg-[linear-gradient(180deg,#8b35f4_0%,#7724ed_100%)]"
+                    className="w-[27%] min-w-[5px] rounded-t-[2px] bg-[linear-gradient(180deg,#723064_0%,#4f2048_100%)]"
                     style={{ height: `${Math.max(2, (item.count / hourlyOrderAxisMax) * 100)}%` }}
                     title={`${item.count} comenzi`}
                   />
@@ -5901,7 +5901,7 @@ function DashboardOverview({
             </button>
           </div>
           <div className="mt-8 flex items-center justify-center">
-            <div className="relative h-56 w-56 rounded-full bg-[conic-gradient(#16a34a_0_28%,#7c3aed_28%_68%,#fbbf24_68%_100%)]">
+            <div className="relative h-56 w-56 rounded-full bg-[conic-gradient(#16a34a_0_28%,#4f2048_28%_68%,#fbbf24_68%_100%)]">
               <div className="absolute inset-8 rounded-full bg-white" />
               <div className="absolute right-1 top-12 rounded-lg bg-slate-900 px-2 py-1 text-[11px] font-semibold text-white">40%</div>
             </div>
