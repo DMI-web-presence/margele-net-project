@@ -114,9 +114,49 @@ type ConversationRecord = {
   messages: ConversationMessageRecord[];
 };
 
+type CustomerAddressRecord = {
+  id: number | null;
+  legacyId: number | null;
+  name: string;
+  phone: string;
+  company: string;
+  country: string;
+  county: string;
+  city: string;
+  postalCode: string;
+  address: string;
+  billingDefault: boolean;
+  shippingDefault: boolean;
+};
+
+type CustomerRecord = {
+  id: number | null;
+  legacyId: number | null;
+  type: 'registered' | 'legacy_guest';
+  name: string;
+  email: string;
+  phone: string;
+  clientType: string;
+  requiresPasswordReset: boolean;
+  orderCount: number;
+  legacyOrderCount?: number;
+  activeOrderCount?: number;
+  totalSpent: string;
+  firstOrderAt: string | null;
+  lastOrderAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  addressCount: number;
+  addresses: CustomerAddressRecord[];
+};
+
 type OrderRecord = {
   id: number;
   orderNumber: string;
+  legacyId: number | null;
+  legacyStatusName: string | null;
+  legacyPaymentMethod: string | null;
+  legacyShippingMethod: string | null;
   status: string;
   subtotal: string;
   deliveryTotal: string;
@@ -226,7 +266,7 @@ type ProductDraft = {
   variants: ProductVariant[];
 };
 
-type AdminSection = 'dashboard' | 'products' | 'orders' | 'packages' | 'billing' | 'chat';
+type AdminSection = 'dashboard' | 'products' | 'customers' | 'orders' | 'legacy-orders' | 'packages' | 'billing' | 'chat';
 
 type ImageUploadTarget = {
   kind: 'gallery' | 'variant';
@@ -257,6 +297,16 @@ const conversationSourceLabels: Record<(typeof conversationSourceOptions)[number
 
 const colorAttributeKey = 'Culoare';
 const colorAttributeKeyNormalized = colorAttributeKey.toLowerCase();
+const adminPageSize = 7;
+const adminNumberFormat = new Intl.NumberFormat('ro-RO');
+const paymentStatusOptions = ['unpaid', 'pending', 'paid', 'failed', 'refunded'] as const;
+const paymentStatusLabels: Record<(typeof paymentStatusOptions)[number], string> = {
+  unpaid: 'Neplatita',
+  pending: 'In asteptare',
+  paid: 'Platita',
+  failed: 'Esuata',
+  refunded: 'Rambursata',
+};
 
 const sidebarGroups = [
   {
@@ -264,12 +314,12 @@ const sidebarGroups = [
     items: [
       { label: 'Dashboard', hint: 'Sumar general', icon: 'home' },
       { label: 'Lista produse', hint: 'Produse si preturi', icon: 'box', active: true },
+      { label: 'Clienti', hint: 'Date si adrese clienti', icon: 'user' },
       { label: 'Comenzi', hint: 'Comenzi si status', icon: 'receipt' },
-      { label: 'Packages', hint: 'Livrare si tracking', icon: 'package' },
+      { label: 'Istoric comenzi', hint: 'Comenzi vechi importate', icon: 'history' },
+      { label: 'Colete', hint: 'Livrare si tracking', icon: 'package' },
       { label: 'Facturi si plati', hint: 'Facturi si plati', icon: 'wallet' },
       { label: 'Chat', hint: 'Mesaje clienti', icon: 'chat' },
-      { label: 'Calendar', hint: 'Activitate planificata', icon: 'calendar' },
-      { label: 'Rapoarte si analiza', hint: 'Performanta magazin', icon: 'chart' },
     ],
   },
   {
@@ -430,8 +480,10 @@ function draftFromProduct(product: ProductRecord): ProductDraft {
 function getMenuSection(label: string): AdminSection | null {
   if (label === 'Dashboard') return 'dashboard';
   if (label === 'Lista produse') return 'products';
+  if (label === 'Clienti') return 'customers';
   if (label === 'Comenzi') return 'orders';
-  if (label === 'Packages') return 'packages';
+  if (label === 'Istoric comenzi') return 'legacy-orders';
+  if (label === 'Colete') return 'packages';
   if (label === 'Facturi si plati') return 'billing';
   if (label === 'Chat') return 'chat';
   return null;
@@ -461,6 +513,7 @@ export default function AdminPanel() {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
@@ -499,6 +552,12 @@ export default function AdminPanel() {
   const [smartBillAction, setSmartBillAction] = useState<'create' | 'pdf' | 'send' | null>(null);
   const [conversationStatusFilter, setConversationStatusFilter] = useState<string>('');
   const [conversationSourceFilter, setConversationSourceFilter] = useState<string>('');
+  const [productPage, setProductPage] = useState(1);
+  const [customerPage, setCustomerPage] = useState(1);
+  const [orderPage, setOrderPage] = useState(1);
+  const [legacyOrderPage, setLegacyOrderPage] = useState(1);
+  const [packagePage, setPackagePage] = useState(1);
+  const [billingPage, setBillingPage] = useState(1);
   const [showAllEditorCategories, setShowAllEditorCategories] = useState(false);
   const [showAllEditorAttributes, setShowAllEditorAttributes] = useState(false);
   const [showAllEditorVariants, setShowAllEditorVariants] = useState(false);
@@ -540,25 +599,28 @@ export default function AdminPanel() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const loadAdminData = useCallback(async (selectProductId?: number | null) => {
-    const [productsResponse, categoriesResponse, ordersResponse, conversationsResponse] = await Promise.all([
+    const [productsResponse, categoriesResponse, ordersResponse, customersResponse, conversationsResponse] = await Promise.all([
       fetch(`${backendUrl}/admin/products`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/categories`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/orders`, { credentials: 'include' }),
+      fetch(`${backendUrl}/admin/customers`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/conversations`, { credentials: 'include' }),
     ]);
 
-    if (!productsResponse.ok || !categoriesResponse.ok || !ordersResponse.ok || !conversationsResponse.ok) {
+    if (!productsResponse.ok || !categoriesResponse.ok || !ordersResponse.ok || !customersResponse.ok || !conversationsResponse.ok) {
       throw new Error('Admin fetch failed.');
     }
 
     const nextProducts = (await productsResponse.json()) as ProductRecord[];
     const nextCategories = (await categoriesResponse.json()) as Category[];
     const nextOrders = (await ordersResponse.json()) as OrderRecord[];
+    const nextCustomers = (await customersResponse.json()) as CustomerRecord[];
     const nextConversations = (await conversationsResponse.json()) as ConversationRecord[];
 
     setProducts(nextProducts);
     setCategories(nextCategories);
     setOrders(nextOrders);
+    setCustomers(nextCustomers);
     setConversations(nextConversations);
 
     if (selectProductId === null) {
@@ -679,9 +741,39 @@ export default function AdminPanel() {
     });
   }, [products, search, selectedCategoryId, selectedSubcategoryId, categoryMap]);
 
+  const activeOrders = useMemo(() => orders.filter((order) => !order.legacyId), [orders]);
+  const legacyOrders = useMemo(() => orders.filter((order) => Boolean(order.legacyId)), [orders]);
+
+  const visibleCustomers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return customers.filter((customer) => {
+      if (!query) return true;
+
+      return [
+        customer.name,
+        customer.email,
+        customer.phone,
+        customer.clientType,
+        customer.type,
+        ...customer.addresses.flatMap((address) => [
+          address.name,
+          address.phone,
+          address.company,
+          address.country,
+          address.county,
+          address.city,
+          address.postalCode,
+          address.address,
+        ]),
+      ]
+        .map((value) => String(value || '').toLowerCase())
+        .some((value) => value.includes(query));
+    });
+  }, [customers, search]);
+
   const visibleOrders = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return orders.filter((order) => {
+    return activeOrders.filter((order) => {
       const matchesQuery =
         !query ||
         [
@@ -701,11 +793,39 @@ export default function AdminPanel() {
 
       return matchesQuery && matchesStatus && matchesPayment;
     });
-  }, [orders, search, orderStatusFilter, paymentStatusFilter]);
+  }, [activeOrders, search, orderStatusFilter, paymentStatusFilter]);
+
+  const visibleLegacyOrders = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return legacyOrders.filter((order) => {
+      const matchesQuery =
+        !query ||
+        [
+          order.orderNumber,
+          order.legacyId,
+          order.legacyStatusName,
+          order.legacyPaymentMethod,
+          order.legacyShippingMethod,
+          order.customer.name,
+          order.customer.email,
+          ...order.items.map((item) => item.productName),
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .some((value) => value.includes(query));
+
+      const matchesStatus =
+        !orderStatusFilter || order.status.toLowerCase() === orderStatusFilter.toLowerCase();
+      const matchesPayment =
+        !paymentStatusFilter ||
+        order.paymentStatus.toLowerCase() === paymentStatusFilter.toLowerCase();
+
+      return matchesQuery && matchesStatus && matchesPayment;
+    });
+  }, [legacyOrders, search, orderStatusFilter, paymentStatusFilter]);
 
   const visiblePackages = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return orders.filter((order) => {
+    return activeOrders.filter((order) => {
       const matchesQuery =
         !query ||
         [
@@ -724,11 +844,11 @@ export default function AdminPanel() {
 
       return matchesQuery && matchesStatus;
     });
-  }, [orders, search, packageStatusFilter]);
+  }, [activeOrders, search, packageStatusFilter]);
 
   const visibleBillingOrders = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return orders.filter((order) => {
+    return activeOrders.filter((order) => {
       const matchesQuery =
         !query ||
         [
@@ -750,7 +870,7 @@ export default function AdminPanel() {
 
       return matchesQuery && matchesPaymentStatus && matchesInvoiceStatus;
     });
-  }, [orders, search, billingPaymentStatusFilter, billingInvoiceStatusFilter]);
+  }, [activeOrders, search, billingPaymentStatusFilter, billingInvoiceStatusFilter]);
 
   const visibleConversations = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -784,9 +904,55 @@ export default function AdminPanel() {
       });
   }, [conversations, search, conversationStatusFilter, conversationSourceFilter]);
 
+  const paginatedProducts = useMemo(
+    () => paginateItems(visibleProducts, productPage, adminPageSize).items,
+    [visibleProducts, productPage],
+  );
+  const paginatedCustomers = useMemo(
+    () => paginateItems(visibleCustomers, customerPage, adminPageSize).items,
+    [visibleCustomers, customerPage],
+  );
+  const paginatedOrders = useMemo(
+    () => paginateItems(visibleOrders, orderPage, adminPageSize).items,
+    [visibleOrders, orderPage],
+  );
+  const paginatedLegacyOrders = useMemo(
+    () => paginateItems(visibleLegacyOrders, legacyOrderPage, adminPageSize).items,
+    [visibleLegacyOrders, legacyOrderPage],
+  );
+  const paginatedPackages = useMemo(
+    () => paginateItems(visiblePackages, packagePage, adminPageSize).items,
+    [visiblePackages, packagePage],
+  );
+  const paginatedBillingOrders = useMemo(
+    () => paginateItems(visibleBillingOrders, billingPage, adminPageSize).items,
+    [visibleBillingOrders, billingPage],
+  );
+
   useEffect(() => {
     setConversationPage(1);
   }, [search, conversationStatusFilter, conversationSourceFilter]);
+
+  useEffect(() => {
+    setProductPage(1);
+  }, [search, selectedCategoryId, selectedSubcategoryId]);
+
+  useEffect(() => {
+    setCustomerPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    setOrderPage(1);
+    setLegacyOrderPage(1);
+  }, [search, orderStatusFilter, paymentStatusFilter]);
+
+  useEffect(() => {
+    setPackagePage(1);
+  }, [search, packageStatusFilter]);
+
+  useEffect(() => {
+    setBillingPage(1);
+  }, [search, billingPaymentStatusFilter, billingInvoiceStatusFilter]);
 
   useEffect(() => {
     if (!isConversationModalOpen) return;
@@ -887,10 +1053,10 @@ export default function AdminPanel() {
   }, [products]);
 
   const orderMetrics = useMemo(() => {
-    const totalOrders = orders.length;
-    const paidOrders = orders.filter((order) => order.paymentStatus === 'paid').length;
-    const pendingOrders = orders.filter((order) => ['Plasata', 'Confirmata', 'In procesare'].includes(order.status)).length;
-    const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const totalOrders = activeOrders.length;
+    const paidOrders = activeOrders.filter((order) => order.paymentStatus === 'paid').length;
+    const pendingOrders = activeOrders.filter((order) => ['Plasata', 'Confirmata', 'In procesare'].includes(order.status)).length;
+    const totalRevenue = activeOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
 
     return [
       { label: 'Comenzi totale', value: totalOrders, tone: 'from-violet-500 to-violet-600' },
@@ -898,7 +1064,20 @@ export default function AdminPanel() {
       { label: 'In lucru', value: pendingOrders, tone: 'from-amber-400 to-orange-500' },
       { label: 'Venit total', value: Number(totalRevenue.toFixed(2)), tone: 'from-sky-500 to-cyan-600' },
     ];
-  }, [orders]);
+  }, [activeOrders]);
+
+  const legacyOrderMetrics = useMemo(() => {
+    const totalRevenue = legacyOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const linkedOrders = legacyOrders.filter((order) => order.customer.id).length;
+    const guestOrders = legacyOrders.length - linkedOrders;
+
+    return [
+      { label: 'Comenzi vechi', value: legacyOrders.length, tone: 'from-violet-500 to-violet-600' },
+      { label: 'Legate de cont', value: linkedOrders, tone: 'from-emerald-500 to-emerald-600' },
+      { label: 'Guest vechi', value: guestOrders, tone: 'from-amber-400 to-orange-500' },
+      { label: 'Valoare istoric', value: Number(totalRevenue.toFixed(2)), tone: 'from-sky-500 to-cyan-600' },
+    ];
+  }, [legacyOrders]);
 
   const selectedOrder = useMemo(
     () => orders.find((order) => order.id === selectedOrderId) ?? null,
@@ -1113,6 +1292,13 @@ export default function AdminPanel() {
     setConversationReplyDraft('');
     setMessage('');
     setErrorMessage('');
+  }
+
+  function navigateToSection(nextSection: AdminSection) {
+    setCurrentSection(nextSection);
+    setSearch('');
+    setSelectedCategoryId(null);
+    setSelectedSubcategoryId(null);
   }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
@@ -3906,7 +4092,7 @@ export default function AdminPanel() {
 
               const nextSection = getMenuSection(label);
               if (nextSection) {
-                setCurrentSection(nextSection);
+                navigateToSection(nextSection);
               }
             }}
           />
@@ -3942,7 +4128,7 @@ export default function AdminPanel() {
 
                         const nextSection = getMenuSection(item.label);
                         if (nextSection) {
-                          setCurrentSection(nextSection);
+                          navigateToSection(nextSection);
                         }
                       }}
                       className={`flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
@@ -3980,6 +4166,14 @@ export default function AdminPanel() {
                   placeholder={
                     currentSection === 'orders'
                       ? 'Cauta comanda, client sau produs'
+                      : currentSection === 'legacy-orders'
+                        ? 'Cauta comanda veche, client sau metoda'
+                        : currentSection === 'customers'
+                          ? 'Cauta client, email, telefon sau adresa'
+                        : currentSection === 'packages'
+                          ? 'Cauta colet, client sau tracking'
+                          : currentSection === 'billing'
+                            ? 'Cauta factura, client sau plata'
                       : currentSection === 'chat'
                         ? 'Cauta conversatie, client sau mesaj'
                         : currentSection === 'products' && isEditorOpen
@@ -3994,11 +4188,27 @@ export default function AdminPanel() {
               <div className="flex items-center gap-3">
                 {currentSection === 'products' && isEditorOpen ? null : (
                   <>
-                    <ToolbarPill>{currentSection === 'orders' ? `${orders.length} comenzi` : `${products.length} produse`}</ToolbarPill>
                     <ToolbarPill>
                       {currentSection === 'orders'
-                        ? `${orders.filter((order) => order.paymentStatus === 'paid').length} platite`
-                        : `${categories.length} categorii`}
+                        ? `${activeOrders.length} comenzi`
+                        : currentSection === 'legacy-orders'
+                          ? `${legacyOrders.length} comenzi vechi`
+                          : currentSection === 'customers'
+                            ? `${visibleCustomers.length} clienti`
+                          : currentSection === 'packages'
+                            ? `${visiblePackages.length} colete`
+                            : currentSection === 'billing'
+                              ? `${visibleBillingOrders.length} facturi`
+                              : `${products.length} produse`}
+                    </ToolbarPill>
+                    <ToolbarPill>
+                      {currentSection === 'orders'
+                        ? `${activeOrders.filter((order) => order.paymentStatus === 'paid').length} platite`
+                        : currentSection === 'legacy-orders'
+                          ? `${legacyOrders.filter((order) => order.customer.id).length} legate de cont`
+                          : currentSection === 'customers'
+                            ? `${customers.filter((customer) => customer.requiresPasswordReset).length} reset parola`
+                            : `${categories.length} categorii`}
                     </ToolbarPill>
                   </>
                 )}
@@ -4030,8 +4240,8 @@ export default function AdminPanel() {
                   products={products}
                   orders={orders}
                   categories={categories}
-                  onOpenProducts={() => setCurrentSection('products')}
-                  onOpenOrders={() => setCurrentSection('orders')}
+                  onOpenProducts={() => navigateToSection('products')}
+                  onOpenOrders={() => navigateToSection('orders')}
                   onNewProduct={handleNewProduct}
                   onViewStore={() => window.open('/', '_blank', 'noopener,noreferrer')}
                 />
@@ -4039,12 +4249,13 @@ export default function AdminPanel() {
 
               {currentSection === 'products' ? (
               isEditorOpen ? renderProductEditorDesign() : <div className="space-y-6">
+                <AdminBreadcrumbs current="Lista produse" />
                 <div className="grid gap-4 xl:grid-cols-4">
                   {metrics.map((metric) => (
                     <div key={metric.label} className={`rounded-[28px] bg-gradient-to-br ${metric.tone} p-[1px] shadow-lg`}>
                       <div className="rounded-[27px] bg-white/92 px-5 py-4 backdrop-blur">
                         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
-                        <p className="mt-3 text-3xl font-semibold text-slate-950">{metric.value}</p>
+                        <p className="mt-3 text-3xl font-semibold text-slate-950">{formatMetricValue(metric)}</p>
                         <p className="mt-2 text-sm text-slate-500">{metric.description}</p>
                       </div>
                     </div>
@@ -4124,7 +4335,7 @@ export default function AdminPanel() {
                               </td>
                             </tr>
                           ) : null}
-                          {visibleProducts.map((product) => {
+                          {paginatedProducts.map((product) => {
                             const isSelected = product.id === selectedProductId;
                             return (
                               <tr
@@ -4183,6 +4394,13 @@ export default function AdminPanel() {
                         </tbody>
                       </table>
                     </div>
+                    <PaginationControls
+                      totalItems={visibleProducts.length}
+                      currentPage={productPage}
+                      pageSize={adminPageSize}
+                      itemLabel="produse"
+                      onPageChange={setProductPage}
+                    />
                   </DashboardCard>
                 </div>
                 </div>
@@ -4191,22 +4409,71 @@ export default function AdminPanel() {
               {currentSection === 'orders' ? (
                 <OrdersOverview
                   metrics={orderMetrics}
-                  orders={visibleOrders}
+                  orders={paginatedOrders}
+                  totalOrders={visibleOrders.length}
+                  eyebrow="Comenzi"
+                  title="Administrare comenzi"
+                  emptyMessage="Nu exista comenzi active care sa corespunda filtrelor."
+                  breadcrumbCurrent="Comenzi"
+                  currentPage={orderPage}
                   selectedOrderId={selectedOrderId}
                   statusFilter={orderStatusFilter}
                   paymentStatusFilter={paymentStatusFilter}
+                  onPageChange={setOrderPage}
                   onStatusFilterChange={setOrderStatusFilter}
                   onPaymentStatusFilterChange={setPaymentStatusFilter}
                   onOpenOrder={openOrder}
                 />
               ) : null}
 
+              {currentSection === 'legacy-orders' ? (
+                <OrdersOverview
+                  metrics={legacyOrderMetrics}
+                  orders={paginatedLegacyOrders}
+                  totalOrders={visibleLegacyOrders.length}
+                  eyebrow="Istoric comenzi"
+                  title="Comenzi vechi importate"
+                  emptyMessage="Nu exista comenzi vechi care sa corespunda filtrelor."
+                  breadcrumbCurrent="Istoric comenzi"
+                  currentPage={legacyOrderPage}
+                  selectedOrderId={selectedOrderId}
+                  statusFilter={orderStatusFilter}
+                  paymentStatusFilter={paymentStatusFilter}
+                  onPageChange={setLegacyOrderPage}
+                  onStatusFilterChange={setOrderStatusFilter}
+                  onPaymentStatusFilterChange={setPaymentStatusFilter}
+                  onOpenOrder={openOrder}
+                />
+              ) : null}
+
+              {currentSection === 'customers' ? (
+                <CustomersOverview
+                  customers={paginatedCustomers}
+                  totalCustomers={visibleCustomers.length}
+                  allCustomers={customers}
+                  currentPage={customerPage}
+                  onPageChange={setCustomerPage}
+                  onOpenCustomerOrders={(customer) => {
+                    const legacyOrderCount = getCustomerLegacyOrderCount(customer);
+                    setSearch(customer.email || customer.name);
+                    setOrderStatusFilter('');
+                    setPaymentStatusFilter('');
+                    setOrderPage(1);
+                    setLegacyOrderPage(1);
+                    setCurrentSection(legacyOrderCount > 0 ? 'legacy-orders' : 'orders');
+                  }}
+                />
+              ) : null}
+
               {currentSection === 'packages' ? (
                 <PackagesOverview
                   metrics={orderMetrics}
-                  packages={visiblePackages}
+                  packages={paginatedPackages}
+                  totalPackages={visiblePackages.length}
+                  currentPage={packagePage}
                   selectedPackageId={selectedPackageId}
                   packageStatusFilter={packageStatusFilter}
+                  onPageChange={setPackagePage}
                   onPackageStatusFilterChange={setPackageStatusFilter}
                   onOpenPackage={openPackage}
                 />
@@ -4215,10 +4482,13 @@ export default function AdminPanel() {
               {currentSection === 'billing' ? (
                 <BillingOverview
                   metrics={orderMetrics}
-                  orders={visibleBillingOrders}
+                  orders={paginatedBillingOrders}
+                  totalOrders={visibleBillingOrders.length}
+                  currentPage={billingPage}
                   selectedBillingId={selectedBillingId}
                   paymentStatusFilter={billingPaymentStatusFilter}
                   invoiceStatusFilter={billingInvoiceStatusFilter}
+                  onPageChange={setBillingPage}
                   onPaymentStatusFilterChange={setBillingPaymentStatusFilter}
                   onInvoiceStatusFilterChange={setBillingInvoiceStatusFilter}
                   onOpenBilling={openBilling}
@@ -4788,6 +5058,11 @@ export default function AdminPanel() {
                     <p className="mt-1 text-sm text-slate-500">
                       {selectedOrder.customer.name || 'Client'} · {selectedOrder.customer.email || 'fara email'} · {formatAdminDate(selectedOrder.createdAt)}
                     </p>
+                    {selectedOrder.legacyId ? (
+                      <p className="mt-2 inline-flex rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                        Import legacy #{selectedOrder.legacyId}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-wrap gap-3">
@@ -4841,15 +5116,34 @@ export default function AdminPanel() {
                       </DashboardField>
                       <DashboardField label="Status plata">
                         <DashboardSelect value={orderDraftPaymentStatus} onChange={(event) => setOrderDraftPaymentStatus(event.target.value)}>
-                          {['unpaid', 'pending', 'paid', 'failed', 'refunded'].map((statusOption) => (
+                          {paymentStatusOptions.map((statusOption) => (
                             <option key={statusOption} value={statusOption}>
-                              {statusOption}
+                              {paymentStatusLabels[statusOption]}
                             </option>
                           ))}
                         </DashboardSelect>
                       </DashboardField>
                     </div>
                   </DashboardSection>
+
+                  {selectedOrder.legacyId ? (
+                    <DashboardSection title="Detalii import legacy" description="Informatii pastrate din comanda istorica.">
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <DashboardCard className="p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status vechi</p>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">{selectedOrder.legacyStatusName || '-'}</p>
+                        </DashboardCard>
+                        <DashboardCard className="p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Plata veche</p>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">{selectedOrder.legacyPaymentMethod || '-'}</p>
+                        </DashboardCard>
+                        <DashboardCard className="p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Livrare veche</p>
+                          <p className="mt-2 text-sm font-semibold text-slate-900">{selectedOrder.legacyShippingMethod || '-'}</p>
+                        </DashboardCard>
+                      </div>
+                    </DashboardSection>
+                  ) : null}
 
                   <DashboardSection title="Produse din comanda" description="Produsele incluse in comanda selectata.">
                     <div className="space-y-3">
@@ -5035,9 +5329,9 @@ export default function AdminPanel() {
                     <div className="grid gap-4 md:grid-cols-2">
                       <DashboardField label="Status plata">
                         <DashboardSelect value={billingDraftPaymentStatus} onChange={(event) => setBillingDraftPaymentStatus(event.target.value)}>
-                          {['unpaid', 'pending', 'paid', 'failed', 'refunded'].map((statusOption) => (
+                          {paymentStatusOptions.map((statusOption) => (
                             <option key={statusOption} value={statusOption}>
-                              {statusOption}
+                              {paymentStatusLabels[statusOption]}
                             </option>
                           ))}
                         </DashboardSelect>
@@ -5390,7 +5684,8 @@ function DashboardOverviewReference({
   onNewProduct: () => void;
   onViewStore: () => void;
 }) {
-  const [rangeDays, setRangeDays] = useState('30');
+  const [rangeDays, setRangeDays] = useState('all');
+  const [monthlyChartYear, setMonthlyChartYear] = useState('');
   const [dashboardNow] = useState(() => Date.now());
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState(11);
   const numberFormat = new Intl.NumberFormat('ro-RO');
@@ -5402,12 +5697,15 @@ function DashboardOverviewReference({
     notation: 'compact',
     maximumFractionDigits: 1,
   });
-  const rangeStart = dashboardNow - Number(rangeDays) * 86_400_000;
-  const ordersInRange = orders.filter((order) => {
-    const timestamp = new Date(order.createdAt).getTime();
-    return Number.isFinite(timestamp) && timestamp >= rangeStart;
-  });
-  const visibleOrders = ordersInRange.length > 0 ? ordersInRange : orders;
+  const visibleOrders = useMemo(() => {
+    if (rangeDays === 'all') return orders;
+
+    const rangeStart = dashboardNow - Number(rangeDays) * 86_400_000;
+    return orders.filter((order) => {
+      const timestamp = new Date(order.createdAt).getTime();
+      return Number.isFinite(timestamp) && timestamp >= rangeStart;
+    });
+  }, [dashboardNow, orders, rangeDays]);
   const revenue = visibleOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
   const averageOrder = visibleOrders.length > 0 ? revenue / visibleOrders.length : 0;
   const lowStock = products.filter((product) => product.stockQuantity <= 5);
@@ -5424,17 +5722,17 @@ function DashboardOverviewReference({
     visibleOrders.map((order) => order.customer.email.toLowerCase()).filter(Boolean),
   ).size;
   const productMap = new Map(products.map((product) => [product.id, product]));
-  const monthNames = ['Mai', 'Iun', 'Iul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Ian', 'Feb', 'Mar', 'Apr'];
-  const monthlyProfile = [0.31, 0.52, 0.64, 0.78, 0.92, 0.79, 0.91, 0.79, 0.86, 0.79, 1, 0.91];
-  const monthlyReferenceValue = revenue > 0 ? Math.max(revenue, 100) : 6573;
-  const monthlyRevenue = monthNames.map((label, index) => ({
-    label,
-    year: index < 8 ? 2024 : 2025,
-    value: monthlyReferenceValue * (monthlyProfile[index] / monthlyProfile[11]),
-  }));
+  const monthlyYearOptions = getDashboardOrderYears(visibleOrders);
+  const monthlyYearSelectOptions = monthlyYearOptions.length > 0
+    ? monthlyYearOptions
+    : [new Date(dashboardNow).getFullYear()];
+  const selectedMonthlyYear = monthlyChartYear && monthlyYearOptions.includes(Number(monthlyChartYear))
+    ? Number(monthlyChartYear)
+    : monthlyYearSelectOptions[0];
+  const monthlyRevenue = buildDashboardMonthlyRevenue(visibleOrders, selectedMonthlyYear);
   const maxMonthly = Math.max(...monthlyRevenue.map((item) => item.value), 1);
-  const monthlyAxisMax = Math.max(10_000, Math.ceil(maxMonthly / 10_000) * 10_000);
-  const monthlyAxisValues = Array.from({ length: 6 }, (_, index) => monthlyAxisMax - index * (monthlyAxisMax / 5));
+  const monthlyAxisMax = getNiceAxisMax(maxMonthly);
+  const monthlyAxisValues = buildAxisValues(monthlyAxisMax, 5);
   const hoveredMonth = monthlyRevenue[hoveredMonthIndex] ?? monthlyRevenue[monthlyRevenue.length - 1];
   const hourly = Array.from({ length: 12 }, (_, index) => {
     const start = index * 2;
@@ -5458,14 +5756,8 @@ function DashboardOverviewReference({
         count: hourlyOrderProfile[index],
         value: hourlyRevenueProfile[index],
       }));
-  const hourlyOrderAxisMax = Math.max(
-    80,
-    Math.ceil(Math.max(...hourlyChart.map((item) => item.count), 1) / 20) * 20,
-  );
-  const hourlyRevenueAxisMax = Math.max(
-    2000,
-    Math.ceil(Math.max(...hourlyChart.map((item) => item.value), 1) / 500) * 500,
-  );
+  const hourlyOrderAxisMax = getNiceAxisMax(Math.max(...hourlyChart.map((item) => item.count), 1));
+  const hourlyRevenueAxisMax = getNiceAxisMax(Math.max(...hourlyChart.map((item) => item.value), 1));
   const hourlyAxisSteps = Array.from({ length: 5 }, (_, index) => index);
   const recentOrders = [...visibleOrders]
     .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
@@ -5578,15 +5870,16 @@ function DashboardOverviewReference({
           <p className="text-[12px] text-[#71809a]">Privire rapida asupra magazinului</p>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex h-10 items-center gap-2 rounded-[10px] border border-[#dde4ed] bg-white px-3 text-[11px] font-semibold text-[#53627a]">
+          <label className="flex h-10 cursor-pointer items-center gap-2 rounded-[10px] border border-[#dde4ed] bg-white px-3 text-[13px] font-semibold text-[#53627a]">
             <DashboardReferenceIcon name="calendar" className="h-4 w-4" />
-            <select value={rangeDays} onChange={(event) => setRangeDays(event.target.value)} className="bg-transparent outline-none">
+            <select value={rangeDays} onChange={(event) => setRangeDays(event.target.value)} className="cursor-pointer bg-transparent outline-none">
+              <option value="all">Tot istoricul</option>
               <option value="7">Ultimele 7 zile</option>
               <option value="30">Ultimele 30 zile</option>
               <option value="90">Ultimele 90 zile</option>
             </select>
           </label>
-          <button type="button" onClick={onNewProduct} className="flex h-10 items-center gap-2 rounded-[10px] bg-violet-600 px-5 text-[11px] font-bold text-white shadow-[0_7px_18px_rgba(79,32,72,0.24)]">
+          <button type="button" onClick={onNewProduct} className="flex h-10 cursor-pointer items-center gap-2 rounded-[10px] bg-violet-600 px-5 text-[13px] font-bold text-white shadow-[0_7px_18px_rgba(79,32,72,0.24)]">
             <DashboardReferenceIcon name="plus" className="h-4 w-4" />
             Adauga produs
           </button>
@@ -5599,14 +5892,14 @@ function DashboardOverviewReference({
             <span className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full" style={{ color: card.color, backgroundColor: `${card.color}12` }}>
               <DashboardReferenceIcon name={card.icon} className="h-5 w-5" />
             </span>
-            <p className="text-[11px] font-semibold text-[#60708a]">{card.label}</p>
+            <p className="text-[13px] font-semibold text-[#60708a]">{card.label}</p>
             <div className="mt-1 flex items-end gap-2">
               <strong className="text-[25px] leading-none tracking-[-0.03em]">{card.value}</strong>
-              <span className="pb-0.5 text-[10px] font-bold text-[#5e6d84]">{card.suffix}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${card.trend.startsWith('-') ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>{card.trend}</span>
+              <span className="pb-0.5 text-[12px] font-bold text-[#5e6d84]">{card.suffix}</span>
+              <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${card.trend.startsWith('-') ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>{card.trend}</span>
             </div>
             <div className="mt-2 flex items-end justify-between">
-              <span className="text-[9px] text-[#93a0b3]">vs. perioada anterioara</span>
+              <span className="text-[11px] text-[#93a0b3]">vs. perioada anterioara</span>
               <DashboardSparkline values={dashboardTrendSeries(index + visibleOrders.length + 8, index + 1)} color={card.color} className="h-7 w-28" />
             </div>
           </section>
@@ -5614,31 +5907,52 @@ function DashboardOverviewReference({
       </div>
 
       <div className="grid gap-4 xl:min-h-[560px] xl:flex-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_300px] xl:grid-rows-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
-        <DashboardReferenceCard title="Plati pe luna">
-          <p className="mb-3 flex items-center gap-2 text-[9px] text-[#74839a]"><span className="h-2 w-2 rounded-full bg-violet-600" />Venituri (RON)</p>
+        <DashboardReferenceCard
+          title="Plati pe luna"
+          action={
+            <label className="flex h-8 cursor-pointer items-center rounded-[8px] border border-[#dde4ed] bg-white px-2 text-[11px] font-semibold text-[#53627a]">
+              <select
+                value={String(selectedMonthlyYear)}
+                onChange={(event) => {
+                  setMonthlyChartYear(event.target.value);
+                  setHoveredMonthIndex(11);
+                }}
+                className="cursor-pointer bg-transparent outline-none"
+                aria-label="An plati lunare"
+              >
+                {monthlyYearSelectOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+          }
+        >
+          <p className="mb-3 flex items-center gap-2 text-[11px] text-[#74839a]"><span className="h-2 w-2 rounded-full bg-violet-600" />Venituri (RON)</p>
           <div className="relative min-h-[210px] flex-1 overflow-hidden">
-            <div className="absolute bottom-6 left-7 right-0 top-0">
+            <div className="absolute bottom-6 left-12 right-4 top-4">
               {monthlyAxisValues.map((value, index) => (
                 <div
                   key={value}
                   className="absolute inset-x-0 border-t border-[#e8edf4]"
                   style={{ top: `${index * 20}%` }}
                 >
-                  <span className="absolute right-full top-0 mr-2 -translate-y-1/2 text-[8px] leading-none text-[#738198]">
-                    {value === 0 ? '0' : `${numberFormat.format(value / 1000)}K`}
+                  <span className="absolute left-0 top-0 -translate-x-full -translate-y-1/2 pr-2 text-right text-[10px] leading-none text-[#738198]">
+                    {formatChartAxisValue(value, numberFormat)}
                   </span>
                 </div>
               ))}
             </div>
 
-            <div className="pointer-events-none absolute right-2 top-0 z-10 min-w-[92px] rounded-[9px] border border-[#e1e6ee] bg-white px-3 py-2 shadow-[0_5px_16px_rgba(28,39,64,0.12)]">
-              <p className="text-[8px] font-semibold text-[#65738a]">{hoveredMonth.label} {hoveredMonth.year}</p>
-              <strong className="mt-1 block text-[10px] text-[#394861]">
+            <div className="pointer-events-none absolute right-6 top-5 z-10 min-w-[108px] rounded-[9px] border border-[#e1e6ee] bg-white px-3 py-2 shadow-[0_5px_16px_rgba(28,39,64,0.12)]">
+              <p className="text-[10px] font-semibold text-[#65738a]">{hoveredMonth.label} {hoveredMonth.year}</p>
+              <strong className="mt-1 block text-[12px] text-[#394861]">
                 {moneyFormat.format(hoveredMonth.value)} RON
               </strong>
             </div>
 
-            <div className="absolute bottom-6 left-7 right-0 top-0 flex items-end gap-1.5">
+            <div className="absolute bottom-6 left-12 right-4 top-4 flex items-end gap-1.5">
               {monthlyRevenue.map((item, index) => (
                 <button
                   key={item.label}
@@ -5652,16 +5966,16 @@ function DashboardOverviewReference({
                     className="w-[34%] min-w-[7px] rounded-t-[3px] bg-[linear-gradient(180deg,#723064_0%,#4f2048_100%)] transition-opacity hover:opacity-80"
                     style={{ height: `${Math.max(2, (item.value / monthlyAxisMax) * 100)}%` }}
                   />
-                  <small className="absolute -bottom-5 whitespace-nowrap text-[8px] leading-none text-[#8390a4]">{item.label}</small>
+                  <small className="absolute -bottom-5 whitespace-nowrap text-[10px] leading-none text-[#8390a4]">{item.label}</small>
                 </button>
               ))}
             </div>
           </div>
         </DashboardReferenceCard>
 
-        <DashboardReferenceCard title="Plati pe interval orar" action={<div className="flex gap-4 text-[8px] text-[#7f8ca0]"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-violet-600" />Comenzi</span><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-emerald-500" />Venituri (RON)</span></div>}>
+        <DashboardReferenceCard title="Plati pe interval orar" action={<div className="flex gap-4 text-[10px] text-[#7f8ca0]"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-violet-600" />Comenzi</span><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-emerald-500" />Venituri (RON)</span></div>}>
           <div className="relative min-h-[232px] flex-1 overflow-hidden">
-            <div className="absolute bottom-6 left-7 right-8 top-0">
+            <div className="absolute bottom-6 left-12 right-14 top-4">
               {hourlyAxisSteps.map((step) => {
                 const orderValue = hourlyOrderAxisMax - step * (hourlyOrderAxisMax / 4);
                 const revenueValue = hourlyRevenueAxisMax - step * (hourlyRevenueAxisMax / 4);
@@ -5671,22 +5985,18 @@ function DashboardOverviewReference({
                     className="absolute inset-x-0 border-t border-[#e8edf4]"
                     style={{ top: `${step * 25}%` }}
                   >
-                    <span className="absolute right-full top-0 mr-2 -translate-y-1/2 text-[8px] leading-none text-[#738198]">
+                    <span className="absolute left-0 top-0 -translate-x-full -translate-y-1/2 pr-2 text-right text-[10px] leading-none text-[#738198]">
                       {numberFormat.format(orderValue)}
                     </span>
-                    <span className="absolute left-full top-0 ml-2 -translate-y-1/2 text-[8px] leading-none text-[#738198]">
-                      {revenueValue === 0
-                        ? '0'
-                        : revenueValue >= 1000
-                          ? `${numberFormat.format(revenueValue / 1000)}K`
-                          : numberFormat.format(revenueValue)}
+                    <span className="absolute right-0 top-0 translate-x-full -translate-y-1/2 pl-2 text-[10px] leading-none text-[#738198]">
+                      {formatChartAxisValue(revenueValue, numberFormat)}
                     </span>
                   </div>
                 );
               })}
             </div>
 
-            <div className="absolute bottom-6 left-7 right-8 top-0 flex items-end gap-1.5">
+            <div className="absolute bottom-6 left-12 right-14 top-4 flex items-end gap-1.5">
               {hourlyChart.map((item) => (
                 <div key={item.label} className="relative flex h-full flex-1 items-end justify-center gap-[3px]">
                   <span
@@ -5699,7 +6009,7 @@ function DashboardOverviewReference({
                     style={{ height: `${Math.max(2, (item.value / hourlyRevenueAxisMax) * 100)}%` }}
                     title={`${moneyFormat.format(item.value)} RON`}
                   />
-                  <small className="absolute -bottom-5 whitespace-nowrap text-[8px] leading-none text-[#8390a4]">{item.label}</small>
+                  <small className="absolute -bottom-5 whitespace-nowrap text-[10px] leading-none text-[#8390a4]">{item.label}</small>
                 </div>
               ))}
             </div>
@@ -5715,7 +6025,7 @@ function DashboardOverviewReference({
                 ['Categorii', 'grid', onOpenProducts, 'blue'],
                 ['Vezi magazinul', 'external', onViewStore, 'violet'],
               ].map(([label, icon, action, tone]) => (
-                <button key={String(label)} type="button" onClick={action as () => void} className={`flex h-14 items-center justify-center gap-2 rounded-[10px] border text-[9px] font-bold ${tone === 'green' ? 'border-emerald-100 bg-emerald-50/50 text-emerald-600' : tone === 'blue' ? 'border-blue-100 bg-blue-50/50 text-blue-600' : 'border-violet-100 bg-violet-50/50 text-violet-600'}`}>
+                <button key={String(label)} type="button" onClick={action as () => void} className={`flex h-14 cursor-pointer items-center justify-center gap-2 rounded-[10px] border text-[11px] font-bold ${tone === 'green' ? 'border-emerald-100 bg-emerald-50/50 text-emerald-600' : tone === 'blue' ? 'border-blue-100 bg-blue-50/50 text-blue-600' : 'border-violet-100 bg-violet-50/50 text-violet-600'}`}>
                   <DashboardReferenceIcon name={String(icon)} className="h-5 w-5" />{String(label)}
                 </button>
               ))}
@@ -5729,20 +6039,20 @@ function DashboardOverviewReference({
                 ['Comenzi neprocesate', pendingOrders.length, 'clock', 'orange', onOpenOrders],
                 ['Produse fara imagine', noImage.length, 'image', 'blue', onOpenProducts],
               ].map(([label, value, icon, tone, action]) => (
-                <button key={String(label)} type="button" onClick={action as () => void} className={`flex h-9 w-full items-center gap-2 rounded-[9px] border px-3 text-[9px] font-semibold ${tone === 'rose' ? 'border-rose-100 bg-rose-50/60 text-rose-600' : tone === 'orange' ? 'border-orange-100 bg-orange-50/60 text-orange-600' : 'border-blue-100 bg-blue-50/60 text-blue-600'}`}>
+                <button key={String(label)} type="button" onClick={action as () => void} className={`flex h-10 w-full items-center gap-2 rounded-[9px] border px-3 text-[11px] font-semibold ${tone === 'rose' ? 'border-rose-100 bg-rose-50/60 text-rose-600' : tone === 'orange' ? 'border-orange-100 bg-orange-50/60 text-orange-600' : 'border-blue-100 bg-blue-50/60 text-blue-600'}`}>
                   <DashboardReferenceIcon name={String(icon)} className="h-4 w-4" /><span className="flex-1 text-left text-[#344159]">{String(label)}</span><strong>{String(value)}</strong><span>›</span>
                 </button>
               ))}
             </div>
           </DashboardReferenceCard>
 
-          <DashboardReferenceCard title="Top produse" compact action={<button type="button" onClick={onOpenProducts} className="text-[8px] font-bold text-violet-600">Vezi toate</button>}>
-            <div className="grid grid-cols-[1fr_42px_72px] border-b border-[#edf0f4] pb-2 text-[7px] font-bold uppercase text-[#98a3b4]"><span>Produs</span><span>Vandute</span><span className="text-right">Venituri</span></div>
-            {topProducts.length === 0 ? <p className="py-6 text-center text-[9px] text-[#929eb0]">Nu exista vanzari.</p> : null}
+          <DashboardReferenceCard title="Top produse" compact action={<button type="button" onClick={onOpenProducts} className="cursor-pointer text-[10px] font-bold text-violet-600">Vezi toate</button>}>
+            <div className="grid grid-cols-[1fr_56px_82px] border-b border-[#edf0f4] pb-2 text-[10px] font-bold uppercase text-[#98a3b4]"><span>Produs</span><span>Vandute</span><span className="text-right">Venituri</span></div>
+            {topProducts.length === 0 ? <p className="py-6 text-center text-[11px] text-[#929eb0]">Nu exista vanzari.</p> : null}
             {topProducts.map((item) => {
               const product = item.id ? productMap.get(item.id) : null;
               return (
-                <div key={`${item.id}-${item.name}`} className="grid grid-cols-[1fr_42px_72px] items-center border-b border-[#f0f2f6] py-2 text-[8px] last:border-0">
+                <div key={`${item.id}-${item.name}`} className="grid grid-cols-[1fr_56px_82px] items-center border-b border-[#f0f2f6] py-2 text-[10px] last:border-0">
                   <div className="flex min-w-0 items-center gap-2">{product?.imageUrl ? <img src={product.imageUrl} alt="" className="h-7 w-7 rounded-md object-cover" /> : <span className="h-7 w-7 rounded-md bg-[#f0f3f7]" />}<span className="truncate font-semibold">{item.name}</span></div>
                   <strong>{numberFormat.format(item.sold)}</strong><strong className="text-right">{compactFormat.format(item.revenue)} RON</strong>
                 </div>
@@ -5751,18 +6061,18 @@ function DashboardOverviewReference({
           </DashboardReferenceCard>
         </aside>
 
-        <DashboardReferenceCard title="Comenzi recente" action={<button type="button" onClick={onOpenOrders} className="text-[8px] font-bold text-violet-600">Vezi toate comenzile ›</button>} className="overflow-hidden">
+        <DashboardReferenceCard title="Comenzi recente" action={<button type="button" onClick={onOpenOrders} className="cursor-pointer text-[10px] font-bold text-violet-600">Vezi toate comenzile ›</button>} className="overflow-hidden">
           <div className="-mx-4 -mb-4 overflow-x-auto">
             <table className="min-w-full text-left">
-              <thead className="border-y border-[#e9edf3] bg-[#fafbfd] text-[7px] font-bold uppercase text-[#8d99ab]"><tr><th className="px-4 py-2">Comanda</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Livrare</th><th className="px-4 py-2 text-right">Valoare</th></tr></thead>
+              <thead className="border-y border-[#e9edf3] bg-[#fafbfd] text-[10px] font-bold uppercase text-[#8d99ab]"><tr><th className="px-4 py-2">Comanda</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Livrare</th><th className="px-4 py-2 text-right">Valoare</th></tr></thead>
               <tbody className="divide-y divide-[#edf0f4]">
-                {recentOrders.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-[9px] text-[#929eb0]">Nu exista comenzi.</td></tr> : null}
+                {recentOrders.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-[11px] text-[#929eb0]">Nu exista comenzi.</td></tr> : null}
                 {recentOrders.map((order) => {
                   const item = order.items[0];
                   return (
-                    <tr key={order.id} className="text-[8px]">
-                      <td className="px-4 py-2"><div className="flex items-center gap-2">{item?.productImageUrl ? <img src={item.productImageUrl} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="h-7 w-7 rounded-full bg-[#eef1f5]" />}<div><b>#{order.orderNumber}</b><p className="text-[7px] text-[#8d99ab]">{new Date(order.createdAt).toLocaleDateString('ro-RO')}</p></div></div></td>
-                      <td className="px-3 py-2"><b>{order.customer.name || 'Client'}</b><p className="max-w-[110px] truncate text-[7px] text-[#8d99ab]">{order.customer.email}</p></td>
+                    <tr key={order.id} className="text-[10px]">
+                      <td className="px-4 py-2"><div className="flex items-center gap-2">{item?.productImageUrl ? <img src={item.productImageUrl} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="h-7 w-7 rounded-full bg-[#eef1f5]" />}<div><b>#{order.orderNumber}</b><p className="text-[10px] text-[#8d99ab]">{new Date(order.createdAt).toLocaleDateString('ro-RO')}</p></div></div></td>
+                      <td className="px-3 py-2"><b>{order.customer.name || 'Client'}</b><p className="max-w-[130px] truncate text-[10px] text-[#8d99ab]">{order.customer.email}</p></td>
                       <td className="px-3 py-2"><OrderStatusPill status={order.status} /></td>
                       <td className="px-3 py-2">{order.courier || 'Curier'}</td>
                       <td className="px-4 py-2 text-right font-bold">{moneyFormat.format(Number(order.total || 0))} RON</td>
@@ -5774,25 +6084,25 @@ function DashboardOverviewReference({
           </div>
         </DashboardReferenceCard>
 
-        <DashboardReferenceCard title="Tipuri comenzi" action={<button type="button" onClick={onOpenOrders} className="rounded-[7px] border border-[#dde3ec] px-3 py-1 text-[8px] font-bold">Detalii</button>}>
+        <DashboardReferenceCard title="Tipuri comenzi" action={<button type="button" onClick={onOpenOrders} className="cursor-pointer rounded-[7px] border border-[#dde3ec] px-3 py-1 text-[10px] font-bold">Detalii</button>}>
           <div className="grid items-center gap-5 sm:grid-cols-[170px_1fr]">
-            <div className="relative mx-auto h-40 w-40 rounded-full" style={{ background: `conic-gradient(${donutGradient})` }}><span className="absolute inset-[25px] flex flex-col items-center justify-center rounded-full bg-white"><b className="text-[19px]">{numberFormat.format(visibleOrders.length)}</b><small className="text-[8px] text-[#8b97aa]">Total</small></span></div>
+            <div className="relative mx-auto h-40 w-40 rounded-full" style={{ background: `conic-gradient(${donutGradient})` }}><span className="absolute inset-[25px] flex flex-col items-center justify-center rounded-full bg-white"><b className="text-[22px]">{numberFormat.format(visibleOrders.length)}</b><small className="text-[10px] text-[#8b97aa]">Total</small></span></div>
             <div className="space-y-3">
-              {statusGroups.map((group) => <div key={group.label} className="grid grid-cols-[10px_1fr_34px_38px] items-center gap-2 text-[9px]"><i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: group.color }} /><span className="text-[#66748a]">{group.label}</span><b>{Math.round((group.count / statusTotal) * 100)}%</b><strong className="text-right">{group.count}</strong></div>)}
+              {statusGroups.map((group) => <div key={group.label} className="grid grid-cols-[10px_1fr_42px_46px] items-center gap-2 text-[11px]"><i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: group.color }} /><span className="text-[#66748a]">{group.label}</span><b>{Math.round((group.count / statusTotal) * 100)}%</b><strong className="text-right">{group.count}</strong></div>)}
             </div>
           </div>
         </DashboardReferenceCard>
       </div>
 
       <div className="grid gap-4 xl:min-h-[205px] xl:grid-cols-[0.85fr_1fr_1.3fr]">
-        <DashboardReferenceCard title="Stoc pe categorii" action={<button type="button" onClick={onOpenProducts} className="text-[8px] font-bold text-violet-600">Vezi raport</button>}>
+        <DashboardReferenceCard title="Stoc pe categorii" action={<button type="button" onClick={onOpenProducts} className="cursor-pointer text-[10px] font-bold text-violet-600">Vezi raport</button>}>
           <div className="space-y-3">
-            {categoryStock.map(([label, value]) => <div key={label} className="grid grid-cols-[82px_1fr_38px] items-center gap-2 text-[8px]"><span className="truncate">{label}</span><span className="h-2 rounded-full bg-[#edf0f5]"><i className="block h-2 rounded-full bg-violet-600" style={{ width: `${Math.max(4, (value / maxCategoryStock) * 100)}%` }} /></span><b className="text-right">{value}</b></div>)}
-            <p className="border-t border-[#edf0f4] pt-2 text-[8px] text-[#8d99ab]">{categories.filter((category) => category.parentId === null && category.isActive).length} categorii active</p>
+            {categoryStock.map(([label, value]) => <div key={label} className="grid grid-cols-[104px_1fr_46px] items-center gap-2 text-[10px]"><span className="truncate">{label}</span><span className="h-2 rounded-full bg-[#edf0f5]"><i className="block h-2 rounded-full bg-violet-600" style={{ width: `${Math.max(4, (value / maxCategoryStock) * 100)}%` }} /></span><b className="text-right">{value}</b></div>)}
+            <p className="border-t border-[#edf0f4] pt-2 text-[10px] text-[#8d99ab]">{categories.filter((category) => category.parentId === null && category.isActive).length} categorii active</p>
           </div>
         </DashboardReferenceCard>
 
-        <DashboardReferenceCard title="Activitate recenta" action={<button type="button" onClick={onOpenOrders} className="text-[8px] font-bold text-violet-600">Vezi tot</button>}>
+        <DashboardReferenceCard title="Activitate recenta" action={<button type="button" onClick={onOpenOrders} className="cursor-pointer text-[10px] font-bold text-violet-600">Vezi tot</button>}>
           <div className="relative flex flex-1 flex-col justify-center gap-3 py-1">
             <span className="absolute bottom-4 left-[4px] top-4 w-px bg-[#e3e8f0]" aria-hidden="true" />
             {dashboardActivities.map((activity) => (
@@ -5809,10 +6119,10 @@ function DashboardOverviewReference({
                   <DashboardReferenceIcon name={activity.icon} className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-[9px] font-semibold leading-4 text-[#344159]" title={activity.text}>
+                  <p className="truncate text-[11px] font-semibold leading-4 text-[#344159]" title={activity.text}>
                     {activity.text}
                   </p>
-                  <p className="text-[7px] leading-3 text-[#96a1b2]">{activity.time}</p>
+                  <p className="text-[10px] leading-3 text-[#96a1b2]">{activity.time}</p>
                 </div>
               </div>
             ))}
@@ -5828,9 +6138,9 @@ function DashboardOverviewReference({
                   index ? 'border-l border-[#e3e8f0]' : ''
                 }`}
               >
-                <p className="truncate text-[8px] text-[#708096]">{trend.label}</p>
-                <b className="mt-1 block text-[17px] leading-none text-[#13203a]">{trend.value}</b>
-                <span className={`mt-2 text-[8px] font-bold ${trend.change.startsWith('-') ? 'text-rose-500' : 'text-emerald-600'}`}>
+                <p className="truncate text-[10px] text-[#708096]">{trend.label}</p>
+                <b className="mt-1 block text-[20px] leading-none text-[#13203a]">{trend.value}</b>
+                <span className={`mt-2 text-[10px] font-bold ${trend.change.startsWith('-') ? 'text-rose-500' : 'text-emerald-600'}`}>
                   {trend.change}
                 </span>
                 <DashboardSparkline
@@ -5883,7 +6193,7 @@ function DashboardReferenceCard({
   return (
     <section className={`flex min-h-0 flex-col rounded-[14px] border border-[#dfe5ee] bg-white shadow-[0_3px_12px_rgba(30,48,80,0.05)] ${compact ? 'p-3' : 'p-4'} ${className}`}>
       <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-        <h2 className={`${compact ? 'text-[12px]' : 'text-[13px]'} font-bold`}>{title}</h2>
+        <h2 className={`${compact ? 'text-[14px]' : 'text-[16px]'} font-bold`}>{title}</h2>
         {action}
       </div>
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
@@ -6179,6 +6489,78 @@ function DashboardOverview({
   );
 }
 
+function paginateItems<T>(items: T[], currentPage: number, pageSize: number) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(currentPage, 1), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    safePage,
+    totalPages,
+  };
+}
+
+function AdminBreadcrumbs({ current }: { current: string }) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+      <span>Admin</span>
+      <span className="text-slate-300">/</span>
+      <span className="text-violet-700">{current}</span>
+    </nav>
+  );
+}
+
+function PaginationControls({
+  totalItems,
+  currentPage,
+  pageSize,
+  itemLabel,
+  onPageChange,
+}: {
+  totalItems: number;
+  currentPage: number;
+  pageSize: number;
+  itemLabel: string;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(currentPage, 1), totalPages);
+  const startItem = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const endItem = Math.min(totalItems, safePage * pageSize);
+
+  if (totalItems <= pageSize) return null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-6 py-4">
+      <p className="text-sm text-slate-500">
+        Afisezi <span className="font-semibold text-slate-900">{startItem}-{endItem}</span> din{' '}
+        <span className="font-semibold text-slate-900">{totalItems}</span> {itemLabel}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(1, safePage - 1))}
+          disabled={safePage === 1}
+          className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Anterioara
+        </button>
+        <span className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+          {safePage} / {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(totalPages, safePage + 1))}
+          disabled={safePage === totalPages}
+          className="cursor-pointer rounded-2xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Urmatoarea
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProductsOverview({
   metrics,
   products,
@@ -6199,7 +6581,7 @@ function ProductsOverview({
           <div key={metric.label} className={`rounded-[28px] bg-gradient-to-br ${metric.tone} p-[1px] shadow-lg`}>
             <div className="rounded-[27px] bg-white/92 px-5 py-4 backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
-              <p className="mt-3 text-3xl font-semibold text-slate-950">{metric.value}</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{formatMetricValue(metric)}</p>
             </div>
           </div>
         ))}
@@ -6218,9 +6600,6 @@ function ProductsOverview({
               className="rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700"
             >
               Adauga produs
-            </button>
-            <button type="button" className="rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
-              Exporta
             </button>
           </div>
         </div>
@@ -6283,33 +6662,41 @@ function ProductsOverview({
   );
 }
 
-function OrdersOverview({
-  metrics,
-  orders,
-  selectedOrderId,
-  statusFilter,
-  paymentStatusFilter,
-  onStatusFilterChange,
-  onPaymentStatusFilterChange,
-  onOpenOrder,
+function CustomersOverview({
+  customers,
+  totalCustomers,
+  allCustomers,
+  currentPage,
+  onPageChange,
+  onOpenCustomerOrders,
 }: {
-  metrics: Array<{ label: string; value: number; tone: string }>;
-  orders: OrderRecord[];
-  selectedOrderId: number | null;
-  statusFilter: string;
-  paymentStatusFilter: string;
-  onStatusFilterChange: (value: string) => void;
-  onPaymentStatusFilterChange: (value: string) => void;
-  onOpenOrder: (order: OrderRecord) => void;
+  customers: CustomerRecord[];
+  totalCustomers: number;
+  allCustomers: CustomerRecord[];
+  currentPage: number;
+  onPageChange: (page: number) => void;
+  onOpenCustomerOrders: (customer: CustomerRecord) => void;
 }) {
+  const registeredCustomers = allCustomers.filter((customer) => customer.type === 'registered').length;
+  const guestCustomers = allCustomers.filter((customer) => customer.type === 'legacy_guest').length;
+  const resetCustomers = allCustomers.filter((customer) => customer.requiresPasswordReset).length;
+  const totalSpent = allCustomers.reduce((sum, customer) => sum + Number(customer.totalSpent || 0), 0);
+  const metrics = [
+    { label: 'Clienti total', value: allCustomers.length, tone: 'from-violet-500 to-violet-600' },
+    { label: 'Conturi inregistrate', value: registeredCustomers, tone: 'from-emerald-500 to-teal-500' },
+    { label: 'Guest legacy', value: guestCustomers, tone: 'from-amber-400 to-orange-500' },
+    { label: 'Reset parola', value: resetCustomers, tone: 'from-sky-500 to-cyan-600' },
+  ];
+
   return (
     <div className="space-y-6">
+      <AdminBreadcrumbs current="Clienti" />
       <div className="grid gap-4 xl:grid-cols-4">
         {metrics.map((metric) => (
           <div key={metric.label} className={`rounded-[28px] bg-gradient-to-br ${metric.tone} p-[1px] shadow-lg`}>
             <div className="rounded-[27px] bg-white/92 px-5 py-4 backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
-              <p className="mt-3 text-3xl font-semibold text-slate-950">{metric.value}</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{adminNumberFormat.format(metric.value)}</p>
             </div>
           </div>
         ))}
@@ -6318,16 +6705,201 @@ function OrdersOverview({
       <DashboardCard className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-500">Comenzi</p>
-            <h2 className="mt-1 text-2xl font-semibold text-slate-950">Administrare comenzi</h2>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-500">Clienti</p>
+            <h2 className="mt-1 text-2xl font-semibold text-slate-950">Conturi, adrese si istoric</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Afisezi <span className="font-semibold text-slate-900">{adminNumberFormat.format(totalCustomers)}</span> din{' '}
+              <span className="font-semibold text-slate-900">{adminNumberFormat.format(allCustomers.length)}</span> clienti
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button type="button" className="cursor-pointer rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700">
-              Vezi
-            </button>
-            <button type="button" className="cursor-pointer rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
-              Exporta
-            </button>
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+            {formatMoney(totalSpent, 'RON')} istoric
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left">
+            <thead className="bg-slate-50/80 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              <tr>
+                <th className="px-6 py-4">Client</th>
+                <th className="px-4 py-4">Contact</th>
+                <th className="px-4 py-4">Tip</th>
+                <th className="px-4 py-4">Adresa</th>
+                <th className="px-4 py-4">Comenzi</th>
+                <th className="px-4 py-4">Total</th>
+                <th className="px-4 py-4">Ultima comanda</th>
+                <th className="px-6 py-4 text-right">Actiune</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {totalCustomers === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-slate-400">
+                    Nu exista clienti care sa corespunda cautarii.
+                  </td>
+                </tr>
+              ) : null}
+              {customers.map((customer) => {
+                const firstAddress = customer.addresses[0];
+                const displayName = customer.name || customer.email || 'Client necunoscut';
+                const customerKey = `${customer.type}-${customer.id ?? customer.legacyId ?? customer.email}`;
+
+                return (
+                  <tr key={customerKey} className="transition hover:bg-slate-50/80">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-sm font-semibold text-violet-700">
+                          {displayName.slice(0, 1).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-900">{displayName}</p>
+                          <p className="text-xs text-slate-400">
+                            {customer.legacyId ? `Legacy ID ${customer.legacyId}` : customer.id ? `ID ${customer.id}` : 'Fara ID cont'}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-semibold text-slate-900">{customer.email || '-'}</p>
+                      <p className="text-xs text-slate-400">{customer.phone || firstAddress?.phone || 'Fara telefon'}</p>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex flex-col items-start gap-2">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          customer.type === 'registered'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {customer.type === 'registered' ? 'Cont client' : 'Guest vechi'}
+                        </span>
+                        {customer.requiresPasswordReset ? (
+                          <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
+                            Necesita reset parola
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="max-w-[260px] truncate text-sm font-semibold text-slate-900">
+                        {firstAddress?.address || 'Fara adresa salvata'}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {[firstAddress?.city, firstAddress?.county].filter(Boolean).join(', ') || `${customer.addressCount} adrese`}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-semibold text-slate-900">{adminNumberFormat.format(customer.orderCount)}</p>
+                      <p className="text-xs text-slate-400">
+                        {getCustomerLegacyOrderCount(customer) > 0
+                          ? `${adminNumberFormat.format(getCustomerLegacyOrderCount(customer))} vechi`
+                          : `${adminNumberFormat.format(getCustomerActiveOrderCount(customer))} active`}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4 text-sm font-semibold text-slate-900">{formatMoney(customer.totalSpent, 'RON')}</td>
+                    <td className="px-4 py-4 text-sm text-slate-500">{formatAdminDate(customer.lastOrderAt)}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-end gap-2">
+                        <IconAction onClick={() => onOpenCustomerOrders(customer)} label="Vezi comenzile clientului">
+                          Comenzi
+                        </IconAction>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <PaginationControls
+          totalItems={totalCustomers}
+          currentPage={currentPage}
+          pageSize={adminPageSize}
+          itemLabel="clienti"
+          onPageChange={onPageChange}
+        />
+      </DashboardCard>
+    </div>
+  );
+}
+
+function getCustomerLegacyOrderCount(customer: CustomerRecord) {
+  if (typeof customer.legacyOrderCount === 'number') return customer.legacyOrderCount;
+  if (customer.type === 'legacy_guest') return customer.orderCount;
+  if (customer.legacyId) return customer.orderCount;
+  return 0;
+}
+
+function getCustomerActiveOrderCount(customer: CustomerRecord) {
+  if (typeof customer.activeOrderCount === 'number') return customer.activeOrderCount;
+  return getCustomerLegacyOrderCount(customer) > 0 ? 0 : customer.orderCount;
+}
+
+function getOrderPreviewItem(order: OrderRecord) {
+  return [...order.items].sort((left, right) => {
+    const rightHasImage = right.productImageUrl ? 1 : 0;
+    const leftHasImage = left.productImageUrl ? 1 : 0;
+    const imageDifference = rightHasImage - leftHasImage;
+    if (imageDifference !== 0) return imageDifference;
+
+    const valueDifference = Number(right.lineTotal || 0) - Number(left.lineTotal || 0);
+    if (valueDifference !== 0) return valueDifference;
+
+    return Number(right.quantity || 0) - Number(left.quantity || 0);
+  })[0] ?? null;
+}
+
+function OrdersOverview({
+  metrics,
+  orders,
+  totalOrders,
+  eyebrow = 'Comenzi',
+  title = 'Administrare comenzi',
+  emptyMessage = 'Nu exista comenzi care sa corespunda filtrelor.',
+  breadcrumbCurrent,
+  currentPage,
+  selectedOrderId,
+  statusFilter,
+  paymentStatusFilter,
+  onPageChange,
+  onStatusFilterChange,
+  onPaymentStatusFilterChange,
+  onOpenOrder,
+}: {
+  metrics: Array<{ label: string; value: number; tone: string }>;
+  orders: OrderRecord[];
+  totalOrders: number;
+  eyebrow?: string;
+  title?: string;
+  emptyMessage?: string;
+  breadcrumbCurrent: string;
+  currentPage: number;
+  selectedOrderId: number | null;
+  statusFilter: string;
+  paymentStatusFilter: string;
+  onPageChange: (page: number) => void;
+  onStatusFilterChange: (value: string) => void;
+  onPaymentStatusFilterChange: (value: string) => void;
+  onOpenOrder: (order: OrderRecord) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <AdminBreadcrumbs current={breadcrumbCurrent} />
+      <div className="grid gap-4 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <div key={metric.label} className={`rounded-[28px] bg-gradient-to-br ${metric.tone} p-[1px] shadow-lg`}>
+            <div className="rounded-[27px] bg-white/92 px-5 py-4 backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{formatMetricValue(metric)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <DashboardCard className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-500">{eyebrow}</p>
+            <h2 className="mt-1 text-2xl font-semibold text-slate-950">{title}</h2>
           </div>
         </div>
 
@@ -6348,9 +6920,9 @@ function OrdersOverview({
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status plata</span>
             <DashboardSelect value={paymentStatusFilter} onChange={(event) => onPaymentStatusFilterChange(event.target.value)} className="h-11">
               <option value="">Toate platile</option>
-              {['unpaid', 'pending', 'paid', 'failed', 'refunded'].map((statusOption) => (
+              {paymentStatusOptions.map((statusOption) => (
                 <option key={statusOption} value={statusOption}>
-                  {statusOption}
+                  {paymentStatusLabels[statusOption]}
                 </option>
               ))}
             </DashboardSelect>
@@ -6358,7 +6930,7 @@ function OrdersOverview({
 
           <div className="flex items-end">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-              Afisezi <span className="font-semibold text-slate-900">{orders.length}</span> comenzi
+              Afisezi <span className="font-semibold text-slate-900">{totalOrders}</span> comenzi
             </div>
           </div>
         </div>
@@ -6377,23 +6949,23 @@ function OrdersOverview({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {orders.length === 0 ? (
+              {totalOrders === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-400">
-                    Nu exista comenzi care sa corespunda filtrelor.
+                    {emptyMessage}
                   </td>
                 </tr>
               ) : null}
               {orders.map((order) => {
                 const isSelected = order.id === selectedOrderId;
-                const firstItem = order.items[0];
+                const previewItem = getOrderPreviewItem(order);
 
                 return (
                   <tr key={order.id} className={`transition ${isSelected ? 'bg-violet-50/80' : 'hover:bg-slate-50/80'}`}>
                     <td className="px-6 py-4">
                       <button type="button" onClick={() => onOpenOrder(order)} className="flex items-center gap-3 text-left">
-                        {firstItem?.productImageUrl ? (
-                          <img src={firstItem.productImageUrl} alt={firstItem.productName} className="h-12 w-12 rounded-2xl object-cover" />
+                        {previewItem?.productImageUrl ? (
+                          <img src={previewItem.productImageUrl} alt={previewItem.productName} className="h-12 w-12 rounded-2xl object-cover" />
                         ) : (
                           <div className="h-12 w-12 rounded-2xl bg-slate-100" />
                         )}
@@ -6402,7 +6974,7 @@ function OrdersOverview({
                           <p className="text-xs text-slate-400">
                             {order.itemCount} produs{order.itemCount === 1 ? '' : 'e'}
                           </p>
-                          <p className="mt-1 text-xs text-slate-500">{firstItem?.productName || 'Comanda fara produse'}</p>
+                          <p className="mt-1 text-xs text-slate-500">{previewItem?.productName || 'Comanda fara produse'}</p>
                         </div>
                       </button>
                     </td>
@@ -6427,6 +6999,13 @@ function OrdersOverview({
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          totalItems={totalOrders}
+          currentPage={currentPage}
+          pageSize={adminPageSize}
+          itemLabel="comenzi"
+          onPageChange={onPageChange}
+        />
       </DashboardCard>
     </div>
   );
@@ -6435,26 +7014,33 @@ function OrdersOverview({
 function PackagesOverview({
   metrics,
   packages,
+  totalPackages,
+  currentPage,
   selectedPackageId,
   packageStatusFilter,
+  onPageChange,
   onPackageStatusFilterChange,
   onOpenPackage,
 }: {
   metrics: Array<{ label: string; value: number; tone: string }>;
   packages: OrderRecord[];
+  totalPackages: number;
+  currentPage: number;
   selectedPackageId: number | null;
   packageStatusFilter: string;
+  onPageChange: (page: number) => void;
   onPackageStatusFilterChange: (value: string) => void;
   onOpenPackage: (order: OrderRecord) => void;
 }) {
   return (
     <div className="space-y-6">
+      <AdminBreadcrumbs current="Colete" />
       <div className="grid gap-4 xl:grid-cols-4">
         {metrics.map((metric) => (
           <div key={metric.label} className={`rounded-[28px] bg-gradient-to-br ${metric.tone} p-[1px] shadow-lg`}>
             <div className="rounded-[27px] bg-white/92 px-5 py-4 backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
-              <p className="mt-3 text-3xl font-semibold text-slate-950">{metric.value}</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{formatMetricValue(metric)}</p>
             </div>
           </div>
         ))}
@@ -6465,14 +7051,6 @@ function PackagesOverview({
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-500">Colete</p>
             <h2 className="mt-1 text-2xl font-semibold text-slate-950">Pregatire si livrare</h2>
-          </div>
-          <div className="flex items-center gap-3">
-            <button type="button" className="cursor-pointer rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700">
-              Vezi
-            </button>
-            <button type="button" className="cursor-pointer rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
-              Exporta
-            </button>
           </div>
         </div>
 
@@ -6491,7 +7069,7 @@ function PackagesOverview({
 
           <div className="flex items-end">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-              Afisezi <span className="font-semibold text-slate-900">{packages.length}</span> colete
+              Afisezi <span className="font-semibold text-slate-900">{totalPackages}</span> colete
             </div>
           </div>
         </div>
@@ -6510,7 +7088,7 @@ function PackagesOverview({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {packages.length === 0 ? (
+              {totalPackages === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-400">
                     Nu exista colete care sa corespunda filtrelor.
@@ -6549,6 +7127,13 @@ function PackagesOverview({
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          totalItems={totalPackages}
+          currentPage={currentPage}
+          pageSize={adminPageSize}
+          itemLabel="colete"
+          onPageChange={onPageChange}
+        />
       </DashboardCard>
     </div>
   );
@@ -6557,30 +7142,37 @@ function PackagesOverview({
 function BillingOverview({
   metrics,
   orders,
+  totalOrders,
+  currentPage,
   selectedBillingId,
   paymentStatusFilter,
   invoiceStatusFilter,
+  onPageChange,
   onPaymentStatusFilterChange,
   onInvoiceStatusFilterChange,
   onOpenBilling,
 }: {
   metrics: Array<{ label: string; value: number; tone: string }>;
   orders: OrderRecord[];
+  totalOrders: number;
+  currentPage: number;
   selectedBillingId: number | null;
   paymentStatusFilter: string;
   invoiceStatusFilter: string;
+  onPageChange: (page: number) => void;
   onPaymentStatusFilterChange: (value: string) => void;
   onInvoiceStatusFilterChange: (value: string) => void;
   onOpenBilling: (order: OrderRecord) => void;
 }) {
   return (
     <div className="space-y-6">
+      <AdminBreadcrumbs current="Facturi si plati" />
       <div className="grid gap-4 xl:grid-cols-4">
         {metrics.map((metric) => (
           <div key={metric.label} className={`rounded-[28px] bg-gradient-to-br ${metric.tone} p-[1px] shadow-lg`}>
             <div className="rounded-[27px] bg-white/92 px-5 py-4 backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
-              <p className="mt-3 text-3xl font-semibold text-slate-950">{metric.value}</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{formatMetricValue(metric)}</p>
             </div>
           </div>
         ))}
@@ -6592,14 +7184,6 @@ function BillingOverview({
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-500">Facturi si plati</p>
             <h2 className="mt-1 text-2xl font-semibold text-slate-950">Administrare financiara</h2>
           </div>
-          <div className="flex items-center gap-3">
-            <button type="button" className="cursor-pointer rounded-2xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700">
-              Vezi
-            </button>
-            <button type="button" className="cursor-pointer rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
-              Exporta
-            </button>
-          </div>
         </div>
 
         <div className="grid gap-4 border-b border-slate-100 bg-slate-50/60 px-6 py-4 md:grid-cols-2 xl:grid-cols-[220px_220px_1fr]">
@@ -6607,9 +7191,9 @@ function BillingOverview({
             <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status plata</span>
             <DashboardSelect value={paymentStatusFilter} onChange={(event) => onPaymentStatusFilterChange(event.target.value)} className="h-11">
               <option value="">Toate platile</option>
-              {['unpaid', 'pending', 'paid', 'failed', 'refunded'].map((statusOption) => (
+              {paymentStatusOptions.map((statusOption) => (
                 <option key={statusOption} value={statusOption}>
-                  {statusOption}
+                  {paymentStatusLabels[statusOption]}
                 </option>
               ))}
             </DashboardSelect>
@@ -6629,7 +7213,7 @@ function BillingOverview({
 
           <div className="flex items-end">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-              Afisezi <span className="font-semibold text-slate-900">{orders.length}</span> inregistrari
+              Afisezi <span className="font-semibold text-slate-900">{totalOrders}</span> inregistrari
             </div>
           </div>
         </div>
@@ -6648,7 +7232,7 @@ function BillingOverview({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {orders.length === 0 ? (
+              {totalOrders === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-400">
                     Nu exista inregistrari financiare care sa corespunda filtrelor.
@@ -6687,6 +7271,13 @@ function BillingOverview({
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          totalItems={totalOrders}
+          currentPage={currentPage}
+          pageSize={adminPageSize}
+          itemLabel="inregistrari"
+          onPageChange={onPageChange}
+        />
       </DashboardCard>
     </div>
   );
@@ -6713,7 +7304,7 @@ function ChatOverview({
   onSourceFilterChange: (value: string) => void;
   onOpenConversation: (conversation: ConversationRecord) => void;
 }) {
-  const itemsPerPage = 8;
+  const itemsPerPage = adminPageSize;
   const totalPages = Math.max(1, Math.ceil(conversations.length / itemsPerPage));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const pageStart = (safeCurrentPage - 1) * itemsPerPage;
@@ -6755,6 +7346,7 @@ function ChatOverview({
 
   return (
     <div className="space-y-6">
+      <AdminBreadcrumbs current="Chat" />
       <div className="grid gap-4 xl:grid-cols-4">
         {channelCards.map((card) => (
           <div key={card.source} className={`overflow-hidden rounded-[30px] bg-gradient-to-br ${card.tone} p-[1px] shadow-[0_18px_40px_rgba(15,23,42,0.08)]`}>
@@ -6902,32 +7494,13 @@ function ChatOverview({
             </tbody>
           </table>
         </div>
-        {conversations.length > itemsPerPage ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-6 py-4">
-            <p className="text-sm text-slate-500">
-              Pagina <span className="font-semibold text-slate-900">{safeCurrentPage}</span> din{' '}
-              <span className="font-semibold text-slate-900">{totalPages}</span>
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
-                disabled={safeCurrentPage === 1}
-                className="cursor-pointer rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:text-violet-700 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                Anterioara
-              </button>
-              <button
-                type="button"
-                onClick={() => onPageChange(Math.min(totalPages, safeCurrentPage + 1))}
-                disabled={safeCurrentPage === totalPages}
-                className="cursor-pointer rounded-2xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                Urmatoarea
-              </button>
-            </div>
-          </div>
-        ) : null}
+        <PaginationControls
+          totalItems={conversations.length}
+          currentPage={safeCurrentPage}
+          pageSize={itemsPerPage}
+          itemLabel="conversatii"
+          onPageChange={onPageChange}
+        />
       </DashboardCard>
     </div>
   );
@@ -7237,7 +7810,82 @@ async function fileToBase64(file: File) {
 
 function formatMoney(value: string | number, currency: string) {
   const amount = Number(value || 0);
-  return `${amount.toFixed(2)} ${currency}`;
+  const safeAmount = Number.isFinite(amount) ? amount : 0;
+  return `${new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(safeAmount)} ${currency}`;
+}
+
+function formatMetricValue(metric: { label: string; value: string | number }) {
+  if (/(venit|valoare)/i.test(metric.label)) {
+    return formatMoney(metric.value, 'RON');
+  }
+
+  return metric.value;
+}
+
+function getDashboardOrderYears(orders: OrderRecord[]) {
+  const years = Array.from(
+    new Set(
+      orders
+        .map((order) => new Date(order.createdAt).getFullYear())
+        .filter((year) => Number.isInteger(year) && year > 2000),
+    ),
+  );
+
+  return years.sort((left, right) => right - left);
+}
+
+function getNiceAxisMax(maxValue: number) {
+  if (!Number.isFinite(maxValue) || maxValue <= 0) return 10;
+
+  const roughStep = maxValue / 5;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const normalized = roughStep / magnitude;
+  const niceNormalized =
+    normalized <= 1
+      ? 1
+      : normalized <= 2
+        ? 2
+        : normalized <= 5
+          ? 5
+          : 10;
+  const niceStep = niceNormalized * magnitude;
+
+  return niceStep * 5;
+}
+
+function buildAxisValues(axisMax: number, steps: number) {
+  return Array.from({ length: steps + 1 }, (_, index) => axisMax - index * (axisMax / steps));
+}
+
+function formatChartAxisValue(value: number, numberFormat: Intl.NumberFormat) {
+  if (value === 0) return '0';
+  if (Math.abs(value) >= 1_000_000) return `${numberFormat.format(value / 1_000_000)}M`;
+  if (Math.abs(value) >= 1_000) return `${numberFormat.format(value / 1_000)}K`;
+  return numberFormat.format(value);
+}
+
+function buildDashboardMonthlyRevenue(orders: OrderRecord[], year: number) {
+  const monthFormatter = new Intl.DateTimeFormat('ro-RO', { month: 'short' });
+  const buckets = Array.from({ length: 12 }, (_, month) => {
+    const date = new Date(year, month, 1);
+    return {
+      key: String(month),
+      label: monthFormatter.format(date).replace('.', ''),
+      year,
+      value: 0,
+    };
+  });
+
+  for (const order of orders) {
+    const date = new Date(order.createdAt);
+    if (Number.isNaN(date.getTime()) || date.getFullYear() !== year) continue;
+    buckets[date.getMonth()].value += Number(order.total || 0);
+  }
+
+  return buckets;
 }
 
 function formatAdminDate(value: string | null | undefined) {
@@ -7280,16 +7928,7 @@ function OrderStatusPill({ status }: { status: string }) {
 
 function PaymentStatusPill({ status }: { status: string }) {
   const normalized = status.toLowerCase();
-  const label =
-    normalized === 'paid'
-      ? 'platita'
-      : normalized === 'pending'
-        ? 'in asteptare'
-        : normalized === 'failed'
-          ? 'esuata'
-          : normalized === 'refunded'
-            ? 'rambursata'
-            : 'neplatita';
+  const label = paymentStatusLabels[normalized as keyof typeof paymentStatusLabels] || 'Neplatita';
   const styles =
     normalized === 'paid'
       ? 'bg-emerald-100 text-emerald-700'
@@ -7494,6 +8133,14 @@ function SidebarIcon({ name }: { name: string }) {
         <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.8">
           <path d="M7 3h10v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5V3Z" />
           <path d="M9 8h6M9 12h6M9 16h4" />
+        </svg>
+      );
+    case 'history':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.8">
+          <path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5" />
+          <path d="M4 4v4.5h4.5" />
+          <path d="M12 7v5l3 2" />
         </svg>
       );
     case 'package':

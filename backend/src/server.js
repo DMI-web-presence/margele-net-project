@@ -190,6 +190,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && requestUrl.pathname === '/admin/customers') {
+      await handleAdminCustomerList(req, requestUrl, res);
+      return;
+    }
+
     const adminSmartBillPdfMatch = requestUrl.pathname.match(
       /^\/admin\/orders\/(\d+)\/invoice\/smartbill\/pdf$/,
     );
@@ -1455,6 +1460,39 @@ async function handleAdminOrderList(req, requestUrl, res) {
   sendJson(res, 200, filtered);
 }
 
+async function handleAdminCustomerList(req, requestUrl, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const search = String(requestUrl.searchParams.get('q') || '').trim().toLowerCase();
+  const customers = await getAdminCustomers();
+  const filtered = customers.filter((customer) => {
+    if (!search) return true;
+
+    return [
+      customer.name,
+      customer.email,
+      customer.phone,
+      customer.type,
+      customer.clientType,
+      ...customer.addresses.flatMap((address) => [
+        address.name,
+        address.phone,
+        address.company,
+        address.city,
+        address.county,
+        address.country,
+        address.address,
+        address.postalCode,
+      ]),
+    ]
+      .map((value) => String(value || '').toLowerCase())
+      .some((value) => value.includes(search));
+  });
+
+  sendJson(res, 200, filtered);
+}
+
 async function handleAdminOrderUpdate(req, res, orderId) {
   const user = await requireAdmin(req, res);
   if (!user) return;
@@ -1701,6 +1739,141 @@ async function getAdminOrders(db = pool) {
   return result.rows.map(adminOrderResponse);
 }
 
+async function getAdminCustomers(db = pool) {
+  if (!(await hasTable('users'))) {
+    return [];
+  }
+
+  const userColumns = await getUserColumns();
+  const hasOrders = await hasTable('orders');
+  const hasAddresses = await hasTable('addresses');
+  const nameSelect = buildAdminCustomerUserNameSql(userColumns);
+  const phoneSelect = userColumns.has('phone') ? 'u.phone' : 'NULL';
+  const clientTypeSelect = userColumns.has('client_type') ? 'u.client_type' : 'NULL';
+  const legacyIdSelect = userColumns.has('legacy_id') ? 'u.legacy_id' : 'NULL';
+  const resetSelect = userColumns.has('requires_password_reset') ? 'u.requires_password_reset' : 'false';
+  const createdAtSelect = userColumns.has('created_at') ? 'u.created_at' : 'NULL';
+  const updatedAtSelect = userColumns.has('updated_at') ? 'u.updated_at' : 'NULL';
+  const roleFilter = userColumns.has('role') ? "WHERE COALESCE(u.role, 'customer') <> 'admin'" : '';
+  const addressesJoin = hasAddresses
+    ? `
+      LEFT JOIN LATERAL (
+        SELECT jsonb_agg(to_jsonb(a) ORDER BY a.implicit_facturare DESC, a.implicit_livrare DESC, a.id DESC) AS addresses
+        FROM addresses a
+        WHERE a.user_id = u.id
+      ) addresses ON true
+    `
+    : `LEFT JOIN LATERAL (SELECT '[]'::jsonb AS addresses) addresses ON true`;
+  const legacyOrderAddressesJoin = hasOrders
+    ? `
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(jsonb_agg(address_rows.address_entry), '[]'::jsonb) AS addresses
+        FROM (
+          SELECT o.legacy_shipping_address AS address_entry
+          FROM orders o
+          WHERE o.user_id = u.id
+            AND o.legacy_shipping_address IS NOT NULL
+            AND NULLIF(BTRIM(o.legacy_shipping_address->>'address1'), '') IS NOT NULL
+          ORDER BY o.created_at DESC NULLS LAST, o.id DESC
+          LIMIT 3
+        ) address_rows
+      ) legacy_order_addresses ON true
+    `
+    : `LEFT JOIN LATERAL (SELECT '[]'::jsonb AS addresses) legacy_order_addresses ON true`;
+  const orderStatsJoin = hasOrders
+    ? `
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS order_count,
+          COUNT(*) FILTER (WHERE o.legacy_id IS NOT NULL)::int AS legacy_order_count,
+          COUNT(*) FILTER (WHERE o.legacy_id IS NULL)::int AS active_order_count,
+          COALESCE(SUM(o.total), 0)::numeric AS total_spent,
+          MAX(o.created_at) AS last_order_at,
+          MIN(o.created_at) AS first_order_at
+        FROM orders o
+        WHERE o.user_id = u.id
+      ) order_stats ON true
+    `
+    : `
+      LEFT JOIN LATERAL (
+        SELECT 0::int AS order_count, 0::int AS legacy_order_count, 0::int AS active_order_count, 0::numeric AS total_spent, NULL::timestamp AS last_order_at, NULL::timestamp AS first_order_at
+      ) order_stats ON true
+    `;
+
+  const usersResult = await db.query(`
+    SELECT
+      u.id,
+      ${legacyIdSelect} AS legacy_id,
+      ${nameSelect} AS customer_name,
+      u.email,
+      ${phoneSelect} AS phone,
+      ${clientTypeSelect} AS client_type,
+      ${resetSelect} AS requires_password_reset,
+      ${createdAtSelect} AS created_at,
+      ${updatedAtSelect} AS updated_at,
+      CASE
+        WHEN jsonb_array_length(COALESCE(addresses.addresses, '[]'::jsonb)) > 0 THEN COALESCE(addresses.addresses, '[]'::jsonb)
+        ELSE COALESCE(legacy_order_addresses.addresses, '[]'::jsonb)
+      END AS addresses,
+      COALESCE(order_stats.order_count, 0)::int AS order_count,
+      COALESCE(order_stats.legacy_order_count, 0)::int AS legacy_order_count,
+      COALESCE(order_stats.active_order_count, 0)::int AS active_order_count,
+      COALESCE(order_stats.total_spent, 0)::numeric AS total_spent,
+      order_stats.last_order_at,
+      order_stats.first_order_at
+    FROM users u
+    ${addressesJoin}
+    ${legacyOrderAddressesJoin}
+    ${orderStatsJoin}
+    ${roleFilter}
+    ORDER BY order_stats.last_order_at DESC NULLS LAST, u.id DESC
+  `);
+
+  const customers = usersResult.rows.map((row) => adminCustomerResponse(row, 'registered'));
+  if (!hasOrders) return customers;
+
+  const registeredEmails = new Set(customers.map((customer) => customer.email).filter(Boolean));
+  const guestResult = await db.query(`
+    SELECT
+      NULL::int AS id,
+      MAX(o.legacy_customer_id)::int AS legacy_id,
+      COALESCE(NULLIF(BTRIM(MAX(o.legacy_customer_name)), ''), SPLIT_PART(lower(o.legacy_customer_email), '@', 1)) AS customer_name,
+      lower(o.legacy_customer_email) AS email,
+      MAX(o.legacy_customer_phone) AS phone,
+      NULL::varchar AS client_type,
+      false AS requires_password_reset,
+      MIN(o.created_at) AS created_at,
+      MAX(o.updated_at) AS updated_at,
+      COALESCE(
+        jsonb_agg(o.legacy_shipping_address ORDER BY o.created_at DESC NULLS LAST, o.id DESC)
+          FILTER (
+            WHERE o.legacy_shipping_address IS NOT NULL
+              AND NULLIF(BTRIM(o.legacy_shipping_address->>'address1'), '') IS NOT NULL
+          ),
+        '[]'::jsonb
+      ) AS addresses,
+      COUNT(*)::int AS order_count,
+      COUNT(*) FILTER (WHERE o.legacy_id IS NOT NULL)::int AS legacy_order_count,
+      COUNT(*) FILTER (WHERE o.legacy_id IS NULL)::int AS active_order_count,
+      COALESCE(SUM(o.total), 0)::numeric AS total_spent,
+      MAX(o.created_at) AS last_order_at,
+      MIN(o.created_at) AS first_order_at
+    FROM orders o
+    WHERE o.user_id IS NULL
+      AND NULLIF(BTRIM(o.legacy_customer_email), '') IS NOT NULL
+    GROUP BY lower(o.legacy_customer_email)
+    ORDER BY MAX(o.created_at) DESC NULLS LAST
+  `);
+
+  for (const row of guestResult.rows) {
+    const guest = adminCustomerResponse(row, 'legacy_guest');
+    if (!guest.email || registeredEmails.has(guest.email)) continue;
+    customers.push(guest);
+  }
+
+  return customers;
+}
+
 async function getAdminConversations(db = pool) {
   if (!(await hasTable('conversations')) || !(await hasTable('conversation_messages'))) {
     return [];
@@ -1755,7 +1928,7 @@ async function adminOrderSelectSql() {
             'productId', oi.product_id,
             'variantId', oi.variant_id,
             'productName', oi.product_name,
-            'productImageUrl', oi.product_image_url,
+            'productImageUrl', COALESCE(NULLIF(oi.product_image_url, ''), primary_image.image_url, p.image_url, ''),
             'sku', oi.sku,
             'selectedOptions', oi.selected_options,
             'unitPrice', oi.unit_price,
@@ -1766,6 +1939,14 @@ async function adminOrderSelectSql() {
         ) AS items,
         COALESCE(SUM(oi.quantity), 0) AS item_count
       FROM order_items oi
+      LEFT JOIN products p ON p.id = oi.product_id
+      LEFT JOIN LATERAL (
+        SELECT image_url
+        FROM product_images
+        WHERE product_id = p.id
+        ORDER BY is_primary DESC, sort_order ASC, id ASC
+        LIMIT 1
+      ) primary_image ON true
       WHERE oi.order_id = o.id
     ) items ON true
   `;
@@ -1845,6 +2026,39 @@ function buildAdminOrderShipmentSql(orderColumns) {
 }
 
 function buildAdminOrderUserNameSql(userColumns) {
+  const parts = [];
+
+  if (userColumns.has('full_name')) {
+    parts.push('NULLIF(BTRIM(u.full_name), \'\')');
+  }
+
+  const firstNameColumn = userColumns.has('first_name')
+    ? 'first_name'
+    : userColumns.has('prenume')
+      ? 'prenume'
+      : null;
+  const lastNameColumn = userColumns.has('last_name')
+    ? 'last_name'
+    : userColumns.has('nume')
+      ? 'nume'
+      : null;
+
+  if (firstNameColumn || lastNameColumn) {
+    const firstExpr = firstNameColumn ? `COALESCE(u.${firstNameColumn}, '')` : `''`;
+    const lastExpr = lastNameColumn ? `COALESCE(u.${lastNameColumn}, '')` : `''`;
+    parts.push(`NULLIF(BTRIM(${firstExpr} || ' ' || ${lastExpr}), '')`);
+  }
+
+  if (userColumns.has('name')) {
+    parts.push('NULLIF(BTRIM(u.name), \'\')');
+  }
+
+  parts.push(`SPLIT_PART(COALESCE(u.email, ''), '@', 1)`);
+
+  return `COALESCE(${parts.join(', ')})`;
+}
+
+function buildAdminCustomerUserNameSql(userColumns) {
   const parts = [];
 
   if (userColumns.has('full_name')) {
@@ -4756,9 +4970,15 @@ function adminOrderResponse(order) {
     quantity: Number(item.quantity || 0),
     lineTotal: String(item.lineTotal || item.line_total || '0'),
   }));
+  const legacyCustomerName = order.legacy_customer_name || '';
+  const legacyCustomerEmail = order.legacy_customer_email || '';
 
   return {
     ...orderResponse(order, items),
+    legacyId: order.legacy_id ?? null,
+    legacyStatusName: order.legacy_status_name || null,
+    legacyPaymentMethod: order.legacy_payment_method || null,
+    legacyShippingMethod: order.legacy_shipping_method || null,
     updatedAt: order.updated_at || null,
     courier: order.courier || null,
     trackingNumber: order.tracking_number || null,
@@ -4782,10 +5002,61 @@ function adminOrderResponse(order) {
     smartbillError: order.smartbill_error || null,
     customer: {
       id: order.user_id ?? null,
-      name: order.user_name || '',
-      email: order.user_email || '',
+      name: order.user_name || legacyCustomerName,
+      email: order.user_email || legacyCustomerEmail,
     },
     itemCount: Number(order.item_count || items.reduce((sum, item) => sum + item.quantity, 0)),
+  };
+}
+
+function adminCustomerResponse(customer, type) {
+  const addresses = normalizeJsonArray(customer.addresses).map(adminCustomerAddressResponse);
+
+  return {
+    id: customer.id ?? null,
+    legacyId: customer.legacy_id ?? null,
+    type,
+    name: customer.customer_name || '',
+    email: normalizeEmail(customer.email || '') || '',
+    phone: customer.phone || '',
+    clientType: customer.client_type || '',
+    requiresPasswordReset: Boolean(customer.requires_password_reset),
+    orderCount: Number(customer.order_count || 0),
+    legacyOrderCount: Number(customer.legacy_order_count || 0),
+    activeOrderCount: Number(customer.active_order_count || 0),
+    totalSpent: String(customer.total_spent || '0'),
+    firstOrderAt: customer.first_order_at || null,
+    lastOrderAt: customer.last_order_at || null,
+    createdAt: customer.created_at || null,
+    updatedAt: customer.updated_at || null,
+    addresses,
+    addressCount: addresses.length,
+  };
+}
+
+function adminCustomerAddressResponse(address) {
+  const firstName = cleanOptionalValue(address.prenume || address.first_name);
+  const lastName = cleanOptionalValue(address.nume || address.last_name);
+  const addressLines = [
+    address.adresa1 || address.address_line_1 || address.address1 || address.street,
+    address.adresa2 || address.address_line_2 || address.address2,
+  ]
+    .map(cleanOptionalValue)
+    .filter(Boolean);
+
+  return {
+    id: address.id ?? null,
+    legacyId: address.legacy_id ?? null,
+    name: [firstName, lastName].filter(Boolean).join(' '),
+    phone: cleanOptionalValue(address.telefon || address.phone) || '',
+    company: cleanOptionalValue(address.companie || address.company) || '',
+    country: cleanOptionalValue(address.tara || address.country) || '',
+    county: cleanOptionalValue(address.judet || address.county || address.zone) || '',
+    city: cleanOptionalValue(address.oras || address.city) || '',
+    postalCode: cleanOptionalValue(address.cod_postal || address.postal_code || address.postcode) || '',
+    address: addressLines.join(', '),
+    billingDefault: Boolean(address.implicit_facturare || address.billing_default),
+    shippingDefault: Boolean(address.implicit_livrare || address.shipping_default || address.is_default),
   };
 }
 
