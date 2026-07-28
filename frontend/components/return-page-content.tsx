@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { createFormSpamState } from '@/lib/form-spam-protection';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
@@ -83,6 +84,7 @@ export default function ReturnPageContent() {
   const [isSubmitAnimationVisible, setIsSubmitAnimationVisible] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [spamState, setSpamState] = useState(() => createFormSpamState());
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -97,6 +99,8 @@ export default function ReturnPageContent() {
       reason: form.reason.trim(),
       outcome: form.outcome.trim(),
       details: form.details.trim(),
+      websiteUrl: spamState.websiteUrl,
+      formStartedAt: spamState.formStartedAt,
     };
 
     if (!payload.fullName || !payload.email || !payload.phone || !payload.orderNumber || !payload.productName) {
@@ -134,6 +138,7 @@ export default function ReturnPageContent() {
         window.setTimeout(resolve, 1200);
       });
       setForm(initialFormState);
+      setSpamState(createFormSpamState());
       setSuccess(result?.message || 'Cererea de retur a fost trimisa cu succes.');
     } catch (submitError) {
       setSuccess('');
@@ -148,6 +153,7 @@ export default function ReturnPageContent() {
 
   const handleReset = () => {
     setForm(initialFormState);
+    setSpamState(createFormSpamState());
     setError('');
     setIsSubmitAnimationVisible(false);
     setSuccess('');
@@ -231,6 +237,16 @@ export default function ReturnPageContent() {
             </div>
 
             <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
+              <input
+                type="text"
+                name="websiteUrl"
+                value={spamState.websiteUrl}
+                onChange={(event) => setSpamState((current) => ({ ...current, websiteUrl: event.target.value }))}
+                tabIndex={-1}
+                autoComplete="off"
+                className="hidden"
+                aria-hidden="true"
+              />
               <div className="grid gap-5 md:grid-cols-2">
                 <Field
                   label="Nume complet"
