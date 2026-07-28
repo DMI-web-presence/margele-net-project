@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { createFormSpamState } from '@/lib/form-spam-protection';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -24,6 +25,7 @@ function ResetareParolaContent() {
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [spamState, setSpamState] = useState(() => createFormSpamState());
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -45,7 +47,11 @@ function ResetareParolaContent() {
       const response = await fetch(`${backendUrl}/auth/password-reset/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          email,
+          websiteUrl: spamState.websiteUrl,
+          formStartedAt: spamState.formStartedAt,
+        }),
       });
       const result = (await response.json().catch(() => null)) as {
         cooldownSeconds?: number;
@@ -62,6 +68,7 @@ function ResetareParolaContent() {
       }
 
       setMessage(result?.message ?? 'Daca exista un cont pentru aceasta adresa, vei primi un link de resetare.');
+      setSpamState(createFormSpamState());
       setCooldownSeconds(result?.cooldownSeconds ?? 60);
     } finally {
       setIsSubmitting(false);
@@ -156,6 +163,16 @@ function ResetareParolaContent() {
               </form>
             ) : (
               <form onSubmit={handleRequestSubmit} className="space-y-6">
+                <input
+                  type="text"
+                  name="websiteUrl"
+                  value={spamState.websiteUrl}
+                  onChange={(event) => setSpamState((current) => ({ ...current, websiteUrl: event.target.value }))}
+                  tabIndex={-1}
+                  autoComplete="off"
+                  className="hidden"
+                  aria-hidden="true"
+                />
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-900" htmlFor="email-reset">
                     Adresa de email

@@ -72,6 +72,17 @@ const dbSearchPath = dbSearchSchemas.join(',');
 const uploadRoot = path.join(__dirname, '..', 'uploads');
 const productUploadDir = path.join(uploadRoot, 'products');
 const passwordResetCooldownSeconds = 60;
+const spamRateLimitBuckets = new Map();
+const spamFingerprintBuckets = new Map();
+const spamHoneypotFields = [
+  'website',
+  'websiteUrl',
+  'website_url',
+  'companyWebsite',
+  'company_website',
+  'url',
+];
+const spamMinimumSubmitSeconds = 2;
 
 if (!config.databaseUrl) {
   throw new Error('DATABASE_URL is required. Add it to backend/.env.');
@@ -2930,6 +2941,19 @@ async function handlePasswordResetRequest(req, res) {
   const body = await readJson(req);
   const email = normalizeEmail(body.email);
 
+  const spamDecision = checkFormSpam(req, body, {
+    formName: 'password-reset',
+    identity: email,
+    text: email,
+    ipLimit: { max: 5, windowSeconds: 10 * 60 },
+    identityLimit: { max: 2, windowSeconds: 10 * 60 },
+    minimumSubmitSeconds: 1,
+    content: { minLength: 5, maxLength: 180, maxUrls: 0 },
+  });
+  if (sendSpamDecision(res, spamDecision, 'Daca exista un cont pentru aceasta adresa, vei primi un link de resetare.')) {
+    return;
+  }
+
   if (!email || !isEmail(email)) {
     sendJson(res, 400, { message: 'Emailul nu este valid.' });
     return;
@@ -4424,6 +4448,217 @@ function clientIpAddress(req) {
   return forwarded || req.socket?.remoteAddress || '';
 }
 
+function checkFormSpam(req, body, options) {
+  if (isHoneypotFilled(body)) {
+    return { action: 'silently_accept', reason: 'honeypot' };
+  }
+
+  const formName = options.formName || 'form';
+  const ip = normalizeRateLimitKey(clientIpAddress(req) || 'unknown');
+  const identity = normalizeRateLimitKey(options.identity || '');
+  const text = String(options.text || '');
+  const contentCheck = validateFormContent(text, options.content || {});
+  if (contentCheck) {
+    return { action: 'reject', status: 400, reason: contentCheck.reason, message: contentCheck.message };
+  }
+
+  const timingCheck = validateFormTiming(body, options.minimumSubmitSeconds ?? spamMinimumSubmitSeconds);
+  if (timingCheck) {
+    return { action: 'reject', status: 400, reason: timingCheck.reason, message: timingCheck.message };
+  }
+
+  const ipLimit = options.ipLimit || { max: 3, windowSeconds: 10 * 60 };
+  const ipResult = consumeRateLimit(spamRateLimitBuckets, `ip:${formName}:${ip}`, ipLimit.max, ipLimit.windowSeconds);
+  if (!ipResult.allowed) {
+    return rateLimitDecision('ip_rate_limit', ipResult.retryAfterSeconds);
+  }
+
+  if (identity && options.identityLimit) {
+    const identityResult = consumeRateLimit(
+      spamRateLimitBuckets,
+      `identity:${formName}:${identity}`,
+      options.identityLimit.max,
+      options.identityLimit.windowSeconds,
+    );
+    if (!identityResult.allowed) {
+      return rateLimitDecision('identity_rate_limit', identityResult.retryAfterSeconds);
+    }
+  }
+
+  if (options.fingerprintLimit) {
+    const fingerprint = messageFingerprint(text);
+    if (fingerprint) {
+      const fingerprintResult = consumeRateLimit(
+        spamFingerprintBuckets,
+        `fingerprint:${formName}:${fingerprint}`,
+        options.fingerprintLimit.max,
+        options.fingerprintLimit.windowSeconds,
+      );
+      if (!fingerprintResult.allowed) {
+        return rateLimitDecision('duplicate_message', fingerprintResult.retryAfterSeconds);
+      }
+    }
+  }
+
+  return { action: 'allow' };
+}
+
+function sendSpamDecision(res, decision, silentSuccessMessage) {
+  if (!decision || decision.action === 'allow') return false;
+
+  if (decision.action === 'silently_accept') {
+    sendJson(res, 202, { ok: true, message: silentSuccessMessage });
+    return true;
+  }
+
+  sendJson(res, decision.status || 429, {
+    code: decision.reason || 'form_limited',
+    message: decision.message || 'Prea multe incercari. Te rugam sa incerci mai tarziu.',
+    retryAfterSeconds: decision.retryAfterSeconds,
+  });
+  return true;
+}
+
+function isHoneypotFilled(body) {
+  return spamHoneypotFields.some((field) => String(body?.[field] || '').trim().length > 0);
+}
+
+function validateFormTiming(body, minimumSubmitSeconds) {
+  const rawStartedAt = body?.formStartedAt || body?.form_started_at || body?.startedAt;
+  if (!rawStartedAt) return null;
+
+  const startedAt = Number(rawStartedAt);
+  if (!Number.isFinite(startedAt) || startedAt <= 0) return null;
+
+  const elapsedSeconds = (Date.now() - startedAt) / 1000;
+  if (elapsedSeconds >= 0 && elapsedSeconds < minimumSubmitSeconds) {
+    return {
+      reason: 'submitted_too_fast',
+      message: 'Formularul a fost trimis prea rapid. Te rugam sa incerci din nou.',
+    };
+  }
+
+  return null;
+}
+
+function validateFormContent(text, rules) {
+  const normalized = normalizeMessageText(text);
+  if (rules.minLength && normalized.length < rules.minLength) {
+    return { reason: 'message_too_short', message: 'Mesajul este prea scurt.' };
+  }
+
+  if (rules.maxLength && normalized.length > rules.maxLength) {
+    return { reason: 'message_too_long', message: 'Mesajul este prea lung.' };
+  }
+
+  const urlCount = countUrls(normalized);
+  if (urlCount > (rules.maxUrls ?? 2)) {
+    return { reason: 'too_many_links', message: 'Mesajul contine prea multe linkuri.' };
+  }
+
+  if (hasRepeatedSpamText(normalized)) {
+    return { reason: 'repeated_text', message: 'Mesajul contine prea mult text repetat.' };
+  }
+
+  if (hasSpamKeywordPattern(normalized)) {
+    return { reason: 'spam_keywords', message: 'Mesajul pare automatizat si nu a fost acceptat.' };
+  }
+
+  return null;
+}
+
+function consumeRateLimit(store, key, maxAttempts, windowSeconds) {
+  cleanupRateLimitBuckets(store);
+  const now = Date.now();
+  const windowMs = windowSeconds * 1000;
+  const bucket = store.get(key) || { count: 0, resetAt: now + windowMs };
+
+  if (bucket.resetAt <= now) {
+    bucket.count = 0;
+    bucket.resetAt = now + windowMs;
+  }
+
+  bucket.count += 1;
+  store.set(key, bucket);
+
+  if (bucket.count > maxAttempts) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+    };
+  }
+
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+function cleanupRateLimitBuckets(store) {
+  const now = Date.now();
+  for (const [key, bucket] of store.entries()) {
+    if (bucket.resetAt <= now) {
+      store.delete(key);
+    }
+  }
+}
+
+function rateLimitDecision(reason, retryAfterSeconds) {
+  return {
+    action: 'reject',
+    status: 429,
+    reason,
+    retryAfterSeconds,
+    message: `Ai trimis prea multe cereri. Incearca din nou peste ${retryAfterSeconds} secunde.`,
+  };
+}
+
+function normalizeRateLimitKey(value) {
+  return String(value || '').trim().toLowerCase().slice(0, 180);
+}
+
+function normalizeMessageText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function countUrls(value) {
+  return (String(value || '').match(/https?:\/\/|www\.|[a-z0-9-]+\.(com|net|org|info|ru|cn|xyz|top|shop)\b/gi) || []).length;
+}
+
+function hasRepeatedSpamText(value) {
+  const normalized = String(value || '').toLowerCase();
+  if (/(.)\1{18,}/.test(normalized)) return true;
+
+  const words = normalized.match(/[a-z0-9ăâîșşțţ]+/gi) || [];
+  if (words.length < 12) return false;
+
+  const counts = new Map();
+  for (const word of words) {
+    if (word.length < 4) continue;
+    counts.set(word, (counts.get(word) || 0) + 1);
+  }
+
+  return [...counts.values()].some((count) => count >= 8);
+}
+
+function hasSpamKeywordPattern(value) {
+  const normalized = String(value || '').toLowerCase();
+  const patterns = [
+    /\bcasino\b/,
+    /\bcrypto\b/,
+    /\bforex\b/,
+    /\bloan\b/,
+    /\bviagra\b/,
+    /\bseo\b.*\bbacklink/,
+    /\btelegram\b.*\bwhatsapp\b/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+}
+
+function messageFingerprint(value) {
+  const normalized = normalizeMessageText(value).toLowerCase();
+  if (normalized.length < 20) return '';
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
 function netopiaPaymentAction(response) {
   const paymentUrl =
     response.payment?.paymentURL ||
@@ -5427,6 +5662,29 @@ async function handleReturnRequest(req, res) {
     details: String(body.details || '').trim(),
   };
 
+  const spamDecision = checkFormSpam(req, body, {
+    formName: 'return-request',
+    identity: returnRequest.email || returnRequest.phone,
+    text: [
+      returnRequest.fullName,
+      returnRequest.email,
+      returnRequest.phone,
+      returnRequest.orderNumber,
+      returnRequest.productName,
+      returnRequest.sku,
+      returnRequest.reason,
+      returnRequest.outcome,
+      returnRequest.details,
+    ].join(' '),
+    ipLimit: { max: 4, windowSeconds: 10 * 60 },
+    identityLimit: { max: 2, windowSeconds: 30 * 60 },
+    fingerprintLimit: { max: 1, windowSeconds: 30 * 60 },
+    content: { minLength: 25, maxLength: 5000, maxUrls: 2 },
+  });
+  if (sendSpamDecision(res, spamDecision, 'Cererea de retur a fost trimisa. Revenim cat mai curand.')) {
+    return;
+  }
+
   if (!returnRequest.fullName) {
     sendJson(res, 400, { message: 'Numele complet este obligatoriu.' });
     return;
@@ -5497,6 +5755,19 @@ async function handleContactMessage(req, res) {
     topic: String(body.topic || '').trim(),
     message: String(body.message || '').trim(),
   };
+
+  const spamDecision = checkFormSpam(req, body, {
+    formName: 'contact-message',
+    identity: message.contactDetail,
+    text: [message.name, message.contactDetail, message.topic, message.message].join(' '),
+    ipLimit: { max: 3, windowSeconds: 10 * 60 },
+    identityLimit: { max: 2, windowSeconds: 30 * 60 },
+    fingerprintLimit: { max: 1, windowSeconds: 30 * 60 },
+    content: { minLength: 12, maxLength: 3000, maxUrls: 2 },
+  });
+  if (sendSpamDecision(res, spamDecision, 'Mesajul a fost trimis. Revenim cat mai curand.')) {
+    return;
+  }
 
   if (!message.name) {
     sendJson(res, 400, { message: 'Numele este obligatoriu.' });

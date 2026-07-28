@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { createFormSpamState } from '@/lib/form-spam-protection';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
@@ -27,6 +28,7 @@ export default function ContactPageContent() {
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitAnimationVisible, setIsSubmitAnimationVisible] = useState(false);
+  const [spamState, setSpamState] = useState(() => createFormSpamState());
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -36,6 +38,8 @@ export default function ContactPageContent() {
       contactDetail: contactDetail.trim(),
       topic: topic.trim(),
       message: message.trim(),
+      websiteUrl: spamState.websiteUrl,
+      formStartedAt: spamState.formStartedAt,
     };
 
     if (!payload.name || !payload.contactDetail || !payload.message) {
@@ -71,6 +75,7 @@ export default function ContactPageContent() {
       setContactDetail('');
       setTopic('');
       setMessage('');
+      setSpamState(createFormSpamState());
       setSuccess(result?.message || 'Mesajul a fost trimis cu succes.');
     } catch (submitError) {
       setSuccess('');
@@ -176,6 +181,16 @@ export default function ContactPageContent() {
             </div>
 
             <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
+              <input
+                type="text"
+                name="websiteUrl"
+                value={spamState.websiteUrl}
+                onChange={(event) => setSpamState((current) => ({ ...current, websiteUrl: event.target.value }))}
+                tabIndex={-1}
+                autoComplete="off"
+                className="hidden"
+                aria-hidden="true"
+              />
               <div className="grid gap-5 md:grid-cols-2">
                 <Field
                   label="Nume"
@@ -242,6 +257,7 @@ export default function ContactPageContent() {
                     setContactDetail('');
                     setTopic('');
                     setMessage('');
+                    setSpamState(createFormSpamState());
                     setError('');
                     setSuccess('');
                     setIsSubmitAnimationVisible(false);
