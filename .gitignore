@@ -11,3 +11,4 @@ frontend/public/images/catalog/
 backend/backups/
 .local/backups/
 .local/backup-logs/
+.codex-dev/
