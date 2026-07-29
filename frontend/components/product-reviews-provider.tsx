@@ -1,27 +1,44 @@
 'use client';
 
-import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 export type ProductReview = {
   id: number;
+  productId: number;
+  userId: number | null;
+  orderId: number | null;
   name: string;
   rating: number;
   comment: string;
+  status: string;
+  isVerifiedPurchase: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+type ReviewSubmission = {
+  name: string;
+  email: string;
+  rating: number;
+  comment: string;
+  formStartedAt: number;
 };
 
 type ProductReviewsContextValue = {
   reviews: ProductReview[];
   reviewsCount: number;
   averageRating: number;
-  addReview: (review: Omit<ProductReview, 'id'>) => void;
+  isLoading: boolean;
+  isSubmitting: boolean;
+  message: string;
+  error: string;
+  addReview: (review: ReviewSubmission) => Promise<boolean>;
+  clearReviewFeedback: () => void;
 };
 
 const ProductReviewsContext = createContext<ProductReviewsContextValue | null>(null);
-
-const defaultReviews: ProductReview[] = [
-  { id: 1, name: 'Ana', rating: 5, comment: 'Foarte frumos lucrat, recomand.' },
-  { id: 2, name: 'Mihai', rating: 4, comment: 'Calitate buna si livrare rapida.' },
-];
 
 export function ProductReviewsProvider({
   productId,
@@ -30,47 +47,83 @@ export function ProductReviewsProvider({
   productId: number;
   children: ReactNode;
 }) {
-  const storageKey = `margele_product_reviews_${productId}`;
-  const [reviews, setReviews] = useState<ProductReview[]>(defaultReviews);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewsCount, setReviewsCount] = useState(0);
+  const [averageRating, setAverageRating] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  useEffect(() => {
+  const loadReviews = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const raw = window.localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as ProductReview[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setReviews(parsed);
-        }
+      const response = await fetch(`${backendUrl}/products/${productId}/reviews`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Reviews fetch failed.');
       }
+
+      const data = await response.json();
+      setReviews(Array.isArray(data.reviews) ? data.reviews : []);
+      setReviewsCount(Number(data.reviewsCount || 0));
+      setAverageRating(Number(data.averageRating || 0));
     } catch {
-      // Ignore malformed local storage and keep defaults.
+      setError('Nu am putut incarca recenziile momentan.');
     } finally {
-      setHasLoaded(true);
+      setIsLoading(false);
     }
-  }, [storageKey]);
+  }, [productId]);
 
   useEffect(() => {
-    if (!hasLoaded) return;
-    window.localStorage.setItem(storageKey, JSON.stringify(reviews));
-  }, [hasLoaded, reviews, storageKey]);
-
-  const averageRating = useMemo(() => {
-    if (reviews.length === 0) return 0;
-    const total = reviews.reduce((sum, review) => sum + review.rating, 0);
-    return total / reviews.length;
-  }, [reviews]);
+    void loadReviews();
+  }, [loadReviews]);
 
   const value = useMemo<ProductReviewsContextValue>(
     () => ({
       reviews,
-      reviewsCount: reviews.length,
+      reviewsCount,
       averageRating,
-      addReview: (review) => {
-        setReviews((current) => [{ ...review, id: Date.now() }, ...current]);
+      isLoading,
+      isSubmitting,
+      message,
+      error,
+      addReview: async (review) => {
+        setIsSubmitting(true);
+        setMessage('');
+        setError('');
+
+        try {
+          const response = await fetch(`${backendUrl}/products/${productId}/reviews`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(review),
+          });
+          const data = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            setError(data.message || 'Recenzia nu a putut fi trimisa.');
+            return false;
+          }
+
+          setMessage(data.message || 'Multumim! Recenzia ta va fi vizibila dupa aprobare.');
+          return true;
+        } catch {
+          setError('Recenzia nu a putut fi trimisa momentan.');
+          return false;
+        } finally {
+          setIsSubmitting(false);
+        }
+      },
+      clearReviewFeedback: () => {
+        setMessage('');
+        setError('');
       },
     }),
-    [reviews, averageRating],
+    [averageRating, error, isLoading, isSubmitting, message, productId, reviews, reviewsCount],
   );
 
   return (

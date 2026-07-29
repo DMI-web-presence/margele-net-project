@@ -96,8 +96,84 @@ const variantIsAvailable = (variant: ProductVariant) =>
 const variantHasFinalPrice = (variant: ProductVariant) =>
   Boolean(variant.combinationId || variant.sku || variant.model) && Number(variant.priceDelta ?? 0) > 0;
 
-const getBuyablePricedVariants = (variants: ProductVariant[]) => {
-  const pricedVariants = variants.filter(variantHasPrice);
+const legacyVariantGroupKey = (variant: ProductVariant) =>
+  `${variant.optionName || ''}|${variant.optionValue || ''}|${variant.legacyOptionValueId ?? ''}`.toLowerCase();
+
+const variantPriceSignal = (variant: ProductVariant) => {
+  const variantPrice = Number(variant.variantPrice);
+  if (variant.variantPrice !== null && variant.variantPrice !== undefined && Number.isFinite(variantPrice) && variantPrice > 0) {
+    return variantPrice;
+  }
+
+  const priceDelta = Number(variant.priceDelta ?? 0);
+  return Number.isFinite(priceDelta) ? priceDelta : 0;
+};
+
+const representativeLegacyVariants = (variants: ProductVariant[]) => {
+  const grouped = new Map<string, ProductVariant[]>();
+  for (const variant of variants) {
+    const key = legacyVariantGroupKey(variant);
+    grouped.set(key, [...(grouped.get(key) || []), variant]);
+  }
+
+  return Array.from(grouped.values()).map((group) => {
+    const positiveSignals = group
+      .map((variant) => variantPriceSignal(variant))
+      .filter((signal) => signal > 0);
+
+    if (positiveSignals.length === 0) {
+      return group.find(variantIsAvailable) || group[0];
+    }
+
+    const counts = new Map<number, number>();
+    for (const signal of positiveSignals) {
+      counts.set(signal, (counts.get(signal) || 0) + 1);
+    }
+
+    const representativeSignal = Array.from(counts.entries()).sort(
+      ([leftSignal, leftCount], [rightSignal, rightCount]) =>
+        rightCount - leftCount || leftSignal - rightSignal,
+    )[0][0];
+
+    return (
+      group.find((variant) => variantIsAvailable(variant) && variantPriceSignal(variant) === representativeSignal) ||
+      group.find((variant) => variantPriceSignal(variant) === representativeSignal) ||
+      group.find(variantIsAvailable) ||
+      group[0]
+    );
+  });
+};
+
+const variantCombinationLegacyIds = (variant: ProductVariant) =>
+  String(variant.combinationId || '')
+    .split('-')
+    .map((part) => Number(part))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+const variantMatchesVisibleColor = (variant: ProductVariant, visibleColorValueIds: Set<number>) => {
+  if (visibleColorValueIds.size === 0) return true;
+
+  const combinationIds = variantCombinationLegacyIds(variant);
+  if (combinationIds.length > 0) {
+    return combinationIds.some((id) => visibleColorValueIds.has(id));
+  }
+
+  if (isColorOptionLabel(variant.optionName || '')) {
+    return Boolean(variant.legacyOptionValueId && visibleColorValueIds.has(variant.legacyOptionValueId));
+  }
+
+  return true;
+};
+
+const getBuyablePricedVariants = (
+  variants: ProductVariant[],
+  visibleColorValueIds: Set<number> = new Set(),
+) => {
+  const hasCombinationPrices = variants.some((variant) => variant.combinationId || Object.keys(normalizeVariantOptionValues(variant)).length > 0);
+  const visibleVariants = variants.filter((variant) => variantMatchesVisibleColor(variant, visibleColorValueIds));
+  const pricedVariants = hasCombinationPrices
+    ? visibleVariants.filter(variantHasPrice)
+    : representativeLegacyVariants(visibleVariants.filter(variantHasPrice));
   const availablePricedVariants = pricedVariants.filter(variantIsAvailable);
   const candidateVariants = availablePricedVariants.length > 0 ? availablePricedVariants : pricedVariants;
   const finalPricedVariants = candidateVariants.filter(variantHasFinalPrice);
@@ -105,9 +181,13 @@ const getBuyablePricedVariants = (variants: ProductVariant[]) => {
   return finalPricedVariants.length > 0 ? finalPricedVariants : candidateVariants;
 };
 
-const getLowestVariantPrice = (basePrice: number, variants: ProductVariant[]) => {
+const getLowestVariantPrice = (
+  basePrice: number,
+  variants: ProductVariant[],
+  visibleColorValueIds: Set<number> = new Set(),
+) => {
   const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
-  const prices = getBuyablePricedVariants(variants)
+  const prices = getBuyablePricedVariants(variants, visibleColorValueIds)
     .map((variant) => applyPriceDelta(safeBasePrice, variant))
     .filter(Number.isFinite);
 
@@ -121,10 +201,12 @@ const findBestVariant = (
   predicate: (variant: ProductVariant) => boolean,
 ) => {
   const matches = variants.filter(predicate);
+  const representativeMatch = representativeLegacyVariants(matches)[0];
 
   return (
     matches.find((variant) => variantHasCode(variant) && variantIsAvailable(variant)) ||
     matches.find(variantHasCode) ||
+    representativeMatch ||
     matches.find(variantIsAvailable) ||
     matches[0]
   );
@@ -145,22 +227,116 @@ const normalizeVariantOptionValues = (variant: ProductVariant): Record<string, s
 
 const normalizedOptionText = (value: string) => value.trim().toLowerCase();
 
+const variantLegacyOptionValueIds = (variant: ProductVariant) =>
+  new Set(
+    [
+      variant.legacyOptionValueId,
+      ...variantCombinationLegacyIds(variant),
+    ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0),
+  );
+
+const selectedPurchaseOptions = (
+  groups: PurchaseOptionGroup[],
+  selections: Record<string, string | null>,
+) =>
+  groups.flatMap((group) => {
+    const selectedValue = selections[group.name];
+    if (!selectedValue) return [];
+
+    const option = group.options.find(
+      (candidate) => normalizedOptionText(candidate.value) === normalizedOptionText(selectedValue),
+    );
+
+    return [
+      {
+        name: group.name,
+        value: selectedValue,
+        legacyOptionValueId: option?.legacyOptionValueId ?? null,
+      },
+    ];
+  });
+
 const variantMatchesSelections = (
   variant: ProductVariant,
   selections: Record<string, string | null>,
+  groups: PurchaseOptionGroup[],
 ) => {
+  const selectedEntries = selectedPurchaseOptions(groups, selections);
+  if (selectedEntries.length === 0) return true;
+
   const optionValues = normalizeVariantOptionValues(variant);
-  const selectedEntries = Object.entries(selections).filter(
-    (entry): entry is [string, string] => Boolean(entry[1]),
+  if (Object.keys(optionValues).length > 0) {
+    return selectedEntries.every(({ name: selectedName, value: selectedValue }) =>
+      Object.entries(optionValues).some(
+        ([optionName, optionValue]) =>
+          normalizedOptionText(optionName) === normalizedOptionText(selectedName) &&
+          normalizedOptionText(optionValue) === normalizedOptionText(selectedValue),
+      ),
+    );
+  }
+
+  const legacyIds = variantLegacyOptionValueIds(variant);
+  const selectedLegacyIds = selectedEntries
+    .map((entry) => entry.legacyOptionValueId)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+  if (selectedLegacyIds.length === selectedEntries.length) {
+    return selectedLegacyIds.every((legacyId) => legacyIds.has(legacyId));
+  }
+
+  return selectedEntries.every(
+    ({ name, value, legacyOptionValueId }) =>
+      (legacyOptionValueId ? legacyIds.has(legacyOptionValueId) : false) ||
+      (
+        normalizedOptionText(variant.optionName || '') === normalizedOptionText(name) &&
+        normalizedOptionText(variant.optionValue || '') === normalizedOptionText(value)
+      ),
+  );
+};
+
+const selectionVariantsForGroups = (
+  variants: ProductVariant[],
+  groups: PurchaseOptionGroup[],
+) => {
+  const combinationVariants = variants.filter(
+    (variant) => Object.keys(normalizeVariantOptionValues(variant)).length > 0,
+  );
+  if (combinationVariants.length > 0) return combinationVariants;
+
+  const groupsWithLegacyIds = groups.filter((group) =>
+    group.options.some((option) => typeof option.legacyOptionValueId === 'number'),
+  ).length;
+  const legacyCombinationVariants = variants.filter((variant) => {
+    if (groupsWithLegacyIds <= 1) {
+      return variantLegacyOptionValueIds(variant).size >= 1;
+    }
+
+    return (
+      Boolean(variant.combinationId || variant.sku || variant.model) &&
+      variantLegacyOptionValueIds(variant).size >= groupsWithLegacyIds
+    );
+  });
+
+  return legacyCombinationVariants.length > 0 ? legacyCombinationVariants : variants;
+};
+
+const resolveSelectedVariant = (
+  variants: ProductVariant[],
+  selections: Record<string, string | null>,
+  groups: PurchaseOptionGroup[],
+) =>
+  findBestVariant(
+    variants,
+    (variant) => variantMatchesSelections(variant, selections, groups),
   );
 
-  return selectedEntries.every(([selectedName, selectedValue]) =>
-    Object.entries(optionValues).some(
-      ([optionName, optionValue]) =>
-        normalizedOptionText(optionName) === normalizedOptionText(selectedName) &&
-        normalizedOptionText(optionValue) === normalizedOptionText(selectedValue),
-    ),
-  );
+const isColorOptionLabel = (value: string) => {
+  const normalized = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return normalized.includes('culoare') || normalized.includes('color') || normalized.includes('nuanta');
 };
 
 export default function ProductPurchaseControls({
@@ -173,11 +349,26 @@ export default function ProductPurchaseControls({
   children,
 }: ProductPurchaseControlsProps) {
   const { addToCart } = useCart();
-  const groups =
+  const rawGroups =
     optionGroups && optionGroups.length > 0 ? optionGroups : [{ name: optionName, options }];
+  const groups = rawGroups
+    .map((group) => ({
+      ...group,
+      options: isColorOptionLabel(group.name)
+        ? group.options.filter((option) => Boolean(option.imageUrl))
+        : group.options,
+    }))
+    .filter((group) => group.options.length > 0);
   const imageOptionGroupNames = groups
     .filter((group) => group.options.some((option) => option.imageUrl))
     .map((group) => group.name);
+  const visibleColorValueIds = new Set(
+    groups
+      .filter((group) => isColorOptionLabel(group.name))
+      .flatMap((group) => group.options)
+      .map((option) => option.legacyOptionValueId)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+  );
   const hasImageOptionGroups = imageOptionGroupNames.length > 0;
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(
@@ -194,64 +385,34 @@ export default function ProductPurchaseControls({
   const [showSelectionNotice, setShowSelectionNotice] = useState(false);
   const hasSelectedImageOption = imageOptionGroupNames.some((name) => Boolean(selectedOptions[name]));
   const selectedImageOption = groups
-    .filter((group) => imageOptionGroupNames.includes(group.name))
+    .filter((group) => isColorOptionLabel(group.name))
+    .concat(groups.filter((group) => !isColorOptionLabel(group.name) && imageOptionGroupNames.includes(group.name)))
     .flatMap((group) => group.options.filter((option) => option.value === selectedOptions[group.name]))
     .find((option) => option.imageUrl);
-  const selectedImageValueId = selectedImageOption?.legacyOptionValueId;
-  const selectedNonImageOptions = groups
-    .filter((group) => !group.options.some((option) => option.imageUrl))
-    .map((group) => group.options.find((option) => option.value === selectedOptions[group.name]))
-    .filter(Boolean) as PurchaseOption[];
   const hasCompleteSelection = groups
     .filter((group) => group.options.length > 0)
     .every((group) => Boolean(selectedOptions[group.name]));
-  const combinationVariants = variants.filter(
-    (variant) => Object.keys(normalizeVariantOptionValues(variant)).length > 0,
-  );
-  const availableCombinationVariants = combinationVariants.filter(variantIsAvailable);
-  const selectedCombinationVariant = hasCompleteSelection
-    ? availableCombinationVariants.find((variant) => variantMatchesSelections(variant, selectedOptions))
+  const selectionVariants = selectionVariantsForGroups(variants, groups);
+  const availableSelectionVariants = selectionVariants.filter(variantIsAvailable);
+  const selectedVariant = hasCompleteSelection
+    ? resolveSelectedVariant(availableSelectionVariants, selectedOptions, groups)
     : undefined;
-  const legacySelectedVariant =
-    selectedNonImageOptions
-      .map((option) =>
-        findBestVariant(variants, (variant) => {
-          if (!option.legacyOptionValueId || variant.legacyOptionValueId !== option.legacyOptionValueId) {
-            return false;
-          }
-
-          if (!selectedImageValueId) {
-            return !variant.combinationId;
-          }
-
-          return Boolean(
-            variant.combinationId
-              ?.split('-')
-              .map((part) => Number(part))
-              .includes(selectedImageValueId),
-          );
-        }),
-      )
-      .find(Boolean) ||
-    (selectedImageValueId
-      ? findBestVariant(
-          variants,
-          (variant) =>
-            variant.legacyOptionValueId === selectedImageValueId &&
-            (!variant.combinationId || variant.combinationId.includes(String(selectedImageValueId))),
-        )
-      : undefined);
-  const selectedVariant =
-    combinationVariants.length > 0 ? selectedCombinationVariant : legacySelectedVariant;
   const basePrice = Number(product.price);
-  const lowestVariantPrice = getLowestVariantPrice(basePrice, variants);
+  const compatibleVariants = availableSelectionVariants.filter((variant) =>
+    variantMatchesSelections(variant, selectedOptions, groups),
+  );
+  const lowestVariantPrice = getLowestVariantPrice(
+    basePrice,
+    compatibleVariants.length > 0 ? compatibleVariants : selectionVariants,
+    visibleColorValueIds,
+  );
   const missingRequiredGroups = groups
     .filter((group) => group.options.length > 0)
     .filter((group) => !selectedOptions[group.name])
     .map((group) => group.name);
   const hasMissingRequiredGroups = missingRequiredGroups.length > 0;
   const hasUnavailableCombination =
-    combinationVariants.length > 0 && hasCompleteSelection && !selectedCombinationVariant;
+    selectionVariants.length > 0 && hasCompleteSelection && !selectedVariant;
   const selectionNoticeText =
     missingRequiredGroups.length > 0
       ? `Alege ${missingRequiredGroups.map((name) => name.toLowerCase()).join(' si ')} pentru a adauga produsul in cos.`
@@ -259,54 +420,60 @@ export default function ProductPurchaseControls({
         ? 'Combinatia selectata nu este disponibila momentan.'
       : '';
   const hasVariablePrice =
-    new Set(getBuyablePricedVariants(variants).map((variant) => applyPriceDelta(basePrice, variant).toFixed(2))).size >
+    new Set(getBuyablePricedVariants(variants, visibleColorValueIds).map((variant) => applyPriceDelta(basePrice, variant).toFixed(2))).size >
     1;
   const shouldShowFromPrice = hasVariablePrice && (!hasCompleteSelection || hasUnavailableCombination);
   const currentPrice = shouldShowFromPrice ? lowestVariantPrice : applyPriceDelta(basePrice, selectedVariant);
   const currentPriceText = `${shouldShowFromPrice ? 'De la ' : ''}${priceFormatter.format(currentPrice)}`;
-  const currentSku = selectedVariant?.sku || null;
+  const currentSku = selectedVariant?.sku || product.sku || null;
   const currentVariantId = selectedVariant?.id ?? null;
   const [quantity, setQuantity] = useState(1);
   const cartOption = Object.entries(selectedOptions)
     .filter(([, value]) => Boolean(value))
     .map(([name, value]) => `${name}: ${value}`)
     .join('; ');
-  const priceHintsByOptionValue =
-    selectedImageValueId
-      ? variants.reduce<Record<string, string>>((hints, variant) => {
-          if (!variant.legacyOptionValueId || !variant.combinationId) return hints;
-
-          const isForSelectedImage = variant.combinationId
-            .split('-')
-            .map((part) => Number(part))
-            .includes(selectedImageValueId);
-
-          if (!isForSelectedImage || !variantIsAvailable(variant)) return hints;
-
-          hints[String(variant.legacyOptionValueId)] = priceFormatter.format(applyPriceDelta(basePrice, variant));
-          return hints;
-        }, {})
-      : {};
-  const optionSelectors = groups.map((group) => {
+  const optionSelectors = groups.map((group, groupIndex) => {
     if (group.options.length === 0) return null;
 
     const isImageOptionGroup = group.options.some((option) => option.imageUrl);
     const shouldWaitForImageOption = !isImageOptionGroup && hasImageOptionGroups && !hasSelectedImageOption;
     const isMissingRequiredGroup = showSelectionNotice && missingRequiredGroups.includes(group.name);
-    const combinationDisabledValues =
-      combinationVariants.length > 0
-        ? group.options
-            .filter((option) => {
-              const candidateSelections = {
-                ...selectedOptions,
-                [group.name]: option.value,
-              };
-              return !availableCombinationVariants.some((variant) =>
-                variantMatchesSelections(variant, candidateSelections),
-              );
-            })
-            .map((option) => option.value)
-        : [];
+    const priorSelections = Object.fromEntries(
+      groups
+        .slice(0, groupIndex)
+        .map((priorGroup) => [priorGroup.name, selectedOptions[priorGroup.name] ?? null]),
+    );
+    const hasCompletePriorSelection = groups
+      .slice(0, groupIndex)
+      .every((priorGroup) => Boolean(selectedOptions[priorGroup.name]));
+    const disabledValues = group.options
+      .filter((option) => {
+        const candidateSelections = {
+          ...priorSelections,
+          [group.name]: option.value,
+        };
+        return !availableSelectionVariants.some((variant) =>
+          variantMatchesSelections(variant, candidateSelections, groups),
+        );
+      })
+      .map((option) => option.value);
+    const valueHints = Object.fromEntries(
+      group.options.flatMap((option) => {
+        const candidateSelections = {
+          ...priorSelections,
+          [group.name]: option.value,
+        };
+        const matchingVariant = resolveSelectedVariant(
+          availableSelectionVariants,
+          candidateSelections,
+          groups,
+        );
+
+        return matchingVariant
+          ? [[option.value, priceFormatter.format(applyPriceDelta(basePrice, matchingVariant))]]
+          : [];
+      }),
+    );
 
     return (
       <SizeSelector
@@ -324,40 +491,8 @@ export default function ProductPurchaseControls({
         showRequiredHint={isMissingRequiredGroup}
         disabled={shouldWaitForImageOption}
         allowDeselect={!isImageOptionGroup}
-        valueHints={
-          !isImageOptionGroup && selectedImageValueId
-            ? Object.fromEntries(
-                group.options
-                  .filter((option) => option.legacyOptionValueId)
-                  .map((option) => [
-                    option.value,
-                    priceHintsByOptionValue[String(option.legacyOptionValueId)] ?? '',
-                  ])
-                  .filter(([, hint]) => hint),
-              )
-            : {}
-        }
-        disabledValues={
-          combinationVariants.length > 0
-            ? combinationDisabledValues
-            : !isImageOptionGroup && selectedImageValueId
-            ? group.options
-                .filter((option) => {
-                  const optionValueId = option.legacyOptionValueId;
-                  if (!optionValueId) return false;
-
-                  return !variants.some(
-                    (variant) =>
-                      variant.legacyOptionValueId === optionValueId &&
-                      variant.combinationId
-                        ?.split('-')
-                        .map((part) => Number(part))
-                        .includes(selectedImageValueId),
-                  );
-                })
-                .map((option) => option.value)
-            : []
-        }
+        valueHints={groupIndex > 0 && hasCompletePriorSelection ? valueHints : {}}
+        disabledValues={disabledValues}
         value={selectedOptions[group.name] ?? null}
         onChange={(value) => {
           const selectedOption = group.options.find((option) => option.value === value);
@@ -376,60 +511,28 @@ export default function ProductPurchaseControls({
               [group.name]: value,
             };
 
-            if (combinationVariants.length > 0) {
-              const compatibleSelections: Record<string, string | null> = {
-                [group.name]: value,
-              };
-
-              for (const dependentGroup of groups) {
-                if (dependentGroup.name === group.name) continue;
-                const currentValue = current[dependentGroup.name];
-                if (!currentValue) {
-                  compatibleSelections[dependentGroup.name] = null;
-                  continue;
-                }
-
-                const candidateSelections = {
-                  ...compatibleSelections,
-                  [dependentGroup.name]: currentValue,
-                };
-                compatibleSelections[dependentGroup.name] = availableCombinationVariants.some(
-                  (variant) => variantMatchesSelections(variant, candidateSelections),
-                )
-                  ? currentValue
-                  : null;
+            for (const dependentGroup of groups.slice(groupIndex + 1)) {
+              const currentValue = current[dependentGroup.name];
+              if (!currentValue) {
+                nextOptions[dependentGroup.name] = null;
+                continue;
               }
 
-              return compatibleSelections;
-            }
-
-            if (!isImageOptionGroup) {
-              return nextOptions;
-            }
-
-            const selectedImageValueId = selectedOption?.legacyOptionValueId;
-            for (const dependentGroup of groups.filter(
-              (item) => !item.options.some((option) => option.imageUrl),
-            )) {
-              const currentDependentOption = dependentGroup.options.find(
-                (option) => option.value === current[dependentGroup.name],
+              const candidateSelections = Object.fromEntries(
+                groups
+                  .slice(0, groups.indexOf(dependentGroup) + 1)
+                  .map((candidateGroup) => [
+                    candidateGroup.name,
+                    candidateGroup.name === dependentGroup.name
+                      ? currentValue
+                      : nextOptions[candidateGroup.name] ?? null,
+                  ]),
+              );
+              const remainsAvailable = availableSelectionVariants.some((variant) =>
+                variantMatchesSelections(variant, candidateSelections, groups),
               );
 
-              const isStillAvailable =
-                selectedImageValueId &&
-                currentDependentOption?.legacyOptionValueId &&
-                variants.some(
-                  (variant) =>
-                    variant.legacyOptionValueId === currentDependentOption.legacyOptionValueId &&
-                    variant.combinationId
-                      ?.split('-')
-                      .map((part) => Number(part))
-                      .includes(selectedImageValueId),
-                );
-
-              nextOptions[dependentGroup.name] = isStillAvailable
-                ? currentDependentOption.value
-                : null;
+              nextOptions[dependentGroup.name] = remainsAvailable ? currentValue : null;
             }
 
             return nextOptions;

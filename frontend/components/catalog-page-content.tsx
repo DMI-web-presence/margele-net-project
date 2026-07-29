@@ -15,10 +15,16 @@ type Product = {
   price: string;
   imageUrl: string | null;
   categoryId: number | null;
+  sku?: string | null;
+  searchTokens?: string[];
   category?: ProductCategory | null;
   categories?: ProductCategory[];
   attributes?: ProductAttribute[];
   options?: ProductOption[] | ProductOption;
+  reviewSummary?: {
+    reviewsCount: number;
+    averageRating: number;
+  };
   createdAt: string;
 };
 
@@ -184,6 +190,34 @@ const sortOptions = [
   { value: 'price-asc', label: 'Pret crescator' },
   { value: 'price-desc', label: 'Pret descrescator' },
 ] as const;
+
+function ProductCardRating({ product }: { product: Product }) {
+  const reviewsCount = Number(product.reviewSummary?.reviewsCount || 0);
+  if (reviewsCount < 1) return null;
+
+  const averageRating = Number(product.reviewSummary?.averageRating || 0);
+  const roundedRating = Math.round(averageRating);
+
+  return (
+    <div className="flex min-h-5 items-center gap-1.5 text-xs text-slate-500">
+      <span className="inline-flex items-center gap-0.5 text-amber-500" aria-label={`Rating ${averageRating.toFixed(1)} din 5`}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <svg
+            key={star}
+            viewBox="0 0 24 24"
+            className={`h-3.5 w-3.5 ${roundedRating >= star ? 'fill-current' : 'fill-none text-slate-300'}`}
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+          </svg>
+        ))}
+      </span>
+      <span className="font-semibold text-slate-700">{averageRating.toFixed(1)}</span>
+      <span>({reviewsCount})</span>
+    </div>
+  );
+}
 
 const fallbackCategoryGroups: CategoryGroup[] = [
   {
@@ -404,6 +438,7 @@ export default function CatalogPageContent({
                     <p className="line-clamp-1 min-h-5 text-xs leading-5 text-slate-500 sm:line-clamp-2 sm:min-h-[2.75rem] sm:text-sm">
                       {toPlainText(product.description) || 'Material premium pentru proiecte handmade.'}
                     </p>
+                    <ProductCardRating product={product} />
                     {product.category?.name ? (
                       <p className="text-[0.68rem] font-medium uppercase tracking-[0.18em] text-slate-400 sm:text-xs">
                         {formatCategoryLabel(product.category.name)}
@@ -613,7 +648,7 @@ function sortProducts(left: Product, right: Product, sort: string) {
 }
 
 function productSearchText(product: Product) {
-  return `${product.name} ${toPlainText(product.description)} ${getAllProductOptionTags(product).join(' ')} ${(product.attributes || [])
+  return `${product.name} ${product.sku ?? ''} ${(product.searchTokens || []).join(' ')} ${toPlainText(product.description)} ${getAllProductOptionTags(product).join(' ')} ${(product.attributes || [])
     .map((attribute) => `${attribute.key}: ${attribute.value}`)
     .join(' ')} ${product.category?.name ?? ''}`.toLowerCase();
 }

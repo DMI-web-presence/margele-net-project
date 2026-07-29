@@ -18,11 +18,16 @@ type Product = {
   imageUrl: string | null;
   categoryId: number | null;
   sku?: string | null;
+  searchTokens?: string[];
   category?: ProductCategory | null;
   categories?: ProductCategory[];
   attributes?: ProductAttribute[];
   options?: ProductOption[] | ProductOption;
   variants?: ProductVariant[];
+  reviewSummary?: {
+    reviewsCount: number;
+    averageRating: number;
+  };
   sizes?: string[];
   createdAt: string;
 };
@@ -71,12 +76,17 @@ type ProductOptionValue = {
   value: string;
   imageUrl?: string | null;
   swatchColor?: string | null;
+  legacyOptionValueId?: number | null;
 };
 
 type ProductVariant = {
+  optionName?: string | null;
+  optionValue?: string | null;
+  legacyOptionValueId?: number | null;
   combinationId?: string | null;
   model?: string | null;
   sku?: string | null;
+  variantPrice?: number | string | null;
   priceDelta?: number | string | null;
   pricePrefix?: string | null;
   quantity?: number | null;
@@ -92,6 +102,34 @@ const numberFormatter = new Intl.NumberFormat('ro-RO', {
   currency: 'RON',
   currencyDisplay: 'narrowSymbol',
 });
+
+function ProductCardRating({ product }: { product: Product }) {
+  const reviewsCount = Number(product.reviewSummary?.reviewsCount || 0);
+  if (reviewsCount < 1) return null;
+
+  const averageRating = Number(product.reviewSummary?.averageRating || 0);
+  const roundedRating = Math.round(averageRating);
+
+  return (
+    <div className="flex min-h-5 items-center gap-1.5 text-xs text-slate-500">
+      <span className="inline-flex items-center gap-0.5 text-amber-500" aria-label={`Rating ${averageRating.toFixed(1)} din 5`}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <svg
+            key={star}
+            viewBox="0 0 24 24"
+            className={`h-3.5 w-3.5 ${roundedRating >= star ? 'fill-current' : 'fill-none text-slate-300'}`}
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+          </svg>
+        ))}
+      </span>
+      <span className="font-semibold text-slate-700">{averageRating.toFixed(1)}</span>
+      <span>({reviewsCount})</span>
+    </div>
+  );
+}
 
 const curatedRootSlugs = [
   'margele',
@@ -204,6 +242,11 @@ const applyVariantPrice = (basePrice: number, variant?: ProductVariant) => {
   const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
   if (!variant) return safeBasePrice;
 
+  const variantPrice = Number(variant.variantPrice);
+  if (variant.variantPrice !== null && variant.variantPrice !== undefined && Number.isFinite(variantPrice)) {
+    return Math.max(0, variantPrice);
+  }
+
   const priceDelta = Number(variant.priceDelta ?? 0);
   if (!Number.isFinite(priceDelta)) return safeBasePrice;
 
@@ -226,8 +269,97 @@ const variantIsAvailable = (variant: ProductVariant) =>
 const variantHasFinalPrice = (variant: ProductVariant) =>
   Boolean(variant.combinationId || variant.sku || variant.model) && Number(variant.priceDelta ?? 0) > 0;
 
-const getBuyablePricedVariants = (variants: ProductVariant[] = []) => {
-  const pricedVariants = variants.filter(variantHasPrice);
+const legacyVariantGroupKey = (variant: ProductVariant) =>
+  `${variant.optionName || ''}|${variant.optionValue || ''}|${variant.legacyOptionValueId ?? ''}`.toLowerCase();
+
+const variantPriceSignal = (variant: ProductVariant) => {
+  const variantPrice = Number(variant.variantPrice);
+  if (variant.variantPrice !== null && variant.variantPrice !== undefined && Number.isFinite(variantPrice) && variantPrice > 0) {
+    return variantPrice;
+  }
+
+  const priceDelta = Number(variant.priceDelta ?? 0);
+  return Number.isFinite(priceDelta) ? priceDelta : 0;
+};
+
+const normalizeVariantOptionValues = (variant: ProductVariant): Record<string, string> => {
+  const optionValues = (variant as ProductVariant & { optionValues?: Record<string, string> | null }).optionValues;
+  if (!optionValues || typeof optionValues !== 'object' || Array.isArray(optionValues)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(optionValues)
+      .map(([name, value]) => [name.trim(), String(value || '').trim()] as const)
+      .filter(([name, value]) => name && value),
+  );
+};
+
+const representativeLegacyVariants = (variants: ProductVariant[]) => {
+  const grouped = new Map<string, ProductVariant[]>();
+  for (const variant of variants) {
+    const key = legacyVariantGroupKey(variant);
+    grouped.set(key, [...(grouped.get(key) || []), variant]);
+  }
+
+  return Array.from(grouped.values()).map((group) => {
+    const positiveSignals = group
+      .map((variant) => variantPriceSignal(variant))
+      .filter((signal) => signal > 0);
+
+    if (positiveSignals.length === 0) {
+      return group.find(variantIsAvailable) || group[0];
+    }
+
+    const counts = new Map<number, number>();
+    for (const signal of positiveSignals) {
+      counts.set(signal, (counts.get(signal) || 0) + 1);
+    }
+
+    const representativeSignal = Array.from(counts.entries()).sort(
+      ([leftSignal, leftCount], [rightSignal, rightCount]) =>
+        rightCount - leftCount || leftSignal - rightSignal,
+    )[0][0];
+
+    return (
+      group.find((variant) => variantIsAvailable(variant) && variantPriceSignal(variant) === representativeSignal) ||
+      group.find((variant) => variantPriceSignal(variant) === representativeSignal) ||
+      group.find(variantIsAvailable) ||
+      group[0]
+    );
+  });
+};
+
+const variantCombinationLegacyIds = (variant: ProductVariant) =>
+  String(variant.combinationId || '')
+    .split('-')
+    .map((part) => Number(part))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+const variantMatchesVisibleColor = (variant: ProductVariant, visibleColorValueIds: Set<number>) => {
+  if (visibleColorValueIds.size === 0) return true;
+
+  const combinationIds = variantCombinationLegacyIds(variant);
+  if (combinationIds.length > 0) {
+    return combinationIds.some((id) => visibleColorValueIds.has(id));
+  }
+
+  if (colorOptionNames.some((name) => String(variant.optionName || '').toLowerCase().includes(name))) {
+    return Boolean(variant.legacyOptionValueId && visibleColorValueIds.has(variant.legacyOptionValueId));
+  }
+
+  return true;
+};
+
+const getBuyablePricedVariants = (
+  variants: ProductVariant[] = [],
+  visibleColorValueIds: Set<number> = new Set(),
+) => {
+  const hasCombinationPrices = variants.some((variant) => variant.combinationId || Object.keys(normalizeVariantOptionValues(variant)).length > 0);
+  const visibleVariants = variants.filter((variant) => variantMatchesVisibleColor(variant, visibleColorValueIds));
+  const pricedVariants = hasCombinationPrices
+    ? visibleVariants.filter(variantHasPrice)
+    : representativeLegacyVariants(visibleVariants.filter(variantHasPrice));
   const availablePricedVariants = pricedVariants.filter(variantIsAvailable);
   const candidateVariants = availablePricedVariants.length > 0 ? availablePricedVariants : pricedVariants;
   const finalPricedVariants = candidateVariants.filter(variantHasFinalPrice);
@@ -303,7 +435,7 @@ const getPurchaseOptionValueCounts = (product: Product) =>
 const getUniqueVariantSkus = (product: Product) =>
   Array.from(
     new Set(
-      getBuyablePricedVariants(product.variants)
+      getBuyablePricedVariants(product.variants, getVisibleImageColorValueIds(product))
         .map((variant) => String(variant.sku || '').trim())
         .filter(Boolean),
     ),
@@ -318,10 +450,27 @@ const hasSelectablePurchaseVariations = (product: Product) => {
 
 const getAutomaticCartSku = (product: Product) => getUniqueVariantSkus(product)[0] ?? product.sku ?? null;
 
+const getVisibleImageColorValueIds = (product: Product) => {
+  const apiOptions = Array.isArray(product.options)
+    ? product.options
+    : product.options
+      ? [product.options]
+      : [];
+
+  return new Set(
+    apiOptions
+      .filter((option) => colorOptionNames.some((name) => option.name.toLowerCase().includes(name)))
+      .flatMap((option) => option.valueDetails || [])
+      .filter((value) => Boolean(value.imageUrl))
+      .map((value) => value.legacyOptionValueId)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+  );
+};
+
 const getCatalogPriceInfo = (product: Product) => {
   const basePrice = Number(product.price);
   const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
-  const variantPrices = getBuyablePricedVariants(product.variants)
+  const variantPrices = getBuyablePricedVariants(product.variants, getVisibleImageColorValueIds(product))
     .map((variant) => applyVariantPrice(safeBasePrice, variant))
     .filter(Number.isFinite);
 
@@ -344,7 +493,7 @@ const getAllProductOptionTags = (product: Product) =>
   );
 
 const productSearchText = (product: Product) =>
-  `${product.name} ${product.description ?? ''} ${getAllProductOptionTags(product).join(' ')} ${(product.attributes || [])
+  `${product.name} ${product.sku ?? ''} ${(product.searchTokens || []).join(' ')} ${product.description ?? ''} ${getAllProductOptionTags(product).join(' ')} ${(product.attributes || [])
     .map((attribute) => `${attribute.key}: ${attribute.value}`)
     .join(' ')}`.toLowerCase();
 
@@ -990,6 +1139,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
                   >
                     {product.name}
                   </Link>
+                  <ProductCardRating product={product} />
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-3 py-3.5 sm:px-4 sm:py-6">

@@ -188,6 +188,29 @@ type CustomerRecord = {
   addresses: CustomerAddressRecord[];
 };
 
+type ProductReviewRecord = {
+  id: number;
+  productId: number;
+  userId: number | null;
+  orderId: number | null;
+  name: string;
+  email: string;
+  rating: number;
+  comment: string;
+  status: 'pending' | 'approved' | 'rejected';
+  isVerifiedPurchase: boolean;
+  adminNote: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  product: {
+    id: number;
+    name: string;
+    slug: string | null;
+    sku: string | null;
+    imageUrl: string | null;
+  };
+};
+
 type OrderRecord = {
   id: number;
   orderNumber: string;
@@ -304,7 +327,7 @@ type ProductDraft = {
   variants: ProductVariant[];
 };
 
-type AdminSection = 'dashboard' | 'products' | 'customers' | 'orders' | 'legacy-orders' | 'packages' | 'billing' | 'chat';
+type AdminSection = 'dashboard' | 'products' | 'customers' | 'orders' | 'legacy-orders' | 'reviews' | 'packages' | 'billing' | 'chat';
 
 type ImageUploadTarget = {
   kind: 'gallery' | 'variant';
@@ -355,6 +378,7 @@ const sidebarGroups = [
       { label: 'Clienti', hint: 'Date si adrese clienti', icon: 'user' },
       { label: 'Comenzi', hint: 'Comenzi si status', icon: 'receipt' },
       { label: 'Istoric comenzi', hint: 'Comenzi vechi importate', icon: 'history' },
+      { label: 'Recenzii', hint: 'Moderare produse', icon: 'star' },
       { label: 'Colete', hint: 'Livrare si tracking', icon: 'package' },
       { label: 'Facturi si plati', hint: 'Facturi si plati', icon: 'wallet' },
       { label: 'Chat', hint: 'Mesaje clienti', icon: 'chat' },
@@ -521,6 +545,7 @@ function getMenuSection(label: string): AdminSection | null {
   if (label === 'Clienti') return 'customers';
   if (label === 'Comenzi') return 'orders';
   if (label === 'Istoric comenzi') return 'legacy-orders';
+  if (label === 'Recenzii') return 'reviews';
   if (label === 'Colete') return 'packages';
   if (label === 'Facturi si plati') return 'billing';
   if (label === 'Chat') return 'chat';
@@ -553,6 +578,7 @@ export default function AdminPanel() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
+  const [reviews, setReviews] = useState<ProductReviewRecord[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
@@ -591,10 +617,12 @@ export default function AdminPanel() {
   const [smartBillAction, setSmartBillAction] = useState<'create' | 'pdf' | 'send' | null>(null);
   const [conversationStatusFilter, setConversationStatusFilter] = useState<string>('');
   const [conversationSourceFilter, setConversationSourceFilter] = useState<string>('');
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<string>('');
   const [productPage, setProductPage] = useState(1);
   const [customerPage, setCustomerPage] = useState(1);
   const [orderPage, setOrderPage] = useState(1);
   const [legacyOrderPage, setLegacyOrderPage] = useState(1);
+  const [reviewPage, setReviewPage] = useState(1);
   const [packagePage, setPackagePage] = useState(1);
   const [billingPage, setBillingPage] = useState(1);
   const [showAllEditorCategories, setShowAllEditorCategories] = useState(false);
@@ -638,12 +666,13 @@ export default function AdminPanel() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const loadAdminData = useCallback(async (selectProductId?: number | null) => {
-    const [productsResponse, categoriesResponse, ordersResponse, customersResponse, conversationsResponse, backupStatusResponse] = await Promise.all([
+    const [productsResponse, categoriesResponse, ordersResponse, customersResponse, conversationsResponse, reviewsResponse, backupStatusResponse] = await Promise.all([
       fetch(`${backendUrl}/admin/products`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/categories`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/orders`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/customers`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/conversations`, { credentials: 'include' }),
+      fetch(`${backendUrl}/admin/reviews`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/backup-status`, { credentials: 'include' }),
     ]);
 
@@ -653,6 +682,7 @@ export default function AdminPanel() {
       !ordersResponse.ok ||
       !customersResponse.ok ||
       !conversationsResponse.ok ||
+      !reviewsResponse.ok ||
       !backupStatusResponse.ok
     ) {
       throw new Error('Admin fetch failed.');
@@ -663,6 +693,7 @@ export default function AdminPanel() {
     const nextOrders = (await ordersResponse.json()) as OrderRecord[];
     const nextCustomers = (await customersResponse.json()) as CustomerRecord[];
     const nextConversations = (await conversationsResponse.json()) as ConversationRecord[];
+    const nextReviews = (await reviewsResponse.json()) as ProductReviewRecord[];
     const nextBackupStatus = (await backupStatusResponse.json()) as BackupStatus;
 
     setProducts(nextProducts);
@@ -670,6 +701,7 @@ export default function AdminPanel() {
     setOrders(nextOrders);
     setCustomers(nextCustomers);
     setConversations(nextConversations);
+    setReviews(nextReviews);
     setBackupStatus(nextBackupStatus);
 
     if (selectProductId === null) {
@@ -953,6 +985,29 @@ export default function AdminPanel() {
       });
   }, [conversations, search, conversationStatusFilter, conversationSourceFilter]);
 
+  const visibleReviews = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return reviews.filter((review) => {
+      const matchesStatus =
+        !reviewStatusFilter ||
+        review.status.toLowerCase() === reviewStatusFilter.toLowerCase();
+      const matchesQuery =
+        !query ||
+        [
+          review.name,
+          review.email,
+          review.comment,
+          review.product?.name,
+          review.product?.sku,
+          review.product?.slug,
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .some((value) => value.includes(query));
+
+      return matchesStatus && matchesQuery;
+    });
+  }, [reviews, search, reviewStatusFilter]);
+
   const paginatedProducts = useMemo(
     () => paginateItems(visibleProducts, productPage, adminPageSize).items,
     [visibleProducts, productPage],
@@ -969,6 +1024,10 @@ export default function AdminPanel() {
     () => paginateItems(visibleLegacyOrders, legacyOrderPage, adminPageSize).items,
     [visibleLegacyOrders, legacyOrderPage],
   );
+  const paginatedReviews = useMemo(
+    () => paginateItems(visibleReviews, reviewPage, adminPageSize).items,
+    [visibleReviews, reviewPage],
+  );
   const paginatedPackages = useMemo(
     () => paginateItems(visiblePackages, packagePage, adminPageSize).items,
     [visiblePackages, packagePage],
@@ -981,6 +1040,10 @@ export default function AdminPanel() {
   useEffect(() => {
     setConversationPage(1);
   }, [search, conversationStatusFilter, conversationSourceFilter]);
+
+  useEffect(() => {
+    setReviewPage(1);
+  }, [search, reviewStatusFilter]);
 
   useEffect(() => {
     setProductPage(1);
@@ -1207,6 +1270,7 @@ export default function AdminPanel() {
     setUser(null);
     setProducts([]);
     setOrders([]);
+    setReviews([]);
     setCategories([]);
     setSelectedProductId(null);
     setSelectedOrderId(null);
@@ -1734,6 +1798,37 @@ export default function AdminPanel() {
       setErrorMessage('Trimiterea raspunsului a esuat.');
     } finally {
       setIsSendingConversationReply(false);
+    }
+  }
+
+  async function handleReviewStatusUpdate(review: ProductReviewRecord, status: ProductReviewRecord['status']) {
+    setErrorMessage('');
+    setMessage('');
+    setIsUpdatingOrder(true);
+
+    try {
+      const response = await fetch(`${backendUrl}/admin/reviews/${review.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          status,
+          adminNote: review.adminNote || '',
+        }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        setErrorMessage(data?.message || 'Recenzia nu a putut fi actualizata.');
+        return;
+      }
+
+      await loadAdminData(selectedProductId);
+      setMessage(status === 'approved' ? 'Recenzia a fost aprobata.' : status === 'rejected' ? 'Recenzia a fost respinsa.' : 'Recenzia a fost marcata in asteptare.');
+    } catch {
+      setErrorMessage('Actualizarea recenziei a esuat.');
+    } finally {
+      setIsUpdatingOrder(false);
     }
   }
 
@@ -4496,6 +4591,20 @@ export default function AdminPanel() {
                 />
               ) : null}
 
+              {currentSection === 'reviews' ? (
+                <ReviewsOverview
+                  reviews={paginatedReviews}
+                  totalReviews={visibleReviews.length}
+                  allReviews={reviews}
+                  currentPage={reviewPage}
+                  statusFilter={reviewStatusFilter}
+                  onPageChange={setReviewPage}
+                  onStatusFilterChange={setReviewStatusFilter}
+                  onUpdateStatus={handleReviewStatusUpdate}
+                  isUpdating={isUpdatingOrder}
+                />
+              ) : null}
+
               {currentSection === 'customers' ? (
                 <CustomersOverview
                   customers={paginatedCustomers}
@@ -6998,6 +7107,170 @@ function getCustomerActiveOrderCount(customer: CustomerRecord) {
   return getCustomerLegacyOrderCount(customer) > 0 ? 0 : customer.orderCount;
 }
 
+function ReviewsOverview({
+  reviews,
+  totalReviews,
+  allReviews,
+  currentPage,
+  statusFilter,
+  onPageChange,
+  onStatusFilterChange,
+  onUpdateStatus,
+  isUpdating,
+}: {
+  reviews: ProductReviewRecord[];
+  totalReviews: number;
+  allReviews: ProductReviewRecord[];
+  currentPage: number;
+  statusFilter: string;
+  onPageChange: (page: number) => void;
+  onStatusFilterChange: (value: string) => void;
+  onUpdateStatus: (review: ProductReviewRecord, status: ProductReviewRecord['status']) => void;
+  isUpdating: boolean;
+}) {
+  const pendingReviews = allReviews.filter((review) => review.status === 'pending').length;
+  const approvedReviews = allReviews.filter((review) => review.status === 'approved').length;
+  const rejectedReviews = allReviews.filter((review) => review.status === 'rejected').length;
+  const averageRating =
+    allReviews.length === 0
+      ? 0
+      : allReviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / allReviews.length;
+  const metrics = [
+    { label: 'Recenzii total', value: allReviews.length, tone: 'from-violet-500 to-violet-600' },
+    { label: 'In asteptare', value: pendingReviews, tone: 'from-amber-400 to-orange-500' },
+    { label: 'Aprobate', value: approvedReviews, tone: 'from-emerald-500 to-teal-500' },
+    { label: 'Rating mediu', value: Number(averageRating.toFixed(1)), tone: 'from-sky-500 to-cyan-600' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <AdminBreadcrumbs current="Recenzii" />
+      <div className="grid gap-4 xl:grid-cols-4">
+        {metrics.map((metric) => (
+          <div key={metric.label} className={`rounded-[28px] bg-gradient-to-br ${metric.tone} p-[1px] shadow-lg`}>
+            <div className="rounded-[27px] bg-white/92 px-5 py-4 backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">{metric.label}</p>
+              <p className="mt-3 text-3xl font-semibold text-slate-950">{formatMetricValue(metric)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <DashboardCard className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-500">Recenzii</p>
+            <h2 className="mt-1 text-2xl font-semibold text-slate-950">Moderare recenzii produse</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {pendingReviews} in asteptare, {rejectedReviews} respinse
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 border-b border-slate-100 bg-slate-50/60 px-6 py-4 md:grid-cols-[220px_1fr]">
+          <label className="space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status recenzie</span>
+            <DashboardSelect value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className="h-11">
+              <option value="">Toate statusurile</option>
+              <option value="pending">In asteptare</option>
+              <option value="approved">Aprobata</option>
+              <option value="rejected">Respinsa</option>
+            </DashboardSelect>
+          </label>
+          <div className="flex items-end">
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+              Afisezi <span className="font-semibold text-slate-900">{totalReviews}</span> recenzii
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left">
+            <thead className="bg-slate-50/80 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              <tr>
+                <th className="px-6 py-4">Produs</th>
+                <th className="px-4 py-4">Client</th>
+                <th className="px-4 py-4">Rating</th>
+                <th className="px-4 py-4">Recenzie</th>
+                <th className="px-4 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Actiune</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {totalReviews === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-400">
+                    Nu exista recenzii care sa corespunda filtrelor.
+                  </td>
+                </tr>
+              ) : null}
+              {reviews.map((review) => (
+                <tr key={review.id} className="transition hover:bg-slate-50/80">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      {review.product.imageUrl ? (
+                        <img src={review.product.imageUrl} alt={review.product.name} className="h-12 w-12 rounded-2xl object-cover" />
+                      ) : (
+                        <div className="h-12 w-12 rounded-2xl bg-slate-100" />
+                      )}
+                      <div>
+                        <p className="font-semibold text-slate-900">{review.product.name || `Produs ${review.productId}`}</p>
+                        <p className="text-xs text-slate-400">{review.product.sku || review.product.slug || `ID ${review.productId}`}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="text-sm font-semibold text-slate-900">{review.name}</p>
+                    <p className="text-xs text-slate-400">{review.email}</p>
+                    {review.isVerifiedPurchase ? (
+                      <p className="mt-1 text-xs font-semibold text-emerald-700">Achizitie verificata</p>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-4 text-sm font-semibold text-slate-900">{review.rating} / 5</td>
+                  <td className="px-4 py-4">
+                    <p className="max-w-[360px] text-sm leading-6 text-slate-600">{review.comment}</p>
+                    <p className="mt-1 text-xs text-slate-400">{formatAdminDate(review.createdAt)}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <ReviewStatusPill status={review.status} />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex justify-end gap-2">
+                      {review.status !== 'approved' ? (
+                        <IconAction onClick={() => onUpdateStatus(review, 'approved')} label="Aproba recenzia">
+                          Aproba
+                        </IconAction>
+                      ) : null}
+                      {review.status !== 'rejected' ? (
+                        <IconAction onClick={() => onUpdateStatus(review, 'rejected')} label="Respinge recenzia">
+                          Respinge
+                        </IconAction>
+                      ) : null}
+                      {review.status !== 'pending' ? (
+                        <IconAction onClick={() => onUpdateStatus(review, 'pending')} label="Marcheaza in asteptare">
+                          Asteptare
+                        </IconAction>
+                      ) : null}
+                    </div>
+                    {isUpdating ? <p className="mt-2 text-right text-xs text-slate-400">Se actualizeaza...</p> : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <PaginationControls
+          totalItems={totalReviews}
+          currentPage={currentPage}
+          pageSize={adminPageSize}
+          itemLabel="recenzii"
+          onPageChange={onPageChange}
+        />
+      </DashboardCard>
+    </div>
+  );
+}
+
 function getOrderPreviewItem(order: OrderRecord) {
   return [...order.items].sort((left, right) => {
     const rightHasImage = right.productImageUrl ? 1 : 0;
@@ -8113,6 +8386,23 @@ function PaymentStatusPill({ status }: { status: string }) {
   return <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${styles}`}>{label}</span>;
 }
 
+function ReviewStatusPill({ status }: { status: ProductReviewRecord['status'] }) {
+  const label =
+    status === 'approved'
+      ? 'aprobata'
+      : status === 'rejected'
+        ? 'respinsa'
+        : 'in asteptare';
+  const styles =
+    status === 'approved'
+      ? 'bg-emerald-100 text-emerald-700'
+      : status === 'rejected'
+        ? 'bg-rose-100 text-rose-700'
+        : 'bg-amber-100 text-amber-700';
+
+  return <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${styles}`}>{label}</span>;
+}
+
 function PackageStatusPill({ status }: { status: string }) {
   const normalized = status.toLowerCase();
   const label =
@@ -8313,6 +8603,12 @@ function SidebarIcon({ name }: { name: string }) {
           <path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5" />
           <path d="M4 4v4.5h4.5" />
           <path d="M12 7v5l3 2" />
+        </svg>
+      );
+    case 'star':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.8">
+          <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
         </svg>
       );
     case 'package':
