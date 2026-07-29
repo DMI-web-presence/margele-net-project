@@ -1,4 +1,6 @@
+import type { Metadata } from 'next';
 import CatalogPageContent from '@/components/catalog-page-content';
+import { buildPageMetadata, categoryCatalogPath, defaultSeoDescription, siteName } from '@/lib/seo';
 export const dynamic = 'force-dynamic';
 
 type Product = {
@@ -112,6 +114,51 @@ function normalizeCategoryQuery(
     category: parentCategory.slug,
     subcategory: subcategory === 'Toate' ? matchedCategory.slug : subcategory,
   };
+}
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<Metadata> {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const categories = await getCategories();
+  const normalizedCategoryQuery = normalizeCategoryQuery(
+    parseSingleParam(resolvedSearchParams.category),
+    parseSingleParam(resolvedSearchParams.subcategory),
+    categories,
+  );
+  const selectedSlug =
+    normalizedCategoryQuery.subcategory !== 'Toate'
+      ? normalizedCategoryQuery.subcategory
+      : normalizedCategoryQuery.category !== 'Toate'
+        ? normalizedCategoryQuery.category
+        : '';
+  const selectedCategory = selectedSlug ? categories.find((category) => category.slug === selectedSlug) : null;
+  const hasFilters = Boolean(
+    parseSingleParam(resolvedSearchParams.search) ||
+      parseSingleParam(resolvedSearchParams.sort) ||
+      parseSingleParam(resolvedSearchParams.perPage) ||
+      parseSingleParam(resolvedSearchParams.page) ||
+      parseMultiParam(resolvedSearchParams.colors).length ||
+      parseMultiParam(resolvedSearchParams.sizes).length,
+  );
+
+  if (selectedCategory) {
+    return buildPageMetadata({
+      title: `${selectedCategory.name} - produse si accesorii`,
+      description: `Descopera produse din categoria ${selectedCategory.name} pe ${siteName}: margele, accesorii si materiale creative pentru proiecte handmade.`,
+      path: categoryCatalogPath(selectedCategory),
+      noindex: hasFilters,
+    });
+  }
+
+  return buildPageMetadata({
+    title: 'Catalog produse',
+    description: defaultSeoDescription,
+    path: '/catalog',
+    noindex: hasFilters,
+  });
 }
 
 export default async function CatalogPage({

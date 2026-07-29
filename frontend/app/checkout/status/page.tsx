@@ -1,6 +1,14 @@
 import { Suspense } from 'react';
 import CheckoutStatusContent from '@/components/checkout-status-content';
 import { Skeleton } from '@/components/ui/skeleton';
+import { buildPageMetadata } from '@/lib/seo';
+
+export const metadata = buildPageMetadata({
+  title: 'Status comanda',
+  description: 'Statusul platii si al comenzii Margele.net.',
+  path: '/checkout/status',
+  noindex: true,
+});
 
 function CheckoutStatusSkeleton() {
   return (

@@ -1,9 +1,16 @@
 import LandingPage from '@/components/landing-page';
+import { buildPageMetadata, defaultSeoDescription, defaultSeoTitle } from '@/lib/seo';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 const homepageRevalidateSeconds = 300;
 export const revalidate = 300;
+
+export const metadata = buildPageMetadata({
+  title: defaultSeoTitle,
+  description: defaultSeoDescription,
+  path: '/',
+});
 
 type Product = {
   id: number;

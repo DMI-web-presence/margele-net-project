@@ -1,4 +1,12 @@
 import BasketPageContent from '@/components/basket-page-content';
+import { buildPageMetadata } from '@/lib/seo';
+
+export const metadata = buildPageMetadata({
+  title: 'Cos de cumparaturi',
+  description: 'Cosul tau de cumparaturi Margele.net.',
+  path: '/basket',
+  noindex: true,
+});
 
 type Product = {
   id: number;
