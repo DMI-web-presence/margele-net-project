@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useCart } from '@/components/cart-provider';
+import Reveal from '@/components/reveal';
 import { getProductImageProps } from '@/lib/product-image-variants';
 
 type Product = {
@@ -214,7 +215,7 @@ function EmptyBasketIllustration() {
 function EmptyBasketState() {
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
-      <section className="mx-auto grid max-w-[1100px] items-center gap-10 rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-sm sm:px-10 lg:grid-cols-[minmax(0,1fr)_24rem] lg:py-14">
+      <section className="animate-hero-item mx-auto grid max-w-[1100px] items-center gap-10 rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-sm sm:px-10 lg:grid-cols-[minmax(0,1fr)_24rem] lg:py-14">
         <div className="space-y-6">
           <div className="inline-flex min-h-10 items-center rounded-full border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700">
             Cosul este gol
@@ -350,7 +351,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
       <div className="mx-auto max-w-[1200px]">
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <section className="space-y-8">
-            <div className="space-y-4">
+            <div className="animate-hero-item space-y-4">
               <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
                 Cosul tau ({count} {count === 1 ? 'articol' : 'articole'})
               </h1>
@@ -367,8 +368,9 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
               </div>
             </div>
 
+            <Reveal>
             <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-              <ul className="divide-y divide-slate-200">
+              <ul className="home-stagger divide-y divide-slate-200">
                 {enrichedItems.map((item) => {
                   const unitPrice = Number(item.product.price);
                   const linePrice = unitPrice * item.quantity;
@@ -491,6 +493,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                 })}
               </ul>
             </div>
+            </Reveal>
 
             <div className="space-y-2 text-sm text-slate-700">
               <p>
@@ -502,7 +505,10 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
             </div>
           </section>
 
-          <aside className="h-fit rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-24">
+          <aside
+            className="animate-hero-item h-fit rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-24"
+            style={{ animationDelay: '120ms' }}
+          >
             <button
               type="button"
               onClick={() => setVoucherOpen((current) => !current)}

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import Reveal from '@/components/reveal';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Order = {
@@ -96,6 +97,7 @@ export default function CheckoutStatusContent() {
 
   return (
     <main className="px-6 py-16 sm:px-10 lg:px-16">
+      <Reveal>
       <section className="mx-auto max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
         {isLoading ? (
           <div className="space-y-4">
@@ -142,6 +144,7 @@ export default function CheckoutStatusContent() {
           </Link>
         </div>
       </section>
+      </Reveal>
     </main>
   );
 }

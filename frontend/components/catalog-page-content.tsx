@@ -3,6 +3,7 @@ import Link from 'next/link';
 import CatalogFiltersForm from '@/components/catalog-filters-form';
 import CatalogPerPageSelect from '@/components/catalog-per-page-select';
 import ProductFavoriteIconButton from '@/components/product-favorite-icon-button';
+import Reveal from '@/components/reveal';
 import { Card } from '@/components/ui/card';
 import { formatCategoryLabel } from '@/lib/format-category-label';
 import { toPlainText } from '@/lib/plain-text';
@@ -13,6 +14,8 @@ type Product = {
   name: string;
   description: string | null;
   price: string;
+  displayPrice?: string | number | null;
+  hasFromPrice?: boolean;
   imageUrl: string | null;
   categoryId: number | null;
   sku?: string | null;
@@ -308,7 +311,7 @@ export default function CatalogPageContent({
   return (
     <div className="space-y-8">
       <section className="relative overflow-hidden rounded-[1.35rem] border border-slate-200 bg-[linear-gradient(105deg,#fff_0%,#fbf7ff_48%,#f8fbff_100%)] shadow-sm sm:rounded-[1.75rem]">
-        <div className="grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.2fr_0.8fr] lg:p-10">
+        <div className="home-stagger grid gap-6 p-5 sm:p-8 lg:grid-cols-[1.2fr_0.8fr] lg:p-10">
           <div className="relative z-10">
             <p className="text-xs font-bold uppercase tracking-[0.3em] text-[#4f2048]">{intro.eyebrow}</p>
             <h1 className="mt-3 max-w-2xl text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">
@@ -357,6 +360,7 @@ export default function CatalogPageContent({
         </div>
       </section>
 
+      <Reveal>
       <section className="grid gap-6 lg:grid-cols-[17rem_1fr]">
         <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
           <CatalogFiltersForm
@@ -392,8 +396,11 @@ export default function CatalogPageContent({
             />
           </div>
 
-          <div className="mt-6 grid items-stretch gap-4 pb-20 sm:grid-cols-2 sm:pb-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
-            {paginatedProducts.map((product) => (
+          <div className="home-stagger mt-6 grid items-stretch gap-4 pb-20 sm:grid-cols-2 sm:pb-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
+            {paginatedProducts.map((product) => {
+              const priceInfo = getCatalogPriceInfo(product);
+
+              return (
               <Card
                 key={product.id}
                 className="flex h-full w-full flex-col overflow-hidden rounded-[1.35rem] border-slate-200 transition hover:-translate-y-1 hover:shadow-md sm:rounded-[2rem]"
@@ -420,7 +427,7 @@ export default function CatalogPageContent({
                       product={{
                         id: product.id,
                         name: product.name,
-                        price: product.price,
+                        price: priceInfo.amount.toFixed(2),
                         imageUrl: product.imageUrl,
                       }}
                     />
@@ -449,8 +456,13 @@ export default function CatalogPageContent({
 
                 <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-3 py-3.5 sm:px-4 sm:py-6">
                   <div className="flex min-w-0 flex-col">
+                    {priceInfo.hasFromLabel ? (
+                      <span className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-slate-500 sm:text-xs">
+                        De la
+                      </span>
+                    ) : null}
                     <p className="text-xl font-semibold leading-tight text-slate-900 sm:text-2xl">
-                      {numberFormatter.format(Number(product.price))}
+                      {numberFormatter.format(priceInfo.amount)}
                     </p>
                   </div>
                   <Link
@@ -461,7 +473,8 @@ export default function CatalogPageContent({
                   </Link>
                 </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-6 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
@@ -492,6 +505,7 @@ export default function CatalogPageContent({
           </div>
         </div>
       </section>
+      </Reveal>
     </div>
   );
 }
@@ -627,8 +641,17 @@ function buildCatalogHref(
 }
 
 function getProductPrice(product: Product) {
-  const numericPrice = Number(product.price);
+  const numericPrice = Number(product.displayPrice ?? product.price);
   return Number.isFinite(numericPrice) ? numericPrice : 0;
+}
+
+function getCatalogPriceInfo(product: Product) {
+  const amount = getProductPrice(product);
+
+  return {
+    amount,
+    hasFromLabel: Boolean(product.hasFromPrice),
+  };
 }
 
 function sortProducts(left: Product, right: Product, sort: string) {

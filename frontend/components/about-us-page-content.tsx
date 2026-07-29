@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Reveal from '@/components/reveal';
 
 const beadCategories = [
   'margele de sticla',
@@ -35,7 +36,7 @@ export default function AboutUsPageContent() {
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
       <div className="mx-auto max-w-6xl space-y-8">
-        <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+        <section className="animate-hero-item overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-6 bg-gradient-to-br from-white via-slate-50 to-rose-50 p-6 sm:p-8 lg:p-10">
               <div className="space-y-3">
@@ -106,8 +107,9 @@ export default function AboutUsPageContent() {
           </div>
         </section>
 
+        <Reveal>
         <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
-          <div className="grid gap-0 lg:grid-cols-[0.85fr_1.15fr]">
+          <div className="home-stagger grid gap-0 lg:grid-cols-[0.85fr_1.15fr]">
             <div className="space-y-4 p-6 sm:p-8">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-rose-600">
                 Locatie
@@ -135,8 +137,10 @@ export default function AboutUsPageContent() {
             />
           </div>
         </section>
+        </Reveal>
 
-        <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+        <Reveal>
+        <section className="home-stagger grid gap-6 lg:grid-cols-[1fr_1fr]">
           <article className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-rose-600">
               Magazin online de margele si accesorii
@@ -182,7 +186,9 @@ export default function AboutUsPageContent() {
             </div>
           </article>
         </section>
+        </Reveal>
 
+        <Reveal>
         <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -198,7 +204,7 @@ export default function AboutUsPageContent() {
             </p>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="home-stagger mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {polystyreneApplications.map((item) => (
               <div
                 key={item}
@@ -209,6 +215,7 @@ export default function AboutUsPageContent() {
             ))}
           </div>
         </section>
+        </Reveal>
       </div>
     </main>
   );

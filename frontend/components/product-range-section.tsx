@@ -30,7 +30,7 @@ export default function ProductRangeSection() {
           Oferim o gama larga de produse
         </p>
 
-        <div className="mt-4 grid gap-5 lg:grid-cols-3">
+        <div className="home-stagger mt-4 grid gap-5 lg:grid-cols-3">
           {productRanges.map((item) => (
             <Link
               key={item.title}

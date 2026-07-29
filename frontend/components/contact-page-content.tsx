@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import Reveal from '@/components/reveal';
 import { Textarea } from '@/components/ui/textarea';
 import { createFormSpamState } from '@/lib/form-spam-protection';
 
@@ -89,7 +90,7 @@ export default function ContactPageContent() {
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
       <div className="mx-auto max-w-6xl space-y-8">
-        <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+        <section className="animate-hero-item overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="relative overflow-hidden bg-gradient-to-br from-[#f7f4ff] via-white to-[#eef7ff] p-6 sm:p-8 lg:p-10">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(79,32,72,0.10),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(33,150,243,0.10),transparent_36%)]" />
@@ -107,7 +108,7 @@ export default function ContactPageContent() {
                   </p>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="home-stagger grid gap-4 md:grid-cols-3">
                   <InfoCard
                     title="Raspuns rapid"
                     body="Mesajele ajung direct in emailul nostru si pot fi preluate usor."
@@ -166,7 +167,8 @@ export default function ContactPageContent() {
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <Reveal>
+        <section className="home-stagger grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Card className="p-6 sm:p-8">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
@@ -293,6 +295,7 @@ export default function ContactPageContent() {
             </div>
           </Card>
         </section>
+        </Reveal>
       </div>
     </main>
   );

@@ -161,7 +161,7 @@ export default function HomepageReviewStrip() {
           </div>
         </div>
 
-        <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="home-stagger mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {reviewHighlights.map((review) => (
             <article
               key={`${review.name}-${review.source}`}

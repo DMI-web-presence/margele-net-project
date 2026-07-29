@@ -185,7 +185,7 @@ export default function LandingProductCarousel({
           setApi={setApi}
           className="w-full max-w-[1280px] self-center"
         >
-          <CarouselContent className="items-stretch">
+          <CarouselContent className="home-stagger items-stretch">
             {products.map((product) => (
               <CarouselItem
                 key={`${title}-${product.id}`}
