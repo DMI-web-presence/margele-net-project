@@ -1,3 +1,5 @@
+import Reveal from '@/components/reveal';
+
 const purchaseSteps = [
   {
     title: 'Fa-ti contul',
@@ -54,7 +56,7 @@ export default function HowToBuyPageContent() {
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
       <div className="mx-auto max-w-6xl space-y-8">
-        <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+        <section className="animate-hero-item overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
             <div className="space-y-6 bg-gradient-to-br from-white via-slate-50 to-indigo-50 p-6 sm:p-8 lg:p-10">
               <div className="space-y-3">
@@ -70,7 +72,7 @@ export default function HowToBuyPageContent() {
                 </p>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="home-stagger grid gap-4 md:grid-cols-3">
                 {purchaseSteps.map((step, index) => (
                   <article
                     key={step.title}
@@ -125,7 +127,8 @@ export default function HowToBuyPageContent() {
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+        <Reveal>
+        <section className="home-stagger grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <article className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
               Cum comand
@@ -161,7 +164,9 @@ export default function HowToBuyPageContent() {
             </div>
           </article>
         </section>
+        </Reveal>
 
+        <Reveal>
         <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div>
@@ -179,7 +184,7 @@ export default function HowToBuyPageContent() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="home-stagger grid gap-3 sm:grid-cols-2">
               <MiniNote title="Mesaje automate" body="Veti primi confirmarea primirii comenzii si, la expediere, confirmarea coletului." />
               <MiniNote title="Plata" body="Pentru Op Bancar asteptati confirmarea produselor de catre noi, apoi se realizeaza plata." />
               <MiniNote title="Cosul" body="Puteti adauga sau sterge produse oricand, folosind butonul STERGE." />
@@ -187,6 +192,7 @@ export default function HowToBuyPageContent() {
             </div>
           </div>
         </section>
+        </Reveal>
       </div>
     </main>
   );

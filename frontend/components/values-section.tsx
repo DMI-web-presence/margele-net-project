@@ -48,7 +48,7 @@ export default function ValuesSection() {
           </h2>
         </div>
 
-        <div className="mt-7 grid gap-7 lg:grid-cols-3 lg:gap-0">
+        <div className="home-stagger mt-7 grid gap-7 lg:grid-cols-3 lg:gap-0">
           {values.map((value, index) => (
             <div
               key={value.title}

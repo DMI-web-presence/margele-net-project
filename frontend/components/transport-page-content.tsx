@@ -1,3 +1,5 @@
+import Reveal from '@/components/reveal';
+
 const shippingTiers = [
   {
     title: 'Posta Romana',
@@ -38,7 +40,7 @@ export default function TransportPageContent() {
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
       <div className="mx-auto max-w-6xl space-y-8">
-        <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+        <section className="animate-hero-item overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="relative overflow-hidden bg-gradient-to-br from-[#f7f3fb] via-white to-[#eef4ff] p-6 sm:p-8 lg:p-10">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(79,32,72,0.10),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(79,32,72,0.12),transparent_38%)]" />
@@ -57,7 +59,7 @@ export default function TransportPageContent() {
                   </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="home-stagger grid gap-4 sm:grid-cols-3">
                   {highlights.map((item) => (
                     <article
                       key={item.title}
@@ -96,7 +98,8 @@ export default function TransportPageContent() {
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <Reveal>
+        <section className="home-stagger grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <article className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-600">
               Sumar rapid
@@ -139,6 +142,7 @@ export default function TransportPageContent() {
             </div>
           </article>
         </section>
+        </Reveal>
       </div>
     </main>
   );

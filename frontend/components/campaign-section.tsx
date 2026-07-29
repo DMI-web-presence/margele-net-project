@@ -68,7 +68,7 @@ export default function CampaignSection() {
           </Link>
         </div>
 
-        <div className="mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="home-stagger mt-7 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {campaigns.map((campaign) => {
             const isUnavailable = Boolean(campaign.unavailable);
             const cardContent = (

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import ProductHistoryRecorder from '@/components/product-history-recorder';
 import ProductImageMagnifier from '@/components/product-image-magnifier';
 import ProductPurchaseControls from '@/components/product-purchase-controls';
+import Reveal from '@/components/reveal';
 import { ProductReviewsProvider } from '@/components/product-reviews-provider';
 import ReviewsSection from '@/components/reviews-section';
 import ReviewsSummary from '@/components/reviews-summary';
@@ -360,7 +361,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           imageUrl: product.imageUrl,
         }}
       />
-      <div className="mx-auto mb-8 flex w-full max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="animate-hero-item mx-auto mb-8 flex w-full max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Detalii produs</p>
         </div>
@@ -376,7 +377,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <div className="grid items-start gap-8 xl:grid-cols-[0.8fr_1.2fr]">
           <div className="xl:sticky xl:top-28">
-            <Card className="relative aspect-square max-h-[34rem] overflow-hidden bg-white text-white shadow-xl">
+            <Card className="animate-hero-image relative aspect-square max-h-[34rem] overflow-hidden bg-white text-white shadow-xl">
               {product.imageUrl ? (
                 <div className="flex h-full w-full items-end justify-center">
                   <ProductImageMagnifier
@@ -394,7 +395,10 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
             </Card>
           </div>
 
-          <Card className="space-y-6 p-8">
+          <Card
+            className="animate-hero-item space-y-6 p-8"
+            style={{ animationDelay: '160ms' }}
+          >
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] uppercase tracking-[0.25em] text-slate-500">
                 <Link href="/catalog" className="transition hover:text-slate-700 hover:underline">
@@ -436,8 +440,12 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           </Card>
         </div>
 
-        <ReviewsSection />
-        <SimilarProductsSlider products={similarProducts} />
+        <Reveal>
+          <ReviewsSection />
+        </Reveal>
+        <Reveal>
+          <SimilarProductsSlider products={similarProducts} />
+        </Reveal>
       </div>
       </ProductReviewsProvider>
     </main>

@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/components/cart-provider';
+import Reveal from '@/components/reveal';
 import { Button } from '@/components/ui/button';
 import { getProductImageVariantConfig } from '@/lib/product-image-variants';
 
@@ -37,7 +38,7 @@ function EmptyFavoritesIllustration() {
 
 function EmptyFavoritesState() {
   return (
-    <section className="mx-auto grid max-w-[1100px] items-center gap-10 rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-sm sm:px-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:py-14">
+    <section className="animate-hero-item mx-auto grid max-w-[1100px] items-center gap-10 rounded-[2rem] border border-slate-200 bg-white px-6 py-10 shadow-sm sm:px-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:py-14">
       <div className="space-y-6">
         <div className="inline-flex min-h-10 items-center rounded-full border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700">
           Lista este goala
@@ -86,7 +87,7 @@ export default function FavoritesPageContent() {
         <EmptyFavoritesState />
       ) : (
         <section className="mx-auto max-w-[1200px] space-y-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="animate-hero-item flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-rose-600">
                 Favorite
@@ -106,7 +107,8 @@ export default function FavoritesPageContent() {
             </Link>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Reveal>
+          <div className="home-stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {favoriteItems.map((item) => (
               <article
                 key={item.product.id}
@@ -163,6 +165,7 @@ export default function FavoritesPageContent() {
               </article>
             ))}
           </div>
+          </Reveal>
         </section>
       )}
     </main>

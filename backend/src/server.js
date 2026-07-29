@@ -844,9 +844,15 @@ async function handleProductList(requestUrl, res) {
                 'optionName', pov.option_name,
                 'optionValue', pov.option_value,
                 'optionValues', pov.option_values,
+                'legacyOptionValueId', pov.legacy_option_value_id,
+                'combinationId', pov.combination_id,
                 'model', pov.model,
                 'sku', pov.sku,
                 'quantity', pov.quantity,
+                'variantPrice', pov.variant_price,
+                'priceDelta', pov.price_delta,
+                'pricePrefix', pov.price_prefix,
+                'imageUrl', pov.image_url,
                 'isActive', pov.is_active,
                 'sortOrder', pov.sort_order
               )
@@ -5955,6 +5961,7 @@ function productCardResponse(product) {
   const categories = normalizeJsonArray(product.categories);
   const attributes = normalizeJsonArray(product.attributes);
   const variants = normalizeJsonArray(product.variants);
+  const catalogPrice = productCatalogPriceInfo(product, variants);
   const searchTokens = Array.from(
     new Set(
       [
@@ -5974,6 +5981,8 @@ function productCardResponse(product) {
       trimProductCardDescription(product.short_description || product.shortDescription) ||
       trimProductCardDescription(product.description),
     price: String(product.price || '0'),
+    displayPrice: catalogPrice.amount,
+    hasFromPrice: catalogPrice.hasFromPrice,
     compareAtPrice: product.compare_at_price ? String(product.compare_at_price) : null,
     currency: product.currency || 'RON',
     imageUrl: product.primary_image_url || product.image_url || product.imageUrl || product.image || null,
@@ -5997,6 +6006,171 @@ function productCardResponse(product) {
     },
     createdAt: product.created_at || product.createdAt || null,
   };
+}
+
+function productCatalogPriceInfo(product, variants = []) {
+  const basePrice = Number(product.price);
+  const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
+  const pricedVariants = getCatalogPricedVariants(variants, getVisibleImageColorValueIdsForCard(variants));
+  const variantPrices = pricedVariants
+    .map((variant) => applyCatalogVariantPrice(safeBasePrice, variant))
+    .filter(Number.isFinite);
+
+  if (variantPrices.length === 0) {
+    return {
+      amount: String(safeBasePrice),
+      hasFromPrice: false,
+    };
+  }
+
+  const lowestPrice = Math.min(...variantPrices);
+
+  return {
+    amount: String(lowestPrice),
+    hasFromPrice: productHasSelectableCatalogVariations(product, variants),
+  };
+}
+
+function applyCatalogVariantPrice(basePrice, variant = {}) {
+  const safeBasePrice = Number.isFinite(basePrice) ? basePrice : 0;
+  const variantPrice = Number(variant.variantPrice);
+  if (variant.variantPrice !== null && variant.variantPrice !== undefined && Number.isFinite(variantPrice)) {
+    return Math.max(0, variantPrice);
+  }
+
+  const priceDelta = Number(variant.priceDelta ?? 0);
+  if (!Number.isFinite(priceDelta)) return safeBasePrice;
+
+  if ((variant.combinationId || variant.sku || variant.model) && priceDelta > 0) {
+    return priceDelta;
+  }
+
+  if (variant.pricePrefix === '-') {
+    return Math.max(0, safeBasePrice - priceDelta);
+  }
+
+  return safeBasePrice + priceDelta;
+}
+
+function catalogVariantHasPrice(variant) {
+  return Number.isFinite(Number(variant.priceDelta)) || Number.isFinite(Number(variant.variantPrice));
+}
+
+function catalogVariantHasFinalPrice(variant) {
+  return Boolean(variant.combinationId || variant.sku || variant.model) && Number(variant.priceDelta ?? 0) > 0;
+}
+
+function catalogVariantIsAvailable(variant) {
+  return variant.quantity === undefined || variant.quantity === null || Number(variant.quantity) > 0;
+}
+
+function catalogVariantPriceSignal(variant) {
+  const variantPrice = Number(variant.variantPrice);
+  if (variant.variantPrice !== null && variant.variantPrice !== undefined && Number.isFinite(variantPrice) && variantPrice > 0) {
+    return variantPrice;
+  }
+
+  const priceDelta = Number(variant.priceDelta ?? 0);
+  return Number.isFinite(priceDelta) ? priceDelta : 0;
+}
+
+function representativeCatalogLegacyVariants(variants = []) {
+  const grouped = new Map();
+  for (const variant of variants) {
+    const key = `${variant.optionName || ''}|${variant.optionValue || ''}|${variant.legacyOptionValueId ?? ''}`.toLowerCase();
+    grouped.set(key, [...(grouped.get(key) || []), variant]);
+  }
+
+  return Array.from(grouped.values()).map((group) => {
+    const positiveSignals = group
+      .map(catalogVariantPriceSignal)
+      .filter((signal) => signal > 0);
+
+    if (positiveSignals.length === 0) {
+      return group.find(catalogVariantIsAvailable) || group[0];
+    }
+
+    const counts = new Map();
+    for (const signal of positiveSignals) {
+      counts.set(signal, (counts.get(signal) || 0) + 1);
+    }
+
+    const representativeSignal = Array.from(counts.entries()).sort(
+      ([leftSignal, leftCount], [rightSignal, rightCount]) =>
+        rightCount - leftCount || leftSignal - rightSignal,
+    )[0][0];
+
+    return (
+      group.find((variant) => catalogVariantIsAvailable(variant) && catalogVariantPriceSignal(variant) === representativeSignal) ||
+      group.find((variant) => catalogVariantPriceSignal(variant) === representativeSignal) ||
+      group.find(catalogVariantIsAvailable) ||
+      group[0]
+    );
+  });
+}
+
+function catalogVariantCombinationLegacyIds(variant) {
+  return String(variant.combinationId || '')
+    .split('-')
+    .map((part) => Number(part))
+    .filter((value) => Number.isFinite(value) && value > 0);
+}
+
+function getVisibleImageColorValueIdsForCard(variants = []) {
+  return new Set(
+    variants
+      .filter(
+        (variant) =>
+          String(variant.optionName || '').toLowerCase().includes('culoare') &&
+          Boolean(variant.imageUrl) &&
+          Number.isFinite(Number(variant.legacyOptionValueId)),
+      )
+      .map((variant) => Number(variant.legacyOptionValueId)),
+  );
+}
+
+function catalogVariantMatchesVisibleColor(variant, visibleColorValueIds) {
+  if (!visibleColorValueIds || visibleColorValueIds.size === 0) return true;
+
+  const combinationIds = catalogVariantCombinationLegacyIds(variant);
+  if (combinationIds.length > 0) {
+    return combinationIds.some((id) => visibleColorValueIds.has(id));
+  }
+
+  if (String(variant.optionName || '').toLowerCase().includes('culoare')) {
+    return Boolean(variant.legacyOptionValueId && visibleColorValueIds.has(Number(variant.legacyOptionValueId)));
+  }
+
+  return true;
+}
+
+function getCatalogPricedVariants(variants = [], visibleColorValueIds = new Set()) {
+  const hasCombinationPrices = variants.some(
+    (variant) => variant.combinationId || (variant.optionValues && Object.keys(variant.optionValues).length > 0),
+  );
+  const visibleVariants = variants.filter((variant) =>
+    catalogVariantMatchesVisibleColor(variant, visibleColorValueIds),
+  );
+  const pricedVariants = hasCombinationPrices
+    ? visibleVariants.filter(catalogVariantHasPrice)
+    : representativeCatalogLegacyVariants(visibleVariants.filter(catalogVariantHasPrice));
+  const availablePricedVariants = pricedVariants.filter(catalogVariantIsAvailable);
+  const candidateVariants = availablePricedVariants.length > 0 ? availablePricedVariants : pricedVariants;
+  const finalPricedVariants = candidateVariants.filter(catalogVariantHasFinalPrice);
+
+  return finalPricedVariants.length > 0 ? finalPricedVariants : candidateVariants;
+}
+
+function productHasSelectableCatalogVariations(product, variants = []) {
+  const options = productOptionsFromVariants(variants, normalizeJsonArray(product.attributes));
+  const hasMultipleOptionChoices = options.some((option) => (option.values || []).length > 1);
+  const hasMultipleVariantSkus = new Set(
+    getCatalogPricedVariants(variants, getVisibleImageColorValueIdsForCard(variants))
+      .map((variant) => String(variant.sku || '').trim())
+      .filter(Boolean),
+  ).size > 1;
+
+  return hasMultipleOptionChoices || hasMultipleVariantSkus;
 }
 
 function trimProductCardDescription(value) {

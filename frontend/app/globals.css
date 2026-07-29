@@ -168,10 +168,68 @@ body {
   will-change: opacity, transform;
 }
 
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 700ms ease,
+    transform 700ms ease;
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+.scroll-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.scroll-reveal .home-stagger > * {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 560ms ease,
+    transform 560ms ease;
+  will-change: opacity, transform;
+}
+
+.scroll-reveal.is-visible .home-stagger > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.scroll-reveal.is-visible .home-stagger > *:nth-child(1) {
+  transition-delay: 90ms;
+}
+
+.scroll-reveal.is-visible .home-stagger > *:nth-child(2) {
+  transition-delay: 170ms;
+}
+
+.scroll-reveal.is-visible .home-stagger > *:nth-child(3) {
+  transition-delay: 250ms;
+}
+
+.scroll-reveal.is-visible .home-stagger > *:nth-child(4) {
+  transition-delay: 330ms;
+}
+
+.scroll-reveal.is-visible .home-stagger > *:nth-child(5) {
+  transition-delay: 410ms;
+}
+
+.scroll-reveal.is-visible .home-stagger > *:nth-child(6) {
+  transition-delay: 490ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-hero-image,
   .animate-hero-item,
-  .animate-benefit-item {
+  .animate-benefit-item,
+  .scroll-reveal,
+  .scroll-reveal .home-stagger > * {
     animation: none;
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 }

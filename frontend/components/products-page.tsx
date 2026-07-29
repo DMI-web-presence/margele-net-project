@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/components/cart-provider';
+import Reveal from '@/components/reveal';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { formatCategoryLabel } from '@/lib/format-category-label';
@@ -902,6 +903,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
         </div>
       </Card>
 
+      <Reveal>
       <section className="grid gap-6 lg:grid-cols-[17rem_1fr]">
         <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
           <div className="flex items-center justify-between gap-3">
@@ -1085,7 +1087,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
             </div>
           </div>
 
-        <div className="mt-6 grid items-stretch gap-4 pb-20 sm:grid-cols-2 sm:pb-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
+        <div className="home-stagger mt-6 grid items-stretch gap-4 pb-20 sm:grid-cols-2 sm:pb-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
           {paginatedProducts.map((product) => {
             const favorited = isFavorite(product.id);
             const priceInfo = getCatalogPriceInfo(product);
@@ -1252,6 +1254,7 @@ export default function ProductsPage({ products, categories = [] }: ProductsPage
         </div>
         </div>
       </section>
+      </Reveal>
     </div>
   );
 }
