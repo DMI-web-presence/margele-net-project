@@ -6,3 +6,8 @@ frontend/.env
 # Local legacy imports / media assets
 margele_oc.mysql.sql
 frontend/public/images/catalog/
+
+# Local database backups
+backend/backups/
+.local/backups/
+.local/backup-logs/

@@ -28,6 +28,44 @@ type AdminUser = {
   role: string;
 };
 
+type BackupStatus = {
+  generatedAt: string;
+  local: {
+    folder: string;
+    latestBackup: {
+      fileName: string;
+      sizeBytes: number;
+      modifiedAt: string;
+      metadataCreatedAt: string | null;
+      format: string;
+    } | null;
+  };
+  offsite: {
+    configured: boolean;
+    bucketConfigured: boolean;
+    encryptionConfigured: boolean;
+    prefix: string;
+    latestUploadedKey: string | null;
+    latestUploadedAt: string | null;
+  };
+  schedule: {
+    configured: boolean;
+    state: string;
+    checkedAt: string;
+    note?: string;
+  };
+  alerts: {
+    configured: boolean;
+    brevoConfigured: boolean;
+  };
+  latestLog: {
+    fileName: string;
+    modifiedAt: string;
+    status: 'success' | 'failed' | 'unknown';
+    excerpt: string;
+  } | null;
+};
+
 type Category = {
   id: number;
   name: string;
@@ -516,6 +554,7 @@ export default function AdminPanel() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
@@ -599,15 +638,23 @@ export default function AdminPanel() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const loadAdminData = useCallback(async (selectProductId?: number | null) => {
-    const [productsResponse, categoriesResponse, ordersResponse, customersResponse, conversationsResponse] = await Promise.all([
+    const [productsResponse, categoriesResponse, ordersResponse, customersResponse, conversationsResponse, backupStatusResponse] = await Promise.all([
       fetch(`${backendUrl}/admin/products`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/categories`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/orders`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/customers`, { credentials: 'include' }),
       fetch(`${backendUrl}/admin/conversations`, { credentials: 'include' }),
+      fetch(`${backendUrl}/admin/backup-status`, { credentials: 'include' }),
     ]);
 
-    if (!productsResponse.ok || !categoriesResponse.ok || !ordersResponse.ok || !customersResponse.ok || !conversationsResponse.ok) {
+    if (
+      !productsResponse.ok ||
+      !categoriesResponse.ok ||
+      !ordersResponse.ok ||
+      !customersResponse.ok ||
+      !conversationsResponse.ok ||
+      !backupStatusResponse.ok
+    ) {
       throw new Error('Admin fetch failed.');
     }
 
@@ -616,12 +663,14 @@ export default function AdminPanel() {
     const nextOrders = (await ordersResponse.json()) as OrderRecord[];
     const nextCustomers = (await customersResponse.json()) as CustomerRecord[];
     const nextConversations = (await conversationsResponse.json()) as ConversationRecord[];
+    const nextBackupStatus = (await backupStatusResponse.json()) as BackupStatus;
 
     setProducts(nextProducts);
     setCategories(nextCategories);
     setOrders(nextOrders);
     setCustomers(nextCustomers);
     setConversations(nextConversations);
+    setBackupStatus(nextBackupStatus);
 
     if (selectProductId === null) {
       setSelectedProductId(null);
@@ -4240,6 +4289,7 @@ export default function AdminPanel() {
                   products={products}
                   orders={orders}
                   categories={categories}
+                  backupStatus={backupStatus}
                   onOpenProducts={() => navigateToSection('products')}
                   onOpenOrders={() => navigateToSection('orders')}
                   onNewProduct={handleNewProduct}
@@ -5671,6 +5721,7 @@ function DashboardOverviewReference({
   products,
   orders,
   categories,
+  backupStatus,
   onOpenProducts,
   onOpenOrders,
   onNewProduct,
@@ -5679,6 +5730,7 @@ function DashboardOverviewReference({
   products: ProductRecord[];
   orders: OrderRecord[];
   categories: Category[];
+  backupStatus: BackupStatus | null;
   onOpenProducts: () => void;
   onOpenOrders: () => void;
   onNewProduct: () => void;
@@ -6153,8 +6205,120 @@ function DashboardOverviewReference({
           </div>
         </DashboardReferenceCard>
       </div>
+
+      <DashboardBackupStatusCard backupStatus={backupStatus} />
     </div>
   );
+}
+
+function DashboardBackupStatusCard({ backupStatus }: { backupStatus: BackupStatus | null }) {
+  const latestBackup = backupStatus?.local.latestBackup;
+  const latestLog = backupStatus?.latestLog;
+  const uploadLabel = backupStatus?.offsite.latestUploadedAt
+    ? formatAdminDate(backupStatus.offsite.latestUploadedAt)
+    : backupStatus?.offsite.latestUploadedKey
+      ? 'Upload confirmat'
+      : 'Fara upload local gasit';
+
+  return (
+    <DashboardReferenceCard title="Status backup" action={<BackupHealthPill backupStatus={backupStatus} />}>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <BackupStatusTile
+          label="Ultimul backup local"
+          value={latestBackup ? formatAdminDate(latestBackup.modifiedAt) : 'Inexistent'}
+          detail={latestBackup ? `${latestBackup.fileName} · ${formatBytes(latestBackup.sizeBytes)}` : 'Nu exista backup local.'}
+          tone={latestBackup ? 'good' : 'warning'}
+        />
+        <BackupStatusTile
+          label="Cloudflare R2"
+          value={backupStatus?.offsite.configured ? 'Configurat' : 'Incomplet'}
+          detail={backupStatus?.offsite.configured ? uploadLabel : 'Verifica R2 si cheia de criptare.'}
+          tone={backupStatus?.offsite.configured ? 'good' : 'warning'}
+        />
+        <BackupStatusTile
+          label="Program automat"
+          value={backupStatus?.schedule.configured ? backupStatus.schedule.state : 'Necunoscut'}
+          detail={backupStatus?.schedule.configured ? 'Task Scheduler gasit.' : 'Nu pot verifica task-ul automat.'}
+          tone={backupStatus?.schedule.configured ? 'good' : 'warning'}
+        />
+        <BackupStatusTile
+          label="Alerte esec"
+          value={backupStatus?.alerts.configured && backupStatus.alerts.brevoConfigured ? 'Active' : 'Incomplet'}
+          detail={backupStatus?.alerts.configured ? 'Email de alerta configurat.' : 'Lipseste emailul de alerta.'}
+          tone={backupStatus?.alerts.configured && backupStatus.alerts.brevoConfigured ? 'good' : 'warning'}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1.4fr]">
+        <div className="rounded-[12px] border border-[#e4e9f1] bg-[#fbfcfe] p-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8fa0b8]">Ultimul log</p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="min-w-0 truncate text-[13px] font-semibold text-[#25314a]">
+              {latestLog?.fileName || 'Nu exista log.'}
+            </span>
+            <BackupLogPill status={latestLog?.status || 'unknown'} />
+          </div>
+          <p className="mt-1 text-[11px] text-[#78879f]">
+            {latestLog ? formatAdminDate(latestLog.modifiedAt) : 'Ruleaza backupul automat pentru primul log.'}
+          </p>
+        </div>
+
+        <pre className="max-h-32 overflow-auto rounded-[12px] border border-[#e4e9f1] bg-[#fbfcfe] p-3 text-[11px] leading-5 text-[#53627a]">
+          {latestLog?.excerpt || 'Nu exista detalii de afisat.'}
+        </pre>
+      </div>
+    </DashboardReferenceCard>
+  );
+}
+
+function BackupStatusTile({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'good' | 'warning';
+}) {
+  const styles = tone === 'good'
+    ? 'border-emerald-100 bg-emerald-50/50 text-emerald-700'
+    : 'border-amber-100 bg-amber-50/60 text-amber-700';
+
+  return (
+    <div className={`rounded-[12px] border p-3 ${styles}`}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-75">{label}</p>
+      <strong className="mt-2 block text-[15px] leading-tight">{value}</strong>
+      <p className="mt-1 max-h-8 overflow-hidden text-[11px] leading-4 opacity-80">{detail}</p>
+    </div>
+  );
+}
+
+function BackupHealthPill({ backupStatus }: { backupStatus: BackupStatus | null }) {
+  const healthy = Boolean(
+    backupStatus?.local.latestBackup &&
+      backupStatus?.offsite.configured &&
+      backupStatus?.alerts.configured &&
+      backupStatus?.latestLog?.status !== 'failed',
+  );
+
+  return (
+    <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${healthy ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+      {healthy ? 'Sanatos' : 'Verifica'}
+    </span>
+  );
+}
+
+function BackupLogPill({ status }: { status: 'success' | 'failed' | 'unknown' }) {
+  const styles = status === 'success'
+    ? 'bg-emerald-50 text-emerald-600'
+    : status === 'failed'
+      ? 'bg-rose-50 text-rose-600'
+      : 'bg-slate-100 text-slate-500';
+  const label = status === 'success' ? 'Succes' : status === 'failed' ? 'Esuat' : 'Necunoscut';
+
+  return <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${styles}`}>{label}</span>;
 }
 
 function dashboardTrendSeries(base: number, seed: number) {
@@ -7815,6 +7979,14 @@ function formatMoney(value: string | number, currency: string) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(safeAmount)} ${currency}`;
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+  const amount = value / 1024 ** index;
+  return `${new Intl.NumberFormat('ro-RO', { maximumFractionDigits: index === 0 ? 0 : 1 }).format(amount)} ${units[index]}`;
 }
 
 function formatMetricValue(metric: { label: string; value: string | number }) {
