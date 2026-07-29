@@ -38,6 +38,10 @@ type Product = {
   attributes?: ProductAttribute[];
   options?: ProductOption[] | ProductOption;
   variants?: ProductVariant[];
+  reviewSummary?: {
+    reviewsCount: number;
+    averageRating: number;
+  };
   sizes?: string[];
   createdAt: string;
 };
@@ -476,6 +480,14 @@ function buildProductJsonLd(
       name: siteName,
     },
     category: getPrimaryProductCategory(product)?.name || undefined,
+    aggregateRating:
+      product.reviewSummary && product.reviewSummary.reviewsCount > 0
+        ? {
+            '@type': 'AggregateRating',
+            ratingValue: Number(product.reviewSummary.averageRating || 0).toFixed(1),
+            reviewCount: product.reviewSummary.reviewsCount,
+          }
+        : undefined,
     offers: {
       '@type': 'Offer',
       url: absoluteUrl(path),

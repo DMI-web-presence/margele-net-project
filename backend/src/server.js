@@ -161,6 +161,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const productReviewsMatch = requestUrl.pathname.match(/^\/products\/([^/]+)\/reviews$/);
+    if (productReviewsMatch && req.method === 'GET') {
+      await handleProductReviews(res, decodeURIComponent(productReviewsMatch[1]));
+      return;
+    }
+
+    if (productReviewsMatch && req.method === 'POST') {
+      await handleProductReviewCreate(req, res, decodeURIComponent(productReviewsMatch[1]));
+      return;
+    }
+
     if (req.method === 'GET' && requestUrl.pathname === '/categories') {
       await handleCategoryList(res);
       return;
@@ -238,6 +249,17 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && requestUrl.pathname === '/admin/conversations') {
       await handleAdminConversationList(req, requestUrl, res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/admin/reviews') {
+      await handleAdminReviewList(req, requestUrl, res);
+      return;
+    }
+
+    const adminReviewMatch = requestUrl.pathname.match(/^\/admin\/reviews\/(\d+)$/);
+    if (adminReviewMatch && req.method === 'PATCH') {
+      await handleAdminReviewUpdate(req, res, Number(adminReviewMatch[1]));
       return;
     }
 
@@ -419,6 +441,16 @@ const server = http.createServer(async (req, res) => {
     console.error(error);
     sendJson(res, 500, { message: 'A aparut o eroare pe server.' });
   }
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${config.port} is already in use. Run npm run dev again to let the dev cleanup stop the old backend process.`);
+    process.exit(1);
+  }
+
+  console.error(error);
+  process.exit(1);
 });
 
 server.listen(config.port, () => {
@@ -748,6 +780,7 @@ async function handleProductList(requestUrl, res) {
     return;
   }
 
+  const hasProductReviews = await hasTable('product_reviews');
   const listView = String(requestUrl.searchParams.get('view') || '').trim().toLowerCase();
   if (listView === 'lite') {
     const filters = buildProductFilters(requestUrl);
@@ -767,6 +800,7 @@ async function handleProductList(requestUrl, res) {
         p.price,
         p.compare_at_price,
         p.currency,
+        p.sku,
         COALESCE(primary_image.image_url, p.image_url) AS primary_image_url,
         p.category_id,
         c.name AS category_name,
@@ -810,6 +844,8 @@ async function handleProductList(requestUrl, res) {
                 'optionName', pov.option_name,
                 'optionValue', pov.option_value,
                 'optionValues', pov.option_values,
+                'model', pov.model,
+                'sku', pov.sku,
                 'quantity', pov.quantity,
                 'isActive', pov.is_active,
                 'sortOrder', pov.sort_order
@@ -821,6 +857,13 @@ async function handleProductList(requestUrl, res) {
           ),
           '[]'::jsonb
         ) AS variants,
+        ${
+          hasProductReviews
+            ? `COALESCE(review_summary.reviews_count, 0)::int AS reviews_count,
+        COALESCE(review_summary.average_rating, 0)::numeric AS average_rating,`
+            : `0::int AS reviews_count,
+        0::numeric AS average_rating,`
+        }
         p.created_at
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
@@ -831,6 +874,17 @@ async function handleProductList(requestUrl, res) {
         ORDER BY is_primary DESC, sort_order ASC, id ASC
         LIMIT 1
       ) primary_image ON true
+      ${
+        hasProductReviews
+          ? `LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS reviews_count,
+          ROUND(AVG(rating)::numeric, 2) AS average_rating
+        FROM product_reviews
+        WHERE product_id = p.id AND status = 'approved'
+      ) review_summary ON true`
+          : ''
+      }
       WHERE ${filters.whereSql}
       ORDER BY p.created_at DESC, p.id DESC
     `,
@@ -865,6 +919,13 @@ async function handleProductList(requestUrl, res) {
       c.name AS category_name,
       c.slug AS category_slug,
       COALESCE(primary_image.image_url, p.image_url) AS primary_image_url,
+      ${
+        hasProductReviews
+          ? `COALESCE(review_summary.reviews_count, 0)::int AS reviews_count,
+      COALESCE(review_summary.average_rating, 0)::numeric AS average_rating,`
+          : `0::int AS reviews_count,
+      0::numeric AS average_rating,`
+      }
       COALESCE(
         jsonb_agg(
           DISTINCT jsonb_build_object(
@@ -915,6 +976,17 @@ async function handleProductList(requestUrl, res) {
       LIMIT 1
     ) primary_image ON true
     ${
+      hasProductReviews
+        ? `LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*)::int AS reviews_count,
+        ROUND(AVG(rating)::numeric, 2) AS average_rating
+      FROM product_reviews
+      WHERE product_id = p.id AND status = 'approved'
+    ) review_summary ON true`
+        : ''
+    }
+    ${
       hasProductOptions
         ? `
     LEFT JOIN LATERAL (
@@ -961,6 +1033,7 @@ async function handleProductList(requestUrl, res) {
     LEFT JOIN product_images pi ON pi.product_id = p.id
     WHERE ${filters.whereSql}
     GROUP BY p.id, c.id, primary_image.image_url
+      ${hasProductReviews ? ', review_summary.reviews_count, review_summary.average_rating' : ''}
       ${hasProductOptions ? ', product_attributes_data.attributes, product_variants_data.variants' : ''}
     ORDER BY p.created_at DESC, p.id DESC
   `,
@@ -1068,7 +1141,9 @@ async function handleProductDetails(res, productIdentifier) {
             WHERE product_category.product_id = p.id
           ),
           '[]'::jsonb
-        ) AS categories
+        ) AS categories,
+        COALESCE(review_summary.reviews_count, 0)::int AS reviews_count,
+        COALESCE(review_summary.average_rating, 0)::numeric AS average_rating
       FROM products p
       LEFT JOIN categories c ON c.id = p.category_id
       LEFT JOIN LATERAL (
@@ -1081,8 +1156,15 @@ async function handleProductDetails(res, productIdentifier) {
       LEFT JOIN product_images pi ON pi.product_id = p.id
       LEFT JOIN product_attributes pa ON pa.product_id = p.id
       LEFT JOIN product_option_values pov ON pov.product_id = p.id
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS reviews_count,
+          ROUND(AVG(rating)::numeric, 2) AS average_rating
+        FROM product_reviews
+        WHERE product_id = p.id AND status = 'approved'
+      ) review_summary ON true
       WHERE ${productFilter} AND COALESCE(p.status, 'active') = 'active'
-      GROUP BY p.id, c.id, primary_image.image_url
+      GROUP BY p.id, c.id, primary_image.image_url, review_summary.reviews_count, review_summary.average_rating
       LIMIT 1
     `,
     [numericProductId || productIdentifier],
@@ -1094,6 +1176,153 @@ async function handleProductDetails(res, productIdentifier) {
   }
 
   sendJson(res, 200, productResponse(product));
+}
+
+async function handleProductReviews(res, productIdentifier) {
+  if (!(await hasTable('products')) || !(await hasTable('product_reviews'))) {
+    sendJson(res, 200, { reviews: [], reviewsCount: 0, averageRating: 0 });
+    return;
+  }
+
+  const product = await findActiveProductByIdentifier(productIdentifier);
+  if (!product) {
+    sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+    return;
+  }
+
+  const reviews = await getApprovedProductReviews(product.id);
+  sendJson(res, 200, productReviewsPayload(reviews));
+}
+
+async function handleProductReviewCreate(req, res, productIdentifier) {
+  if (!(await hasTable('products')) || !(await hasTable('product_reviews'))) {
+    sendJson(res, 501, { message: 'Recenziile nu sunt disponibile momentan.' });
+    return;
+  }
+
+  const product = await findActiveProductByIdentifier(productIdentifier);
+  if (!product) {
+    sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const currentUser = await getCurrentUser(req);
+  const input = normalizeProductReviewInput(body, currentUser);
+  const validationMessage = validateProductReviewInput(input);
+  if (validationMessage) {
+    sendJson(res, 400, { message: validationMessage });
+    return;
+  }
+
+  const spamDecision = checkFormSpam(req, body, {
+    formName: 'product_review',
+    identity: `${product.id}:${input.email}`,
+    text: input.comment,
+    content: { minLength: 8, maxLength: 1800, maxUrls: 1 },
+    ipLimit: { max: 5, windowSeconds: 60 * 60 },
+    identityLimit: { max: 2, windowSeconds: 24 * 60 * 60 },
+    fingerprintLimit: { max: 2, windowSeconds: 24 * 60 * 60 },
+  });
+  if (sendSpamDecision(res, spamDecision, 'Multumim! Recenzia ta va fi verificata inainte de publicare.')) {
+    return;
+  }
+
+  const purchase = await findVerifiedProductPurchase(product.id, {
+    userId: currentUser?.id ?? null,
+    email: input.email,
+  });
+
+  try {
+    const review = await insertRow('product_reviews', {
+      product_id: product.id,
+      user_id: currentUser?.id ?? null,
+      order_id: purchase?.order_id ?? null,
+      name: input.name,
+      email: input.email,
+      rating: input.rating,
+      comment: input.comment,
+      status: 'pending',
+      is_verified_purchase: Boolean(purchase),
+      updated_at: new Date(),
+    });
+
+    sendJson(res, 201, {
+      ok: true,
+      message: 'Multumim! Recenzia ta va fi vizibila dupa aprobare.',
+      review: productReviewResponse(review, { includeEmail: false, includeAdminFields: false }),
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      sendJson(res, 409, { message: 'Ai trimis deja o recenzie pentru acest produs.' });
+      return;
+    }
+    throw error;
+  }
+}
+
+async function handleAdminReviewList(req, requestUrl, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('product_reviews'))) {
+    sendJson(res, 200, []);
+    return;
+  }
+
+  const search = String(requestUrl.searchParams.get('q') || '').trim().toLowerCase();
+  const status = String(requestUrl.searchParams.get('status') || '').trim().toLowerCase();
+  const reviews = await getAdminProductReviews();
+  const filtered = reviews.filter((review) => {
+    const matchesStatus = !status || review.status.toLowerCase() === status;
+    const matchesSearch =
+      !search ||
+      [
+        review.name,
+        review.email,
+        review.comment,
+        review.product?.name,
+        review.product?.sku,
+        review.product?.slug,
+      ]
+        .map((value) => String(value || '').toLowerCase())
+        .some((value) => value.includes(search));
+
+    return matchesStatus && matchesSearch;
+  });
+
+  sendJson(res, 200, filtered);
+}
+
+async function handleAdminReviewUpdate(req, res, reviewId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  if (!(await hasTable('product_reviews'))) {
+    sendJson(res, 404, { message: 'Recenzia nu a fost gasita.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  const status = String(body.status || '').trim().toLowerCase();
+  if (!['pending', 'approved', 'rejected'].includes(status)) {
+    sendJson(res, 400, { message: 'Statusul recenziei nu este valid.' });
+    return;
+  }
+
+  const updated = await updateRow('product_reviews', reviewId, {
+    status,
+    admin_note: cleanOptionalValue(body.adminNote).slice(0, 1000) || null,
+    updated_at: new Date(),
+  });
+
+  if (!updated) {
+    sendJson(res, 404, { message: 'Recenzia nu a fost gasita.' });
+    return;
+  }
+
+  const fullReview = (await getAdminProductReviews()).find((review) => review.id === reviewId);
+  sendJson(res, 200, fullReview || productReviewResponse(updated, { includeEmail: true, includeAdminFields: true }));
 }
 
 async function handleCategoryList(res) {
@@ -4327,48 +4556,33 @@ function findVariantForCartLine(variants, requestedSku, selectedOptions, request
   });
   if (exactCombination) return exactCombination;
 
-  const selectedOptionVariants = selectedOptionPairs
-    .map(({ name, value }) =>
-      findBestCheckoutVariant(
-        candidates,
-        (variant) =>
-          normalizeOptionText(variant.optionName) === name &&
-          normalizeOptionText(variant.optionValue) === value,
-      ),
-    )
-    .filter(Boolean);
-
-  const selectedImageVariant = selectedOptionVariants.find((variant) => variant.imageUrl);
-  const selectedImageValueId = selectedImageVariant?.legacyOptionValueId;
-  const selectedNonImageVariants = selectedOptionVariants.filter((variant) => !variant.imageUrl);
-
-  if (selectedNonImageVariants.length > 0) {
-    for (const optionVariant of selectedNonImageVariants) {
-      const match = findBestCheckoutVariant(candidates, (variant) => {
-        if (!optionVariant.legacyOptionValueId || variant.legacyOptionValueId !== optionVariant.legacyOptionValueId) {
-          return false;
-        }
-
-        if (!selectedImageValueId) {
-          return !variant.combinationId;
-        }
-
-        return variantCombinationIncludes(variant, selectedImageValueId);
-      });
-      if (match) return match;
-    }
-  }
-
-  if (selectedImageValueId) {
-    return findBestCheckoutVariant(
-      candidates,
+  const selectedLegacyOptionValueIds = selectedOptionPairs.map(({ name, value }) => {
+    const optionRow = variants.find(
       (variant) =>
-        variant.legacyOptionValueId === selectedImageValueId &&
-        (!variant.combinationId || variantCombinationIncludes(variant, selectedImageValueId)),
+        normalizeOptionText(variant.optionName) === name &&
+        normalizeOptionText(variant.optionValue) === value &&
+        Number(variant.legacyOptionValueId) > 0,
     );
+
+    return optionRow ? Number(optionRow.legacyOptionValueId) : null;
+  });
+  if (selectedLegacyOptionValueIds.every((value) => Number(value) > 0)) {
+    const legacyCombination = findBestCheckoutVariant(candidates, (variant) => {
+      const variantOptionValueIds = legacyVariantOptionValueIds(variant);
+      return selectedLegacyOptionValueIds.every((value) => variantOptionValueIds.has(Number(value)));
+    });
+    if (legacyCombination) return legacyCombination;
   }
 
-  return selectedOptionVariants[0] || null;
+  if (selectedOptionPairs.length > 1) return null;
+
+  const [{ name, value }] = selectedOptionPairs;
+  return findBestCheckoutVariant(
+    candidates,
+    (variant) =>
+      normalizeOptionText(variant.optionName) === name &&
+      normalizeOptionText(variant.optionValue) === value,
+  );
 }
 
 function parseSelectedOptionPairs(selectedOptions) {
@@ -4388,11 +4602,21 @@ function normalizeOptionText(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function variantCombinationIncludes(variant, legacyOptionValueId) {
-  return String(variant.combinationId || '')
-    .split('-')
-    .map((part) => Number(part))
-    .includes(Number(legacyOptionValueId));
+function legacyVariantOptionValueIds(variant) {
+  const optionValueIds = new Set();
+  const ownOptionValueId = Number(variant.legacyOptionValueId);
+  if (Number.isFinite(ownOptionValueId) && ownOptionValueId > 0) {
+    optionValueIds.add(ownOptionValueId);
+  }
+
+  for (const part of String(variant.combinationId || '').split('-')) {
+    const optionValueId = Number(part);
+    if (Number.isFinite(optionValueId) && optionValueId > 0) {
+      optionValueIds.add(optionValueId);
+    }
+  }
+
+  return optionValueIds;
 }
 
 function findBestCheckoutVariant(variants, predicate) {
@@ -5549,6 +5773,10 @@ function productResponse(product) {
     attributes,
     options,
     variants,
+    reviewSummary: {
+      reviewsCount: Number(product.reviews_count || 0),
+      averageRating: Number(product.average_rating || 0),
+    },
     sizes: options
       .filter((option) => option.name === 'size')
       .flatMap((option) => option.values),
@@ -5556,10 +5784,187 @@ function productResponse(product) {
   };
 }
 
+async function findActiveProductByIdentifier(productIdentifier, db = pool) {
+  const numericProductId = normalizeInteger(productIdentifier);
+  const result = await db.query(
+    `
+      SELECT id, name, slug, sku
+      FROM products
+      WHERE ${numericProductId ? 'id = $1' : 'slug = $1'}
+        AND COALESCE(status, 'active') = 'active'
+      LIMIT 1
+    `,
+    [numericProductId || productIdentifier],
+  );
+
+  return result.rows[0] || null;
+}
+
+async function getApprovedProductReviews(productId, db = pool) {
+  const result = await db.query(
+    `
+      SELECT *
+      FROM product_reviews
+      WHERE product_id = $1 AND status = 'approved'
+      ORDER BY is_verified_purchase DESC, created_at DESC, id DESC
+    `,
+    [productId],
+  );
+
+  return result.rows.map((row) => productReviewResponse(row, {
+    includeEmail: false,
+    includeAdminFields: false,
+  }));
+}
+
+async function getAdminProductReviews(db = pool) {
+  const result = await db.query(`
+    SELECT
+      pr.*,
+      p.name AS product_name,
+      p.slug AS product_slug,
+      p.sku AS product_sku,
+      COALESCE(primary_image.image_url, p.image_url) AS product_image_url
+    FROM product_reviews pr
+    JOIN products p ON p.id = pr.product_id
+    LEFT JOIN LATERAL (
+      SELECT image_url
+      FROM product_images
+      WHERE product_id = p.id
+      ORDER BY is_primary DESC, sort_order ASC, id ASC
+      LIMIT 1
+    ) primary_image ON true
+    ORDER BY
+      CASE pr.status
+        WHEN 'pending' THEN 0
+        WHEN 'approved' THEN 1
+        ELSE 2
+      END,
+      pr.created_at DESC,
+      pr.id DESC
+  `);
+
+  return result.rows.map((row) => productReviewResponse(row, {
+    includeEmail: true,
+    includeAdminFields: true,
+  }));
+}
+
+function productReviewsPayload(reviews) {
+  const reviewsCount = reviews.length;
+  const averageRating = reviewsCount === 0
+    ? 0
+    : reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviewsCount;
+
+  return {
+    reviews,
+    reviewsCount,
+    averageRating: Number(averageRating.toFixed(2)),
+  };
+}
+
+function productReviewResponse(review, { includeEmail, includeAdminFields }) {
+  const response = {
+    id: review.id,
+    productId: review.product_id,
+    userId: review.user_id ?? null,
+    orderId: review.order_id ?? null,
+    name: review.name || '',
+    rating: Number(review.rating || 0),
+    comment: review.comment || '',
+    status: review.status || 'pending',
+    isVerifiedPurchase: Boolean(review.is_verified_purchase),
+    createdAt: review.created_at || null,
+    updatedAt: review.updated_at || null,
+  };
+
+  if (includeEmail) {
+    response.email = review.email || '';
+  }
+
+  if (includeAdminFields) {
+    response.adminNote = review.admin_note || '';
+    response.product = {
+      id: review.product_id,
+      name: review.product_name || '',
+      slug: review.product_slug || null,
+      sku: review.product_sku || null,
+      imageUrl: review.product_image_url || null,
+    };
+  }
+
+  return response;
+}
+
+function normalizeProductReviewInput(body, currentUser) {
+  return {
+    name: cleanOptionalValue(body.name || body.fullName || currentUser?.full_name || currentUser?.name).slice(0, 120),
+    email: normalizeEmail(body.email || currentUser?.email || ''),
+    rating: Number(body.rating),
+    comment: normalizeMessageText(body.comment || body.message || '').slice(0, 1800),
+  };
+}
+
+function validateProductReviewInput(input) {
+  if (!input.name) return 'Numele este obligatoriu.';
+  if (!input.email || !isEmail(input.email)) return 'Adresa de email nu este valida.';
+  if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5) {
+    return 'Selecteaza o evaluare intre 1 si 5 stele.';
+  }
+  if (input.comment.length < 8) return 'Recenzia este prea scurta.';
+  if (input.comment.length > 1800) return 'Recenzia este prea lunga.';
+  return '';
+}
+
+async function findVerifiedProductPurchase(productId, { userId, email }, db = pool) {
+  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) return null;
+
+  const normalizedEmail = normalizeEmail(email);
+  const conditions = ['oi.product_id = $1'];
+  const values = [productId];
+
+  if (userId) {
+    values.push(userId);
+    conditions.push(`o.user_id = $${values.length}`);
+  }
+
+  if (normalizedEmail) {
+    values.push(normalizedEmail);
+    conditions.push(`lower(COALESCE(o.legacy_customer_email, '')) = $${values.length}`);
+  }
+
+  if (conditions.length === 1) return null;
+
+  const result = await db.query(
+    `
+      SELECT o.id AS order_id
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      WHERE oi.product_id = $1
+        AND (${conditions.slice(1).join(' OR ')})
+      ORDER BY o.created_at DESC
+      LIMIT 1
+    `,
+    values,
+  );
+
+  return result.rows[0] || null;
+}
+
 function productCardResponse(product) {
   const categories = normalizeJsonArray(product.categories);
   const attributes = normalizeJsonArray(product.attributes);
   const variants = normalizeJsonArray(product.variants);
+  const searchTokens = Array.from(
+    new Set(
+      [
+        product.sku,
+        ...variants.flatMap((variant) => [variant.sku, variant.model]),
+      ]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    ),
+  );
 
   return {
     id: product.id,
@@ -5573,6 +5978,8 @@ function productCardResponse(product) {
     currency: product.currency || 'RON',
     imageUrl: product.primary_image_url || product.image_url || product.imageUrl || product.image || null,
     categoryId: product.category_id ?? product.categoryId ?? null,
+    sku: product.sku || null,
+    searchTokens,
     category:
       product.category_id || product.category_name || product.category_slug
         ? {
@@ -5584,6 +5991,10 @@ function productCardResponse(product) {
     categories,
     attributes,
     options: productOptionsFromVariants(variants, attributes),
+    reviewSummary: {
+      reviewsCount: Number(product.reviews_count || 0),
+      averageRating: Number(product.average_rating || 0),
+    },
     createdAt: product.created_at || product.createdAt || null,
   };
 }

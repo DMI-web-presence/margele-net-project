@@ -22,6 +22,10 @@ type Product = {
   description: string | null;
   price: string;
   imageUrl: string | null;
+  reviewSummary?: {
+    reviewsCount: number;
+    averageRating: number;
+  };
 };
 
 type LandingProductCarouselProps = {
@@ -42,6 +46,34 @@ const priceFormatter = new Intl.NumberFormat('ro-RO', {
   currency: 'RON',
   currencyDisplay: 'narrowSymbol',
 });
+
+function ProductCardRating({ product }: { product: Product }) {
+  const reviewsCount = Number(product.reviewSummary?.reviewsCount || 0);
+  if (reviewsCount < 1) return null;
+
+  const averageRating = Number(product.reviewSummary?.averageRating || 0);
+  const roundedRating = Math.round(averageRating);
+
+  return (
+    <div className="flex min-h-5 items-center gap-1.5 text-xs text-slate-500">
+      <span className="inline-flex items-center gap-0.5 text-amber-500" aria-label={`Rating ${averageRating.toFixed(1)} din 5`}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <svg
+            key={star}
+            viewBox="0 0 24 24"
+            className={`h-3.5 w-3.5 ${roundedRating >= star ? 'fill-current' : 'fill-none text-slate-300'}`}
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+          </svg>
+        ))}
+      </span>
+      <span className="font-semibold text-slate-700">{averageRating.toFixed(1)}</span>
+      <span>({reviewsCount})</span>
+    </div>
+  );
+}
 
 const carouselMotion = {
   recommended: {
@@ -203,6 +235,7 @@ export default function LandingProductCarousel({
                     <p className="line-clamp-1 text-xs text-slate-600">
                       {toPlainText(product.description) || 'Material premium'}
                     </p>
+                    <ProductCardRating product={product} />
                     <p className="mt-auto text-base font-bold text-slate-950">
                       {priceFormatter.format(Number(product.price))}
                     </p>

@@ -43,6 +43,8 @@ export default function SizeSelector({
   const [collapsedMaxHeight, setCollapsedMaxHeight] = useState<number | null>(null);
   const optionsListRef = useRef<HTMLDivElement | null>(null);
   const selectedSize = value !== undefined ? value : internalSelectedSize;
+  const isColorSelector = isColorOptionLabel(label);
+  const visibleSizes = isColorSelector ? sizes.filter((size) => Boolean(size.imageUrl)) : sizes;
 
   useEffect(() => {
     const optionsList = optionsListRef.current;
@@ -102,7 +104,7 @@ export default function SizeSelector({
       resizeObserver.disconnect();
       window.removeEventListener('resize', measureWrap);
     };
-  }, [selectedSize, sizes.length]);
+  }, [selectedSize, visibleSizes.length]);
 
   const toggleSize = (size: string) => {
     if (disabled || disabledValues.includes(size)) return;
@@ -115,6 +117,10 @@ export default function SizeSelector({
 
     setInternalSelectedSize(nextSize);
   };
+
+  if (isColorSelector && visibleSizes.length === 0) {
+    return null;
+  }
 
   return (
     <div
@@ -144,10 +150,13 @@ export default function SizeSelector({
             : undefined
         }
       >
-        {sizes.map((size) => {
+        {visibleSizes.map((size) => {
           const isSelected = selectedSize === size.value;
           const isDisabled = disabled || disabledValues.includes(size.value);
           const isImageOption = Boolean(size.imageUrl);
+          const swatchColor = !isColorSelector ? size.swatchColor : null;
+          const isSwatchOption = Boolean(swatchColor);
+          const isVisualOption = isImageOption || isSwatchOption;
           const isUnavailableValue = !disabled && disabledValues.includes(size.value);
           const valueHint = valueHints[size.value];
 
@@ -155,20 +164,21 @@ export default function SizeSelector({
             <div
               key={size.value}
               data-option-value={size.value}
-              className={isImageOption || valueHint ? 'flex flex-col items-center gap-1 mt-0.5' : undefined}
+              className={isVisualOption || valueHint ? 'mt-0.5 flex flex-col items-center gap-1' : undefined}
             >
-              <span className={isImageOption ? 'rounded-[14px] p-[3px]' : undefined}>
+              <span className={isVisualOption ? 'rounded-[14px] p-[3px]' : undefined}>
                 <Button
                   type="button"
                   variant={isSelected ? 'primary' : 'secondary'}
                   aria-pressed={isSelected}
+                  aria-label={size.value}
                   disabled={isDisabled}
                   title={isUnavailableValue ? 'Indisponibil pentru culoarea selectata' : size.value}
                   onClick={() => toggleSize(size.value)}
                   className={`relative h-9 min-w-12 rounded-xl px-3 ${
                     isImageOption ? '!h-14 !w-16 !min-w-16 overflow-hidden !p-0' : ''
                   } ${
-                    !isImageOption && size.swatchColor ? 'w-10 overflow-hidden p-1' : ''
+                    !isImageOption && isSwatchOption ? '!h-10 !w-12 !min-w-12 overflow-hidden !p-1' : ''
                   } ${
                     isDisabled ? 'cursor-not-allowed disabled:cursor-not-allowed opacity-45 hover:bg-slate-100' : ''
                   } ${
@@ -191,17 +201,17 @@ export default function SizeSelector({
                         unoptimized
                       />
                     </span>
-                  ) : size.swatchColor ? (
+                  ) : swatchColor ? (
                     <span
                       className="block h-7 w-7 rounded-full border border-slate-300"
-                      style={{ backgroundColor: size.swatchColor }}
+                      style={{ background: swatchColor }}
                     />
                   ) : (
                     size.value
                   )}
                 </Button>
               </span>
-              {isImageOption ? (
+              {isImageOption && !isColorSelector ? (
                 <span className="flex w-full flex-col items-center text-center text-[11px] font-semibold leading-tight text-slate-600">
                   {size.value.split(/\s+/).map((word) => (
                     <span key={`${size.value}-${word}`}>{word}</span>
@@ -227,9 +237,22 @@ export default function SizeSelector({
           onClick={() => setIsExpanded((current) => !current)}
           className="text-xs font-semibold text-indigo-700 hover:text-indigo-900"
         >
-          {isExpanded ? 'Arata mai putine' : `Vezi toate optiunile (${sizes.length})`}
+          {isExpanded ? 'Arata mai putine' : `Vezi toate optiunile (${visibleSizes.length})`}
         </button>
       ) : null}
     </div>
   );
+}
+
+function isColorOptionLabel(value: string) {
+  const normalized = normalizeColorText(value);
+  return normalized.includes('culoare') || normalized.includes('color') || normalized.includes('nuanta');
+}
+
+function normalizeColorText(value: string) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
