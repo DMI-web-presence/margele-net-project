@@ -3,6 +3,7 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 const { URL } = require('url');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { Pool } = require('pg');
@@ -203,6 +204,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && requestUrl.pathname === '/admin/customers') {
       await handleAdminCustomerList(req, requestUrl, res);
+      return;
+    }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/admin/backup-status') {
+      await handleAdminBackupStatus(req, res);
       return;
     }
 
@@ -1504,6 +1510,14 @@ async function handleAdminCustomerList(req, requestUrl, res) {
   sendJson(res, 200, filtered);
 }
 
+async function handleAdminBackupStatus(req, res) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const status = await getBackupStatus();
+  sendJson(res, 200, status);
+}
+
 async function handleAdminOrderUpdate(req, res, orderId) {
   const user = await requireAdmin(req, res);
   if (!user) return;
@@ -1883,6 +1897,196 @@ async function getAdminCustomers(db = pool) {
   }
 
   return customers;
+}
+
+async function getBackupStatus() {
+  const projectRoot = path.resolve(__dirname, '..', '..');
+  const backupRoot = path.resolve(process.env.BACKUP_DIR || path.join(projectRoot, '.local', 'backups'));
+  const logRoot = path.join(projectRoot, '.local', 'backup-logs');
+  const latestBackup = await getLatestFile(backupRoot, /\.(dump|sql)$/i);
+  const latestLog = await getLatestFile(logRoot, /\.log$/i);
+  const latestMetadata = latestBackup ? await readJsonFile(`${latestBackup.fullPath}.json`) : null;
+  const latestR2Metadata = latestBackup ? await readJsonFile(`${latestBackup.fullPath}.enc.json`) : null;
+  const latestLogText = latestLog ? await readTextTail(latestLog.fullPath, 120) : '';
+  const scheduledTask = await getBackupScheduledTaskStatus();
+
+  return {
+    generatedAt: new Date().toISOString(),
+    local: {
+      folder: backupRoot,
+      latestBackup: latestBackup
+        ? {
+            fileName: latestBackup.fileName,
+            sizeBytes: latestBackup.sizeBytes,
+            modifiedAt: latestBackup.modifiedAt,
+            metadataCreatedAt: latestMetadata?.createdAt || latestMetadata?.generatedAt || null,
+            format: latestMetadata?.format || (latestBackup.fileName.endsWith('.sql') ? 'plain' : 'custom'),
+          }
+        : null,
+    },
+    offsite: {
+      configured: Boolean(
+        (process.env.R2_BACKUP_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY_ID) &&
+          (process.env.R2_BACKUP_SECRET_ACCESS_KEY || process.env.R2_SECRET_ACCESS_KEY) &&
+          (process.env.R2_BACKUP_BUCKET_NAME || process.env.R2_BUCKET_NAME) &&
+          (process.env.R2_BACKUP_ENDPOINT || process.env.R2_ENDPOINT) &&
+          process.env.BACKUP_ENCRYPTION_KEY,
+      ),
+      bucketConfigured: Boolean(process.env.R2_BACKUP_BUCKET_NAME || process.env.R2_BUCKET_NAME),
+      encryptionConfigured: Boolean(process.env.BACKUP_ENCRYPTION_KEY),
+      prefix: normalizeBackupPrefix(process.env.BACKUP_R2_PREFIX || 'database-backups'),
+      latestUploadedKey: latestR2Metadata?.r2?.key || null,
+      latestUploadedAt: latestR2Metadata?.uploadedAt || null,
+    },
+    schedule: scheduledTask,
+    alerts: {
+      configured: Boolean(
+        process.env.BACKUP_ALERT_EMAIL ||
+          process.env.BREVO_ADMIN_EMAIL ||
+          firstCsv(process.env.ADMIN_EMAILS),
+      ),
+      brevoConfigured: Boolean(
+        String(process.env.BREVO_ENABLED || '').toLowerCase() === 'true' &&
+          process.env.BREVO_API_KEY &&
+          process.env.BREVO_SENDER_EMAIL,
+      ),
+    },
+    latestLog: latestLog
+      ? {
+          fileName: latestLog.fileName,
+          modifiedAt: latestLog.modifiedAt,
+          status: latestLogText.includes('Scheduled database backup finished')
+            ? 'success'
+            : latestLogText.includes('Scheduled database backup failed')
+              ? 'failed'
+              : 'unknown',
+          excerpt: redactBackupStatusLog(latestLogText).split(/\r?\n/).slice(-12).join('\n'),
+        }
+      : null,
+  };
+}
+
+async function getLatestFile(folder, pattern) {
+  try {
+    const entries = await fs.promises.readdir(folder, { withFileTypes: true });
+    const files = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !pattern.test(entry.name)) continue;
+      const fullPath = path.join(folder, entry.name);
+      const stat = await fs.promises.stat(fullPath);
+      files.push({
+        fileName: entry.name,
+        fullPath,
+        sizeBytes: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+      });
+    }
+
+    files.sort((left, right) => Date.parse(right.modifiedAt) - Date.parse(left.modifiedAt));
+    return files[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function readJsonFile(filePath) {
+  try {
+    return JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+async function readTextTail(filePath, maxLines) {
+  try {
+    const buffer = await fs.promises.readFile(filePath);
+    const text = decodeLogBuffer(buffer);
+    return text.split(/\r?\n/).slice(-maxLines).join('\n');
+  } catch {
+    return '';
+  }
+}
+
+function decodeLogBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) return '';
+
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    return buffer.subarray(2).toString('utf16le');
+  }
+
+  if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+    return buffer.swap16().subarray(2).toString('utf16le');
+  }
+
+  const sampleLength = Math.min(buffer.length, 200);
+  let zeroBytes = 0;
+  for (let index = 0; index < sampleLength; index += 1) {
+    if (buffer[index] === 0) zeroBytes += 1;
+  }
+
+  if (zeroBytes > sampleLength * 0.2) {
+    return buffer.toString('utf16le');
+  }
+
+  return buffer.toString('utf8');
+}
+
+function getBackupScheduledTaskStatus() {
+  if (process.platform !== 'win32') {
+    return Promise.resolve({ configured: false, state: 'unsupported', checkedAt: new Date().toISOString() });
+  }
+
+  return new Promise((resolve) => {
+    execFile(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        "Get-ScheduledTask -TaskName MargeleNetDailyDatabaseBackup | Select-Object -ExpandProperty State",
+      ],
+      { timeout: 5000, windowsHide: true },
+      (error, stdout) => {
+        if (error) {
+          resolve({
+            configured: false,
+            state: 'unknown',
+            checkedAt: new Date().toISOString(),
+            note: 'task_scheduler_unavailable',
+          });
+          return;
+        }
+
+        resolve({
+          configured: true,
+          state: String(stdout || '').trim() || 'unknown',
+          checkedAt: new Date().toISOString(),
+        });
+      },
+    );
+  });
+}
+
+function normalizeBackupPrefix(value) {
+  return String(value || 'database-backups').replace(/^\/+|\/+$/g, '') || 'database-backups';
+}
+
+function firstCsv(value) {
+  return String(value || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .find(Boolean) || '';
+}
+
+function redactBackupStatusLog(value) {
+  return String(value || '')
+    .replace(/(postgres(?:ql)?:\/\/[^:\s]+:)[^@\s]+(@)/gi, '$1[redacted]$2')
+    .replace(/(DATABASE_URL\s*=\s*)\S+/gi, '$1[redacted]')
+    .replace(/(R2_SECRET_ACCESS_KEY\s*=\s*)\S+/gi, '$1[redacted]')
+    .replace(/(R2_ACCESS_KEY_ID\s*=\s*)\S+/gi, '$1[redacted]')
+    .replace(/(BREVO_API_KEY\s*=\s*)\S+/gi, '$1[redacted]')
+    .replace(/(BACKUP_ENCRYPTION_KEY\s*=\s*)\S+/gi, '$1[redacted]');
 }
 
 async function getAdminConversations(db = pool) {
