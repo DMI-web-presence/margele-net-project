@@ -1,6 +1,12 @@
 import CatalogPageContent from '@/components/catalog-page-content';
+import { buildPageMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+export const metadata = buildPageMetadata({
+  title: 'Noutati',
+  description: 'Descopera cele mai noi margele, accesorii si materiale creative intrate in catalogul Margele.net.',
+  path: '/noutati',
+});
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
 

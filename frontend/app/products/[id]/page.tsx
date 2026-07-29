@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,7 @@ import ReviewsSummary from '@/components/reviews-summary';
 import SimilarProductsSlider from '@/components/similar-products-slider';
 import { formatCategoryLabel } from '@/lib/format-category-label';
 import { toPlainText } from '@/lib/plain-text';
+import { absoluteUrl, buildPageMetadata, categoryCatalogPath, productPath, seoDescription, siteName } from '@/lib/seo';
 
 type Product = {
   id: number;
@@ -22,6 +24,7 @@ type Product = {
   price: string;
   currency?: string;
   imageUrl: string | null;
+  images?: Array<{ imageUrl: string; altText?: string | null }>;
   category?: {
     id: number | null;
     name: string;
@@ -152,6 +155,27 @@ const getPurchaseOptionGroups = (product: Product) =>
     }))
     .sort((left, right) => optionDisplayOrder(left.name) - optionDisplayOrder(right.name));
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const product = await getProduct(id);
+
+  if (!product) {
+    return buildPageMetadata({
+      title: 'Produs indisponibil',
+      description: 'Produsul cautat nu este disponibil momentan pe Margele.net.',
+      path: `/products/${encodeURIComponent(id)}`,
+      noindex: true,
+    });
+  }
+
+  return buildPageMetadata({
+    title: product.name,
+    description: seoDescription(product.shortDescription || product.description, `${product.name} disponibil pe Margele.net.`),
+    path: productPath(product),
+    image: product.imageUrl,
+  });
+}
+
 async function getProduct(id: string): Promise<Product | null> {
   try {
     const res = await fetch(`http://127.0.0.1:3001/products/${id}`, {
@@ -258,10 +282,10 @@ function getCategoryBreadcrumbs(product: Product, categories: Category[]) {
   };
 
   while (currentCategory) {
-    breadcrumbItems.unshift({
-      label: formatCategoryLabel(currentCategory.name),
-      href: `/catalog?category=${currentCategory.slug}`,
-    });
+      breadcrumbItems.unshift({
+        label: formatCategoryLabel(currentCategory.name),
+        href: categoryCatalogPath(currentCategory),
+      });
 
     currentCategory = currentCategory.parentId
       ? (categoryById.get(currentCategory.parentId) ?? null)
@@ -271,7 +295,7 @@ function getCategoryBreadcrumbs(product: Product, categories: Category[]) {
   if (breadcrumbItems.length === 0) {
     breadcrumbItems.push({
       label: formatCategoryLabel(primaryCategory.name),
-      href: `/catalog?category=${primaryCategory.slug}`,
+      href: categoryCatalogPath(primaryCategory),
     });
   }
 
@@ -313,9 +337,18 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         : 'Stoc epuizat';
   const productCode = product.sku || `MGL-${String(product.id).padStart(4, '0')}`;
   const materialText = toPlainText(product.material || product.description) || 'Material premium';
+  const productJsonLd = buildProductJsonLd(product, {
+    availabilityLabel,
+    productCode,
+    path: productPath(product),
+  });
 
   return (
     <main className="px-6 py-8 sm:px-10 lg:px-54">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd).replace(/</g, '\\u003c') }}
+      />
       <ProductHistoryRecorder
         product={{
           id: product.id,
@@ -405,4 +438,55 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       </ProductReviewsProvider>
     </main>
   );
+}
+
+function buildProductJsonLd(
+  product: Product,
+  {
+    availabilityLabel,
+    productCode,
+    path,
+  }: {
+    availabilityLabel: string;
+    productCode: string;
+    path: string;
+  },
+) {
+  const imageUrls = [
+    product.imageUrl,
+    ...(product.images || []).map((image) => image.imageUrl),
+    ...(product.variants || []).map((variant) => variant.imageUrl || null),
+  ].filter(Boolean) as string[];
+  const uniqueImageUrls = Array.from(new Set(imageUrls));
+  const description = seoDescription(product.shortDescription || product.description, `${product.name} disponibil pe Margele.net.`);
+  const availability =
+    availabilityLabel === 'In stoc'
+      ? 'https://schema.org/InStock'
+      : 'https://schema.org/OutOfStock';
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    image: uniqueImageUrls.length > 0 ? uniqueImageUrls : [absoluteUrl('/favicon.png')],
+    description,
+    sku: productCode,
+    brand: {
+      '@type': 'Brand',
+      name: siteName,
+    },
+    category: getPrimaryProductCategory(product)?.name || undefined,
+    offers: {
+      '@type': 'Offer',
+      url: absoluteUrl(path),
+      priceCurrency: product.currency || 'RON',
+      price: Number(product.price || 0).toFixed(2),
+      availability,
+      itemCondition: 'https://schema.org/NewCondition',
+      seller: {
+        '@type': 'Organization',
+        name: siteName,
+      },
+    },
+  };
 }
