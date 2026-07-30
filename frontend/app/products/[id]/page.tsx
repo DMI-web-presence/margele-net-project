@@ -351,7 +351,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   });
 
   return (
-    <main className="px-6 py-8 sm:px-10 lg:px-54">
+    <main className="px-4 py-4 sm:px-10 sm:py-8 lg:px-54">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd).replace(/</g, '\\u003c') }}
@@ -363,7 +363,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           imageUrl: product.imageUrl,
         }}
       />
-      <div className="animate-hero-item mx-auto mb-8 flex w-full max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="animate-hero-item mx-auto mb-4 hidden w-full max-w-5xl flex-col gap-4 sm:mb-8 sm:flex sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.3em] text-slate-500">Detalii produs</p>
         </div>
@@ -377,9 +377,9 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
 
       <ProductReviewsProvider productId={product.id}>
       <div className="mx-auto w-full max-w-5xl space-y-6">
-        <div className="grid items-start gap-8 xl:grid-cols-[0.8fr_1.2fr]">
+        <div className="grid items-start gap-4 sm:gap-8 xl:grid-cols-[0.8fr_1.2fr]">
           <div className="xl:sticky xl:top-28">
-            <Card className="animate-hero-image relative aspect-square max-h-[34rem] overflow-hidden bg-white text-white shadow-xl">
+            <Card className="animate-hero-image relative mx-auto aspect-[4/3] max-h-[18rem] overflow-hidden rounded-2xl bg-white text-white shadow-lg sm:aspect-square sm:max-h-[34rem] sm:rounded-3xl sm:shadow-xl">
               {product.imageUrl ? (
                 <div className="flex h-full w-full items-end justify-center">
                   <ProductImageMagnifier
@@ -398,11 +398,11 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           </div>
 
           <Card
-            className="animate-hero-item space-y-6 p-8"
+            className="animate-hero-item space-y-4 rounded-2xl p-4 sm:space-y-6 sm:rounded-3xl sm:p-8"
             style={{ animationDelay: '160ms' }}
           >
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-1.5 text-[11px] uppercase tracking-[0.25em] text-slate-500">
+            <div className="space-y-2 sm:space-y-3">
+              <div className="flex flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-slate-500 sm:text-[11px] sm:tracking-[0.25em]">
                 <Link href="/catalog" className="transition hover:text-slate-700 hover:underline">
                   Catalog
                 </Link>
@@ -418,7 +418,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
               </div>
               <ReviewsSummary />
               <div className="space-y-2">
-                <p className="text-3xl font-semibold tracking-tight text-slate-900">{product.name}</p>
+                <p className="text-2xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-3xl">{product.name}</p>
               </div>
             </div>
             <ProductPurchaseControls

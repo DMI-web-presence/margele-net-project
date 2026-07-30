@@ -124,24 +124,24 @@ export default function SizeSelector({
 
   return (
     <div
-      className={`space-y-2 rounded-2xl transition ${
-        showRequiredHint ? 'bg-amber-50/60 p-3 ring-1 ring-amber-200' : ''
+      className={`space-y-1.5 rounded-2xl transition sm:space-y-2 ${
+        showRequiredHint ? 'bg-amber-50/60 p-2.5 ring-1 ring-amber-200 sm:p-3' : ''
       }`}
     >
       <div className="space-y-1">
-        <p className="text-sm font-semibold text-slate-900">
+        <p className="text-[13px] font-semibold text-slate-900 sm:text-sm">
           {label}
           {required ? <span className="ml-1 text-amber-600">*</span> : null}
         </p>
         {helperText ? (
-          <p className={`text-xs font-medium ${showRequiredHint ? 'text-amber-700' : 'text-slate-500'}`}>
+          <p className={`text-[11px] font-medium leading-4 sm:text-xs ${showRequiredHint ? 'text-amber-700' : 'text-slate-500'}`}>
             {helperText}
           </p>
         ) : null}
       </div>
       <div
         ref={optionsListRef}
-        className={`flex flex-wrap gap-2 px-1 py-1 transition-[max-height] duration-200 ${
+        className={`flex flex-wrap gap-1.5 px-1 py-1 transition-[max-height] duration-200 sm:gap-2 ${
           canCollapse && !isExpanded ? 'overflow-hidden' : ''
         }`}
         style={
@@ -175,10 +175,10 @@ export default function SizeSelector({
                   disabled={isDisabled}
                   title={isUnavailableValue ? 'Indisponibil pentru culoarea selectata' : size.value}
                   onClick={() => toggleSize(size.value)}
-                  className={`relative h-9 min-w-12 rounded-xl px-3 ${
-                    isImageOption ? '!h-14 !w-16 !min-w-16 overflow-hidden !p-0' : ''
+                  className={`relative h-8 min-w-11 rounded-xl px-3 text-xs sm:h-9 sm:min-w-12 sm:text-sm ${
+                    isImageOption ? '!h-13 !w-14 !min-w-14 overflow-hidden !p-0 sm:!h-14 sm:!w-16 sm:!min-w-16' : ''
                   } ${
-                    !isImageOption && isSwatchOption ? '!h-10 !w-12 !min-w-12 overflow-hidden !p-1' : ''
+                    !isImageOption && isSwatchOption ? '!h-9 !w-11 !min-w-11 overflow-hidden !p-1 sm:!h-10 sm:!w-12 sm:!min-w-12' : ''
                   } ${
                     isDisabled ? 'cursor-not-allowed disabled:cursor-not-allowed opacity-45 hover:bg-slate-100' : ''
                   } ${

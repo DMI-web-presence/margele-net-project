@@ -71,6 +71,44 @@ export default function ProductImageMagnifier({
     });
   };
 
+  const updatePointerPosition = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+
+    setPosition({
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+    });
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse') return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updatePointerPosition(event);
+    setIsActive(true);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' || !isActive) return;
+
+    event.preventDefault();
+    updatePointerPosition(event);
+  };
+
+  const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse') return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setIsActive(false);
+  };
+
   const imageRatio = width / height;
   const containerRatio =
     containerSize.width > 0 && containerSize.height > 0
@@ -109,12 +147,16 @@ export default function ProductImageMagnifier({
       onMouseEnter={() => setIsActive(true)}
       onMouseLeave={() => setIsActive(false)}
       onMouseMove={handleMove}
-      className="relative flex h-full w-full items-center justify-center overflow-hidden"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      className="relative flex h-full w-full touch-pan-y items-center justify-center overflow-hidden"
     >
       <Image
         {...getProductImageProps(activeSrc, 'product')}
         alt={alt}
-        className="h-full w-full object-contain object-bottom"
+        className="h-full w-full object-cover object-center sm:object-contain sm:object-bottom"
         unoptimized
       />
 
