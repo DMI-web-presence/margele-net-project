@@ -35,7 +35,7 @@ async function getProducts(): Promise<Product[]> {
   try {
     const res = await fetch(`${backendUrl}/products?view=lite`, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!res.ok) {
@@ -58,7 +58,7 @@ async function getCategories(): Promise<Category[]> {
   try {
     const res = await fetch(`${backendUrl}/categories`, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!res.ok) {

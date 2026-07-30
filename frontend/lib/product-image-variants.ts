@@ -38,7 +38,9 @@ const cloudflareImageBaseUrl = normalizeCloudflareBaseUrl(
   process.env.NEXT_PUBLIC_CLOUDFLARE_IMAGE_BASE_URL || '',
 );
 const imageSourceBaseUrl = normalizeCloudflareBaseUrl(
-  process.env.NEXT_PUBLIC_IMAGE_SOURCE_BASE_URL || '',
+  process.env.NEXT_PUBLIC_IMAGE_SOURCE_BASE_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    '',
 );
 
 export function getProductImageVariantConfig(variant: ProductImageVariant) {
@@ -63,8 +65,12 @@ export function getProductImageUrl(src: string, variant: ProductImageVariant) {
   }
 
   const sourceUrl = resolveTransformSourceUrl(normalizedSrc);
-  if (!cloudflareImageBaseUrl || !sourceUrl) {
+  if (!sourceUrl) {
     return normalizedSrc;
+  }
+
+  if (!cloudflareImageBaseUrl) {
+    return sourceUrl;
   }
 
   const config = getProductImageVariantConfig(variant);

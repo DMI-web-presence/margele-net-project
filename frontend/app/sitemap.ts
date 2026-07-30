@@ -20,7 +20,7 @@ async function fetchJson<T>(path: string, fallback: T): Promise<T> {
   try {
     const response = await fetch(`${backendUrl}${path}`, {
       next: { revalidate },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!response.ok) return fallback;

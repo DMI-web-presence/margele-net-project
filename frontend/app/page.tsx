@@ -26,7 +26,7 @@ async function getProducts(): Promise<Product[]> {
   try {
     const res = await fetch(`${backendUrl}/products?view=lite`, {
       next: { revalidate: homepageRevalidateSeconds },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!res.ok) {

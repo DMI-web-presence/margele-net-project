@@ -32,7 +32,7 @@ async function getProducts(): Promise<Product[]> {
   try {
     const response = await fetch(`${backendUrl}/products?view=lite`, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!response.ok) return [];
@@ -46,7 +46,7 @@ async function getCategories(): Promise<Category[]> {
   try {
     const response = await fetch(`${backendUrl}/categories`, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!response.ok) return [];
