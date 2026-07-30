@@ -428,6 +428,7 @@ export default function ProductPurchaseControls({
   const currentSku = selectedVariant?.sku || product.sku || null;
   const currentVariantId = selectedVariant?.id ?? null;
   const [quantity, setQuantity] = useState(1);
+  const [isMaterialExpanded, setIsMaterialExpanded] = useState(false);
   const cartOption = Object.entries(selectedOptions)
     .filter(([, value]) => Boolean(value))
     .map(([name, value]) => `${name}: ${value}`)
@@ -542,14 +543,29 @@ export default function ProductPurchaseControls({
       />
     );
   });
+  const materialText = productDetails?.material ? String(productDetails.material).trim() : '';
+  const shouldCollapseMaterial = materialText.length > 70;
+  const visibleMaterialText =
+    shouldCollapseMaterial && !isMaterialExpanded
+      ? `${materialText.slice(0, 70).trim()}...`
+      : materialText;
   const metadata = productDetails ? (
-    <div className="space-y-1 text-sm text-slate-700">
+    <div className="space-y-0.5 text-[13px] leading-5 text-slate-700 sm:space-y-1 sm:text-sm">
       <p>
-        <span className="font-semibold text-slate-900">Material:</span> {productDetails.material}
+        <span className="font-semibold text-slate-900">Material:</span> {visibleMaterialText}
         {productDetails.tag ? (
-          <span className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+          <span className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 sm:text-xs">
             {productDetails.tag}
           </span>
+        ) : null}
+        {shouldCollapseMaterial ? (
+          <button
+            type="button"
+            onClick={() => setIsMaterialExpanded((current) => !current)}
+            className="ml-1 cursor-pointer font-semibold text-indigo-700 underline-offset-2 hover:text-indigo-900 hover:underline"
+          >
+            {isMaterialExpanded ? 'Vezi mai putin' : 'Vezi mai mult'}
+          </button>
         ) : null}
       </p>
       <p>
@@ -615,9 +631,9 @@ export default function ProductPurchaseControls({
   );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       <div className="space-y-2">
-        <p className="text-4xl font-extrabold leading-tight text-indigo-700">{currentPriceText}</p>
+        <p className="text-3xl font-extrabold leading-tight text-indigo-700 sm:text-4xl">{currentPriceText}</p>
         {metadata}
         {children}
       </div>
