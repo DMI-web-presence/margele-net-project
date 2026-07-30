@@ -3,6 +3,8 @@ import CatalogPageContent from '@/components/catalog-page-content';
 import { buildPageMetadata, categoryCatalogPath, defaultSeoDescription, siteName } from '@/lib/seo';
 export const dynamic = 'force-dynamic';
 
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+
 type Product = {
   id: number;
   name: string;
@@ -26,7 +28,7 @@ type Category = {
 
 async function getProducts(): Promise<Product[]> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/products?view=lite', {
+    const res = await fetch(`${backendUrl}/products?view=lite`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });
@@ -49,7 +51,7 @@ async function getProducts(): Promise<Product[]> {
 
 async function getCategories(): Promise<Category[]> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/categories', {
+    const res = await fetch(`${backendUrl}/categories`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });

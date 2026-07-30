@@ -48,7 +48,7 @@ async function buildReport() {
       SELECT table_schema, privilege_type, COUNT(*)::int AS count
       FROM information_schema.role_table_grants
       WHERE grantee = $1
-        AND table_schema IN ('auth', 'catalog', 'commerce', 'content', 'public')
+        AND table_schema IN ('app_auth', 'catalog', 'commerce', 'content', 'public')
       GROUP BY table_schema, privilege_type
       ORDER BY table_schema, privilege_type
     `,

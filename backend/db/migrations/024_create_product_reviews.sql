@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS content.product_reviews (
     id SERIAL PRIMARY KEY,
     product_id INTEGER NOT NULL REFERENCES catalog.products(id) ON DELETE CASCADE,
-    user_id INTEGER REFERENCES auth.users(id) ON DELETE SET NULL,
+    user_id INTEGER REFERENCES app_auth.users(id) ON DELETE SET NULL,
     order_id INTEGER REFERENCES commerce.orders(id) ON DELETE SET NULL,
     name VARCHAR(120) NOT NULL,
     email VARCHAR(180) NOT NULL,
@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS product_reviews_unique_email_product_idx
     ON content.product_reviews(product_id, lower(email));
 
 ALTER TABLE content.product_reviews ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES catalog.products(id) ON DELETE CASCADE;
-ALTER TABLE content.product_reviews ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE content.product_reviews ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES app_auth.users(id) ON DELETE SET NULL;
 ALTER TABLE content.product_reviews ADD COLUMN IF NOT EXISTS order_id INTEGER REFERENCES commerce.orders(id) ON DELETE SET NULL;
 ALTER TABLE content.product_reviews ADD COLUMN IF NOT EXISTS name VARCHAR(120);
 ALTER TABLE content.product_reviews ADD COLUMN IF NOT EXISTS email VARCHAR(180);

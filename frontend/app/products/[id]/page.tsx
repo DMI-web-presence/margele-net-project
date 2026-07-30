@@ -15,6 +15,8 @@ import { formatCategoryLabel } from '@/lib/format-category-label';
 import { toPlainText } from '@/lib/plain-text';
 import { absoluteUrl, buildPageMetadata, categoryCatalogPath, productPath, seoDescription, siteName } from '@/lib/seo';
 
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
+
 type Product = {
   id: number;
   name: string;
@@ -183,7 +185,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 async function getProduct(id: string): Promise<Product | null> {
   try {
-    const res = await fetch(`http://127.0.0.1:3001/products/${id}`, {
+    const res = await fetch(`${backendUrl}/products/${id}`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });
@@ -207,7 +209,7 @@ async function getProduct(id: string): Promise<Product | null> {
 
 async function getProducts(): Promise<Product[]> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/products', {
+    const res = await fetch(`${backendUrl}/products`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });
@@ -229,7 +231,7 @@ async function getProducts(): Promise<Product[]> {
 
 async function getCategories(): Promise<Category[]> {
   try {
-    const res = await fetch('http://127.0.0.1:3001/categories', {
+    const res = await fetch(`${backendUrl}/categories`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });
