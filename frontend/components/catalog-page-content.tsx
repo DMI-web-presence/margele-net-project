@@ -349,7 +349,7 @@ export default function CatalogPageContent({
 
           <div className="relative aspect-[7/4] overflow-hidden rounded-[1.15rem]">
             <Image
-              src="/wholesale-atelier-packs.png"
+              src="/wholesale-atelier-packs.avif"
               alt="Pachete atelier cu margele, accesorii si materiale creative"
               fill
               className="object-contain"
