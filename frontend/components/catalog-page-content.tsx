@@ -362,7 +362,7 @@ export default function CatalogPageContent({
 
       <Reveal>
       <section className="grid gap-6 lg:grid-cols-[17rem_1fr]">
-        <aside className="h-fit rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-24">
+        <aside className="h-fit lg:sticky lg:top-24 lg:rounded-3xl lg:border lg:border-slate-200 lg:bg-white lg:p-5 lg:shadow-sm">
           <CatalogFiltersForm
             key={JSON.stringify(query)}
             categoryGroups={categoryGroups}

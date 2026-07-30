@@ -5,7 +5,7 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 loadEnv(path.join(__dirname, '..', '.env'));
 
-const dbSearchPath = 'catalog,app_auth,commerce,content,public';
+const dbSearchPath = 'catalog,app_auth,auth,commerce,content,public';
 const publicRoot = path.resolve(__dirname, '..', '..', 'frontend', 'public');
 const catalogRoot = path.join(publicRoot, 'images', 'catalog');
 const dryRun = !process.argv.includes('--apply');

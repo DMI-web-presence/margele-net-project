@@ -1,6 +1,7 @@
 'use client';
 
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 
 type CategoryGroup = {
@@ -53,6 +54,7 @@ export default function CatalogFiltersForm({
   const [selectedSort, setSelectedSort] = useState(sort);
   const [activeColors, setActiveColors] = useState(selectedColors);
   const [activeSizes, setActiveSizes] = useState(selectedSizes);
+  const [isMounted, setIsMounted] = useState(false);
 
   const selectedGroup = useMemo(
     () => categoryGroups.find((group) => group.id === selectedCategory) ?? categoryGroups[0],
@@ -78,6 +80,10 @@ export default function CatalogFiltersForm({
       setActiveSizes([]);
     });
   };
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!isMobileOpen) return;
@@ -143,23 +149,26 @@ export default function CatalogFiltersForm({
         </span>
       </button>
 
-      {isMobileOpen ? (
-        <div className="fixed inset-0 z-50 touch-none bg-slate-950/35 lg:hidden">
-          <button
-            type="button"
-            aria-label="Inchide filtrele"
-            className="absolute inset-0 h-full w-full cursor-default"
-            onClick={() => setIsMobileOpen(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 max-h-[88vh] touch-auto overflow-hidden rounded-t-[28px] bg-white shadow-[0_-24px_70px_rgba(15,23,42,0.22)]">
-            <CatalogFilterFields
-              {...sharedProps}
-              variant="mobile"
-              onClose={() => setIsMobileOpen(false)}
-            />
-          </div>
-        </div>
-      ) : null}
+      {isMounted && isMobileOpen
+        ? createPortal(
+            <div className="fixed inset-0 z-50 touch-none bg-slate-950/35 lg:hidden">
+              <button
+                type="button"
+                aria-label="Inchide filtrele"
+                className="absolute inset-0 h-full w-full cursor-default"
+                onClick={() => setIsMobileOpen(false)}
+              />
+              <div className="absolute inset-x-0 bottom-0 max-h-[88vh] touch-auto overflow-hidden rounded-t-[28px] bg-white shadow-[0_-24px_70px_rgba(15,23,42,0.22)]">
+                <CatalogFilterFields
+                  {...sharedProps}
+                  variant="mobile"
+                  onClose={() => setIsMobileOpen(false)}
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <div className="hidden lg:block">
         <CatalogFilterFields {...sharedProps} variant="desktop" />
