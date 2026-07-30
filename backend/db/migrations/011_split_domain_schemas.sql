@@ -1,5 +1,5 @@
 CREATE SCHEMA IF NOT EXISTS catalog;
-CREATE SCHEMA IF NOT EXISTS auth;
+CREATE SCHEMA IF NOT EXISTS app_auth;
 CREATE SCHEMA IF NOT EXISTS commerce;
 CREATE SCHEMA IF NOT EXISTS content;
 
@@ -17,8 +17,8 @@ BEGIN
         ('catalog', 'product_attributes'),
         ('catalog', 'product_option_values'),
         ('catalog', 'product_categories'),
-        ('auth', 'users'),
-        ('auth', 'addresses'),
+        ('app_auth', 'users'),
+        ('app_auth', 'addresses'),
         ('commerce', 'orders'),
         ('commerce', 'order_items')
     ) AS planned_moves(target_schema, table_name)
@@ -48,8 +48,8 @@ BEGIN
         ('catalog', 'product_images_id_seq'),
         ('catalog', 'product_attributes_id_seq'),
         ('catalog', 'product_option_values_id_seq'),
-        ('auth', 'users_id_seq'),
-        ('auth', 'addresses_id_seq'),
+        ('app_auth', 'users_id_seq'),
+        ('app_auth', 'addresses_id_seq'),
         ('commerce', 'orders_id_seq'),
         ('commerce', 'order_items_id_seq')
     ) AS planned_moves(target_schema, sequence_name)

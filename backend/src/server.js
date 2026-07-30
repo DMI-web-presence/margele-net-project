@@ -68,7 +68,7 @@ const config = {
   cookieName: 'auth_token',
 };
 
-const dbSearchSchemas = ['catalog', 'auth', 'commerce', 'content', 'public'];
+const dbSearchSchemas = ['catalog', 'app_auth', 'commerce', 'content', 'public'];
 const dbSearchPath = dbSearchSchemas.join(',');
 const uploadRoot = path.join(__dirname, '..', 'uploads');
 const productUploadDir = path.join(uploadRoot, 'products');

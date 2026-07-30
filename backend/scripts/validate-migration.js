@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required in backend/.env');
 }
 
-const dbSearchPath = 'catalog,auth,commerce,content,public';
+const dbSearchPath = 'catalog,app_auth,commerce,content,public';
 const args = process.argv.slice(2);
 const jsonOutput = args.includes('--json');
 const dumpArg = args.find((arg) => !arg.startsWith('--'));
