@@ -53,7 +53,7 @@ function SocialIcon({ icon }: { icon: (typeof socialLinks)[number]['icon'] }) {
   );
 }
 
-function ContactIcon({ icon }: { icon: 'location' | 'phone' | 'email' }) {
+function ContactIcon({ icon }: { icon: 'location' | 'phone' | 'mobile' | 'email' }) {
   if (icon === 'location') {
     return (
       <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
@@ -77,6 +77,29 @@ function ContactIcon({ icon }: { icon: 'location' | 'phone' | 'email' }) {
           stroke="currentColor"
           strokeLinecap="round"
           strokeLinejoin="round"
+          strokeWidth="2"
+        />
+      </svg>
+    );
+  }
+
+  if (icon === 'mobile') {
+    return (
+      <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+        <rect
+          x="7"
+          y="3"
+          width="10"
+          height="18"
+          rx="2"
+          stroke="currentColor"
+          strokeLinejoin="round"
+          strokeWidth="2"
+        />
+        <path
+          d="M10 17h4"
+          stroke="currentColor"
+          strokeLinecap="round"
           strokeWidth="2"
         />
       </svg>
@@ -209,7 +232,15 @@ export default function Footer() {
                   <ContactIcon icon="phone" />
                 </span>
                 <a href="tel:+40259267109" className="transition hover:text-white">
-                  0259 267 109
+                  Telefon fix: 0259 267 109
+                </a>
+              </p>
+              <p className="flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-white/75">
+                  <ContactIcon icon="mobile" />
+                </span>
+                <a href="tel:+40741087097" className="transition hover:text-white">
+                  Mobil: 0741 087 097
                 </a>
               </p>
               <p className="flex items-center gap-2">

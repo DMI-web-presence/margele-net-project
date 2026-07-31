@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 const rawWhatsAppNumber =
   process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ||
   process.env.NEXT_PUBLIC_CONTACT_PHONE ||
-  '+40259267109';
+  '+40741087097';
 
 const defaultMessage = encodeURIComponent('Buna! Am o intrebare despre produsele de pe Margele.net.');
 
