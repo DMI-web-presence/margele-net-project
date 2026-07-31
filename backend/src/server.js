@@ -3391,6 +3391,11 @@ async function handlePasswordResetRequest(req, res) {
   const body = await readJson(req);
   const email = normalizeEmail(body.email);
 
+  if (!email || !isEmail(email)) {
+    sendJson(res, 400, { message: 'Emailul nu este valid.' });
+    return;
+  }
+
   const spamDecision = checkFormSpam(req, body, {
     formName: 'password-reset',
     identity: email,
@@ -3398,14 +3403,9 @@ async function handlePasswordResetRequest(req, res) {
     ipLimit: { max: 5, windowSeconds: 10 * 60 },
     identityLimit: { max: 2, windowSeconds: 10 * 60 },
     minimumSubmitSeconds: 1,
-    content: { minLength: 5, maxLength: 180, maxUrls: 0 },
+    content: { minLength: 5, maxLength: 180 },
   });
   if (sendSpamDecision(res, spamDecision, 'Daca exista un cont pentru aceasta adresa, vei primi un link de resetare.')) {
-    return;
-  }
-
-  if (!email || !isEmail(email)) {
-    sendJson(res, 400, { message: 'Emailul nu este valid.' });
     return;
   }
 
