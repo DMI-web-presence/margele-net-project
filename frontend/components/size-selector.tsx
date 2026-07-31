@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { getProductImageUrl } from '@/lib/product-image-variants';
 
 type SizeOption = {
   value: string;
@@ -153,7 +154,8 @@ export default function SizeSelector({
         {visibleSizes.map((size) => {
           const isSelected = selectedSize === size.value;
           const isDisabled = disabled || disabledValues.includes(size.value);
-          const isImageOption = Boolean(size.imageUrl);
+          const imageUrl = size.imageUrl ? getProductImageUrl(size.imageUrl, 'thumb') : null;
+          const isImageOption = Boolean(imageUrl);
           const swatchColor = !isColorSelector ? size.swatchColor : null;
           const isSwatchOption = Boolean(swatchColor);
           const isVisualOption = isImageOption || isSwatchOption;
@@ -191,10 +193,10 @@ export default function SizeSelector({
                       : ''
                   }`}
                 >
-                  {size.imageUrl ? (
+                  {imageUrl ? (
                     <span className="relative block h-full w-full overflow-hidden rounded-[inherit]">
                       <Image
-                        src={size.imageUrl}
+                        src={imageUrl}
                         alt={size.value}
                         fill
                         className="object-cover"
