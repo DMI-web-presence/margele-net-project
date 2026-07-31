@@ -4200,17 +4200,25 @@ export default function AdminPanel() {
   if (status === 'forbidden') {
     return (
       <AdminStage>
-        <CenteredCard title="Acces restrictionat" subtitle="Contul curent nu are permisiuni pentru aceasta zona.">
-          <div className="space-y-4 text-sm text-slate-600">
+        <CenteredCard title="Acces restrictionat" subtitle="Aceasta zona este rezervata echipei de administrare.">
+          <div className="space-y-4 text-sm leading-6 text-slate-600">
             <p>
-              Contul {user?.email ? <strong>{user.email}</strong> : 'curent'} nu are rol de admin.
+              Contul {user?.email ? <strong className="font-semibold text-slate-800">{user.email}</strong> : 'curent'} este conectat corect, dar nu are acces la panoul de administrare.
             </p>
             <p>
-              Adauga emailul in `ADMIN_EMAILS` sau seteaza coloana `role` la `admin`.
+              Daca ai nevoie de acces, te rugam sa contactezi persoana care administreaza magazinul pentru actualizarea permisiunilor.
             </p>
-            <Button onClick={handleLogout} variant="secondary" className="rounded-2xl">
-              Deconectare
-            </Button>
+            <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+              <Button onClick={handleLogout} variant="secondary" className="rounded-2xl">
+                Deconectare
+              </Button>
+              <a
+                href="/"
+                className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-800"
+              >
+                Inapoi la magazin
+              </a>
+            </div>
           </div>
         </CenteredCard>
       </AdminStage>
