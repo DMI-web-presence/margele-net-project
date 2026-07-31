@@ -19,6 +19,7 @@ const WhatsAppFloatingButton = dynamic(() => import('@/components/whatsapp-float
 export default function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/');
+  const isAuthRoute = pathname === '/autentificare' || pathname.startsWith('/autentificare/');
 
   return (
     <CartProvider>
@@ -29,7 +30,7 @@ export default function AppChrome({ children }: { children: React.ReactNode }) {
           <NavBar />
           <div className="flex-1">{children}</div>
           <WhatsAppFloatingButton />
-          <NavigationHistory />
+          {isAuthRoute ? null : <NavigationHistory />}
           <Footer />
           <CookieConsent />
         </>

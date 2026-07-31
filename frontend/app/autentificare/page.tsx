@@ -16,7 +16,6 @@ const socialActions = [
     iconClass: 'text-red-500',
     href: `${backendUrl}/auth/google`,
   },
-  { label: 'Continua cu Apple', icon: '', iconClass: 'text-slate-900' },
   { label: 'Continua cu Facebook', icon: 'f', iconClass: 'text-blue-600' },
 ];
 
@@ -129,6 +128,13 @@ export default function AutentificarePage() {
                 )
               ))}
             </div>
+
+            <Link
+              href="/"
+              className="inline-flex w-full cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-base font-semibold text-slate-900 transition hover:bg-white hover:shadow-sm"
+            >
+              Inapoi pe website
+            </Link>
 
             <div className="flex items-center justify-center gap-8 text-sm">
               <Link href="#" className="underline text-slate-700 hover:text-slate-900">
