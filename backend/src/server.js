@@ -26,14 +26,16 @@ const config = {
   port: Number(process.env.PORT || 3001),
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret: process.env.JWT_SECRET,
-  frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  frontendOrigin: normalizeConfiguredUrl(process.env.FRONTEND_ORIGIN) || 'http://localhost:3000',
   adminEmails: parseCsv(process.env.ADMIN_EMAILS || ''),
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   googleCallbackUrl:
-    process.env.GOOGLE_CALLBACK_URL || `http://localhost:${process.env.PORT || 3001}/auth/google/callback`,
+    normalizeConfiguredUrl(process.env.GOOGLE_CALLBACK_URL) ||
+    `http://localhost:${process.env.PORT || 3001}/auth/google/callback`,
   backendPublicUrl:
-    process.env.BACKEND_PUBLIC_URL || `http://localhost:${process.env.PORT || 3001}`,
+    normalizeConfiguredUrl(process.env.BACKEND_PUBLIC_URL) ||
+    `http://localhost:${process.env.PORT || 3001}`,
   netopiaMode: process.env.NETOPIA_MODE || 'sandbox',
   netopiaApiKey: process.env.NETOPIA_API_KEY,
   netopiaPosSignature: process.env.NETOPIA_POS_SIGNATURE,
@@ -3215,7 +3217,10 @@ async function handleGoogleStart(res) {
 
   res.writeHead(302, {
     Location: googleUrl.toString(),
-    'Set-Cookie': `google_oauth_state=${state}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax`,
+    'Set-Cookie': buildCookie('google_oauth_state', state, {
+      maxAge: 600,
+      sameSite: 'Lax',
+    }),
   });
   res.end();
 }
@@ -3261,8 +3266,14 @@ async function handleGoogleCallback(req, requestUrl, res) {
   const user = await findOrCreateGoogleUser({ email, fullName });
   const authToken = signToken({ sub: user.id, email: user.email });
   res.setHeader('Set-Cookie', [
-    `${config.cookieName}=${authToken}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax`,
-    'google_oauth_state=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax',
+    buildCookie(config.cookieName, authToken, {
+      maxAge: 60 * 60 * 24 * 7,
+      crossSite: shouldUseCrossSiteAuthCookie(),
+    }),
+    buildCookie('google_oauth_state', '', {
+      maxAge: 0,
+      sameSite: 'Lax',
+    }),
   ]);
   redirectToFrontend(res, '/');
 }
@@ -6715,6 +6726,13 @@ function cleanOptionalValue(value) {
   return text === '--' ? '' : text;
 }
 
+function normalizeConfiguredUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (text.startsWith('//')) return `https:${text}`;
+  return text;
+}
+
 function parseCsv(value) {
   return new Set(
     String(value || '')
@@ -6889,15 +6907,59 @@ function constantTimeEqual(left, right) {
 function setAuthCookie(res, token) {
   res.setHeader(
     'Set-Cookie',
-    `${config.cookieName}=${token}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax`,
+    buildCookie(config.cookieName, token, {
+      maxAge: 60 * 60 * 24 * 7,
+      crossSite: shouldUseCrossSiteAuthCookie(),
+    }),
   );
 }
 
 function clearAuthCookie(res) {
   res.setHeader('Set-Cookie', [
-    `${config.cookieName}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`,
-    'google_oauth_state=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax',
+    buildCookie(config.cookieName, '', {
+      maxAge: 0,
+      crossSite: shouldUseCrossSiteAuthCookie(),
+    }),
+    buildCookie('google_oauth_state', '', {
+      maxAge: 0,
+      sameSite: 'Lax',
+    }),
   ]);
+}
+
+function buildCookie(name, value, options = {}) {
+  const sameSite = options.crossSite ? 'None' : options.sameSite || 'Lax';
+  const parts = [
+    `${name}=${value}`,
+    'HttpOnly',
+    'Path=/',
+    `Max-Age=${options.maxAge ?? 0}`,
+    `SameSite=${sameSite}`,
+  ];
+
+  if (options.crossSite || shouldUseSecureCookies()) {
+    parts.push('Secure');
+  }
+
+  return parts.join('; ');
+}
+
+function shouldUseCrossSiteAuthCookie() {
+  try {
+    const frontend = new URL(config.frontendOrigin);
+    const backend = new URL(config.backendPublicUrl);
+    return frontend.protocol === 'https:' && backend.protocol === 'https:' && frontend.origin !== backend.origin;
+  } catch {
+    return false;
+  }
+}
+
+function shouldUseSecureCookies() {
+  try {
+    return new URL(config.backendPublicUrl).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function redirectToFrontend(res, pathName) {
