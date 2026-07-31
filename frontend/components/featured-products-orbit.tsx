@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { toPlainText } from '@/lib/plain-text';
+import { getProductImageUrl } from '@/lib/product-image-variants';
 
 type Product = {
   id: number;
@@ -106,7 +107,7 @@ export default function FeaturedProductsOrbit({
               >
                 {product.imageUrl ? (
                   <Image
-                    src={product.imageUrl}
+                    src={getProductImageUrl(product.imageUrl, 'thumb')}
                     alt={product.name}
                     width={160}
                     height={160}
@@ -123,7 +124,7 @@ export default function FeaturedProductsOrbit({
           <div className="absolute left-1/2 top-[42%] z-10 flex h-40 w-40 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#4f2048] bg-white shadow-xl">
             {activeProduct.imageUrl ? (
               <Image
-                src={activeProduct.imageUrl}
+                src={getProductImageUrl(activeProduct.imageUrl, 'product')}
                 alt={activeProduct.name}
                 width={260}
                 height={260}

@@ -4,7 +4,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/components/cart-provider';
 import type { CartItem } from '@/components/cart-provider';
-import { getProductImageVariantConfig } from '@/lib/product-image-variants';
+import {
+  getProductImageUrl,
+  getProductImageVariantConfig,
+} from '@/lib/product-image-variants';
 
 const numberFormatter = new Intl.NumberFormat('ro-RO', {
   style: 'currency',
@@ -42,7 +45,7 @@ export default function FavoritePreviewCard({ items, totalCount }: FavoritePrevi
                     <div className="relative h-12 w-12 overflow-hidden rounded-lg bg-slate-200">
                       {item.product.imageUrl ? (
                         <Image
-                          src={item.product.imageUrl}
+                          src={getProductImageUrl(item.product.imageUrl, 'thumb')}
                           alt={item.product.name}
                           fill
                           sizes={getProductImageVariantConfig('thumb').sizes}

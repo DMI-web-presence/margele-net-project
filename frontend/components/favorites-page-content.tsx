@@ -5,7 +5,10 @@ import Link from 'next/link';
 import { useCart } from '@/components/cart-provider';
 import Reveal from '@/components/reveal';
 import { Button } from '@/components/ui/button';
-import { getProductImageVariantConfig } from '@/lib/product-image-variants';
+import {
+  getProductImageUrl,
+  getProductImageVariantConfig,
+} from '@/lib/product-image-variants';
 
 const currencyFormatter = new Intl.NumberFormat('ro-RO', {
   style: 'currency',
@@ -117,7 +120,7 @@ export default function FavoritesPageContent() {
                 <Link href={`/products/${item.product.id}`} className="group relative block h-72 bg-slate-100">
                   {item.product.imageUrl ? (
                     <Image
-                      src={item.product.imageUrl}
+                      src={getProductImageUrl(item.product.imageUrl, 'card')}
                       alt={item.product.name}
                       fill
                       sizes={getProductImageVariantConfig('card').sizes}

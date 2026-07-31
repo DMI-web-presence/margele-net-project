@@ -4,7 +4,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSyncExternalStore } from 'react';
-import { getProductImageVariantConfig } from '@/lib/product-image-variants';
+import {
+  getProductImageUrl,
+  getProductImageVariantConfig,
+} from '@/lib/product-image-variants';
 
 type HistoryItem = {
   href: string;
@@ -47,7 +50,7 @@ export default function NavigationHistory() {
               {item.imageUrl ? (
                 <div className="relative h-[8.5rem] shrink-0 bg-slate-100">
                   <Image
-                    src={item.imageUrl}
+                    src={getProductImageUrl(item.imageUrl, 'card')}
                     alt={item.label}
                     fill
                     sizes={getProductImageVariantConfig('card').sizes}
