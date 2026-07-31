@@ -6441,7 +6441,11 @@ function normalizeJsonArray(value) {
 
 async function bestEffortEmail(label, action) {
   try {
-    return await action();
+    const result = await action();
+    if (result?.skipped) {
+      console.warn(`[brevo] ${label} skipped: ${result.reason || 'unknown_reason'}`);
+    }
+    return result;
   } catch (error) {
     console.error(`[brevo] ${label} failed`, error);
     return null;
