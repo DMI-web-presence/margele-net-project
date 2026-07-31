@@ -4159,7 +4159,11 @@ export default function AdminPanel() {
   if (status === 'loading' || isBootstrapping) {
     return (
       <AdminStage>
-        <CenteredCard title="Se incarca panoul" subtitle="Pregatim catalogul si configuratiile de administrare.">
+        <CenteredCard
+          title="Se incarca panoul"
+          subtitle="Pregatim catalogul si configuratiile de administrare."
+          fullScreen
+        >
           <AdminLoadingSkeleton />
         </CenteredCard>
       </AdminStage>
@@ -4227,9 +4231,9 @@ export default function AdminPanel() {
 
   return (
     <AdminStage>
-      <div className="relative h-screen overflow-hidden bg-[#eef2f8]">
+      <div className="relative h-dvh overflow-hidden bg-[#eef2f8] sm:h-screen">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.85),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(167,139,250,0.18),_transparent_28%)]" />
-        <div className={`relative grid h-screen ${isSidebarExpanded ? 'grid-cols-[78px_250px_minmax(0,1fr)]' : 'grid-cols-[78px_minmax(0,1fr)]'}`}>
+        <div className={`relative grid h-dvh grid-cols-1 sm:h-screen ${isSidebarExpanded ? 'sm:grid-cols-[78px_250px_minmax(0,1fr)]' : 'sm:grid-cols-[78px_minmax(0,1fr)]'}`}>
           <PurpleRail
             groups={sidebarGroups}
             currentSection={currentSection}
@@ -4250,7 +4254,7 @@ export default function AdminPanel() {
           />
 
           {isSidebarExpanded ? (
-          <aside className="sticky top-0 h-screen overflow-y-auto border-r border-white/70 bg-white/78 px-5 py-6 backdrop-blur-xl">
+          <aside className="sticky top-0 hidden h-screen overflow-y-auto border-r border-white/70 bg-white/78 px-5 py-6 backdrop-blur-xl sm:block">
             <div className="flex items-center gap-3 border-b border-slate-100 pb-6">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-300/40">
                 <div className="flex gap-1">
@@ -4307,10 +4311,10 @@ export default function AdminPanel() {
           </aside>
           ) : null}
 
-          <section className="flex h-screen min-h-0 flex-col overflow-hidden">
+          <section className="flex h-dvh min-h-0 flex-col overflow-hidden pb-20 sm:h-screen sm:pb-0">
             {currentSection !== 'dashboard' ? (
-            <header className="sticky top-0 z-20 flex flex-wrap items-center gap-4 border-b border-white/60 bg-white/55 px-6 py-5 backdrop-blur-xl">
-              <div className="flex min-w-[280px] flex-1 items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-100">
+            <header className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b border-white/60 bg-white/75 px-3 py-3 backdrop-blur-xl sm:gap-4 sm:bg-white/55 sm:px-6 sm:py-5">
+              <div className="flex min-w-0 flex-1 basis-full items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-100 sm:min-w-[280px] sm:basis-auto">
                 <span className="text-slate-400">⌕</span>
                 <input
                   value={search}
@@ -4386,7 +4390,7 @@ export default function AdminPanel() {
             </header>
             ) : null}
 
-            <div className={`flex-1 overflow-y-auto ${currentSection === 'dashboard' ? 'bg-[#f7f9fc] p-5' : 'p-6'}`}>
+            <div className={`flex-1 overflow-y-auto ${currentSection === 'dashboard' ? 'bg-[#f7f9fc] p-3 sm:p-5' : 'p-3 sm:p-6'}`}>
               {currentSection === 'dashboard' ? (
                 <DashboardOverviewReference
                   products={products}
@@ -5741,9 +5745,9 @@ function PurpleRail({
   const allItems = groups.flatMap((group) => group.items);
 
   return (
-    <div className="sticky top-0 flex h-screen flex-col items-center bg-[linear-gradient(180deg,#4f2048_0%,#401839_48%,#33112d_100%)] px-3 py-5 text-white">
-      <div className="flex w-full flex-1 flex-col items-center gap-3 overflow-y-auto pb-4 pt-3">
-        <div className="flex w-full flex-col items-center gap-3">
+    <div className="fixed inset-x-3 bottom-3 z-50 flex h-16 items-center rounded-[26px] bg-[linear-gradient(90deg,#4f2048_0%,#401839_55%,#33112d_100%)] px-3 py-2 text-white shadow-[0_18px_45px_rgba(15,23,42,0.28)] sm:sticky sm:inset-auto sm:top-0 sm:z-auto sm:h-screen sm:flex-col sm:rounded-none sm:bg-[linear-gradient(180deg,#4f2048_0%,#401839_48%,#33112d_100%)] sm:px-3 sm:py-5 sm:shadow-none">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0 pt-0 sm:w-full sm:flex-col sm:items-center sm:gap-3 sm:overflow-y-auto sm:overflow-x-hidden sm:pb-4 sm:pt-3">
+        <div className="flex min-w-max items-center gap-2 sm:w-full sm:min-w-0 sm:flex-col sm:gap-3">
           {allItems.map((item) => {
             const section = getMenuSection(item.label);
             const isActive = section === currentSection;
@@ -5753,7 +5757,7 @@ function PurpleRail({
                 key={item.label}
                 type="button"
                 onClick={() => onSelectItem(item.label)}
-                className={`flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl transition ${
+                className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-2xl transition ${
                   isActive
                     ? 'bg-white/22 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)]'
                     : 'bg-white/10 text-white/88 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)] hover:bg-white/16'
@@ -5768,7 +5772,7 @@ function PurpleRail({
         </div>
       </div>
 
-      <div className="flex w-full flex-col items-center gap-4 border-t border-white/15 pt-4">
+      <div className="hidden w-full flex-col items-center gap-4 border-t border-white/15 pt-4 sm:flex">
         <button
           type="button"
           onClick={onToggleExpanded}
@@ -5799,16 +5803,30 @@ function CenteredCard({
   title,
   subtitle,
   children,
+  fullScreen = false,
 }: {
   title: string;
   subtitle: string;
   children?: ReactNode;
+  fullScreen?: boolean;
 }) {
   return (
-    <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-lg items-center">
-      <div className="w-full rounded-[32px] bg-white/88 p-8 shadow-[0_30px_100px_rgba(109,40,217,0.18)] backdrop-blur-xl">
+    <div
+      className={
+        fullScreen
+          ? 'flex min-h-screen w-full items-stretch sm:items-center sm:px-6'
+          : 'mx-auto flex min-h-[calc(100vh-3rem)] max-w-lg items-center'
+      }
+    >
+      <div
+        className={
+          fullScreen
+            ? 'flex min-h-screen w-full flex-col justify-center bg-white/88 px-6 py-10 shadow-[0_30px_100px_rgba(109,40,217,0.18)] backdrop-blur-xl sm:mx-auto sm:min-h-0 sm:max-w-3xl sm:rounded-[32px] sm:p-10'
+            : 'w-full rounded-[32px] bg-white/88 p-8 shadow-[0_30px_100px_rgba(109,40,217,0.18)] backdrop-blur-xl'
+        }
+      >
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-violet-500">Panou Margele</p>
-        <h1 className="mt-3 text-4xl font-semibold text-slate-950">{title}</h1>
+        <h1 className={fullScreen ? 'mt-3 text-4xl font-semibold text-slate-950 sm:text-5xl' : 'mt-3 text-4xl font-semibold text-slate-950'}>{title}</h1>
         <p className="mt-3 text-sm leading-6 text-slate-500">{subtitle}</p>
         {children ? <div className="mt-8">{children}</div> : null}
       </div>
@@ -6032,38 +6050,39 @@ function DashboardOverviewReference({
   ];
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-2.5rem)] w-full max-w-[1680px] flex-col gap-4 text-[#14203a]">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto flex min-h-[calc(100dvh-2.5rem)] w-full max-w-[1680px] flex-col gap-3 text-[#14203a] sm:gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
-          <h1 className="text-[26px] font-bold tracking-[-0.03em]">Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-[-0.03em] sm:text-[26px]">Dashboard</h1>
           <p className="text-[12px] text-[#71809a]">Privire rapida asupra magazinului</p>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="flex h-10 cursor-pointer items-center gap-2 rounded-[10px] border border-[#dde4ed] bg-white px-3 text-[13px] font-semibold text-[#53627a]">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:flex sm:gap-3">
+          <label className="flex h-10 min-w-0 cursor-pointer items-center gap-2 rounded-[10px] border border-[#dde4ed] bg-white px-3 text-[13px] font-semibold text-[#53627a]">
             <DashboardReferenceIcon name="calendar" className="h-4 w-4" />
-            <select value={rangeDays} onChange={(event) => setRangeDays(event.target.value)} className="cursor-pointer bg-transparent outline-none">
+            <select value={rangeDays} onChange={(event) => setRangeDays(event.target.value)} className="min-w-0 cursor-pointer bg-transparent outline-none">
               <option value="all">Tot istoricul</option>
               <option value="7">Ultimele 7 zile</option>
               <option value="30">Ultimele 30 zile</option>
               <option value="90">Ultimele 90 zile</option>
             </select>
           </label>
-          <button type="button" onClick={onNewProduct} className="flex h-10 cursor-pointer items-center gap-2 rounded-[10px] bg-violet-600 px-5 text-[13px] font-bold text-white shadow-[0_7px_18px_rgba(79,32,72,0.24)]">
+          <button type="button" onClick={onNewProduct} className="flex h-10 cursor-pointer items-center gap-2 rounded-[10px] bg-violet-600 px-3 text-[13px] font-bold text-white shadow-[0_7px_18px_rgba(79,32,72,0.24)] sm:px-5">
             <DashboardReferenceIcon name="plus" className="h-4 w-4" />
-            Adauga produs
+            <span className="hidden sm:inline">Adauga produs</span>
+            <span className="sm:hidden">Adauga</span>
           </button>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card, index) => (
-          <section key={card.label} className="relative min-h-[112px] overflow-hidden rounded-[14px] border border-[#dfe5ee] bg-white px-5 py-4 shadow-[0_3px_12px_rgba(30,48,80,0.05)]">
-            <span className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full" style={{ color: card.color, backgroundColor: `${card.color}12` }}>
+          <section key={card.label} className="relative min-h-[112px] overflow-hidden rounded-[14px] border border-[#dfe5ee] bg-white px-4 py-4 shadow-[0_3px_12px_rgba(30,48,80,0.05)] sm:px-5">
+            <span className="absolute right-3 top-4 flex h-9 w-9 items-center justify-center rounded-full sm:right-4" style={{ color: card.color, backgroundColor: `${card.color}12` }}>
               <DashboardReferenceIcon name={card.icon} className="h-5 w-5" />
             </span>
-            <p className="text-[13px] font-semibold text-[#60708a]">{card.label}</p>
-            <div className="mt-1 flex items-end gap-2">
-              <strong className="text-[25px] leading-none tracking-[-0.03em]">{card.value}</strong>
+            <p className="max-w-[72%] text-[13px] font-semibold text-[#60708a]">{card.label}</p>
+            <div className="mt-1 flex flex-wrap items-end gap-2 pr-10">
+              <strong className="text-[24px] leading-none tracking-[-0.03em] sm:text-[25px]">{card.value}</strong>
               <span className="pb-0.5 text-[12px] font-bold text-[#5e6d84]">{card.suffix}</span>
               <span className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${card.trend.startsWith('-') ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>{card.trend}</span>
             </div>
@@ -6100,7 +6119,7 @@ function DashboardOverviewReference({
         >
           <p className="mb-3 flex items-center gap-2 text-[11px] text-[#74839a]"><span className="h-2 w-2 rounded-full bg-violet-600" />Venituri (RON)</p>
           <div className="relative min-h-[210px] flex-1 overflow-hidden">
-            <div className="absolute bottom-6 left-12 right-4 top-4">
+            <div className="absolute bottom-6 left-9 right-2 top-4 sm:left-12 sm:right-4">
               {monthlyAxisValues.map((value, index) => (
                 <div
                   key={value}
@@ -6114,14 +6133,14 @@ function DashboardOverviewReference({
               ))}
             </div>
 
-            <div className="pointer-events-none absolute right-6 top-5 z-10 min-w-[108px] rounded-[9px] border border-[#e1e6ee] bg-white px-3 py-2 shadow-[0_5px_16px_rgba(28,39,64,0.12)]">
+            <div className="pointer-events-none absolute right-3 top-5 z-10 min-w-[108px] rounded-[9px] border border-[#e1e6ee] bg-white px-3 py-2 shadow-[0_5px_16px_rgba(28,39,64,0.12)] sm:right-6">
               <p className="text-[10px] font-semibold text-[#65738a]">{hoveredMonth.label} {hoveredMonth.year}</p>
               <strong className="mt-1 block text-[12px] text-[#394861]">
                 {moneyFormat.format(hoveredMonth.value)} RON
               </strong>
             </div>
 
-            <div className="absolute bottom-6 left-12 right-4 top-4 flex items-end gap-1.5">
+            <div className="absolute bottom-6 left-9 right-2 top-4 flex items-end gap-1 sm:left-12 sm:right-4 sm:gap-1.5">
               {monthlyRevenue.map((item, index) => (
                 <button
                   key={item.label}
@@ -6144,7 +6163,7 @@ function DashboardOverviewReference({
 
         <DashboardReferenceCard title="Plati pe interval orar" action={<div className="flex gap-4 text-[10px] text-[#7f8ca0]"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-violet-600" />Comenzi</span><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-[2px] bg-emerald-500" />Venituri (RON)</span></div>}>
           <div className="relative min-h-[232px] flex-1 overflow-hidden">
-            <div className="absolute bottom-6 left-12 right-14 top-4">
+            <div className="absolute bottom-6 left-9 right-9 top-4 sm:left-12 sm:right-14">
               {hourlyAxisSteps.map((step) => {
                 const orderValue = hourlyOrderAxisMax - step * (hourlyOrderAxisMax / 4);
                 const revenueValue = hourlyRevenueAxisMax - step * (hourlyRevenueAxisMax / 4);
@@ -6165,7 +6184,7 @@ function DashboardOverviewReference({
               })}
             </div>
 
-            <div className="absolute bottom-6 left-12 right-14 top-4 flex items-end gap-1.5">
+            <div className="absolute bottom-6 left-9 right-9 top-4 flex items-end gap-1 sm:left-12 sm:right-14 sm:gap-1.5">
               {hourlyChart.map((item) => (
                 <div key={item.label} className="relative flex h-full flex-1 items-end justify-center gap-[3px]">
                   <span
@@ -6472,8 +6491,8 @@ function DashboardReferenceCard({
   className?: string;
 }) {
   return (
-    <section className={`flex min-h-0 flex-col rounded-[14px] border border-[#dfe5ee] bg-white shadow-[0_3px_12px_rgba(30,48,80,0.05)] ${compact ? 'p-3' : 'p-4'} ${className}`}>
-      <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+    <section className={`flex min-h-0 flex-col rounded-[14px] border border-[#dfe5ee] bg-white shadow-[0_3px_12px_rgba(30,48,80,0.05)] ${compact ? 'p-3' : 'p-3 sm:p-4'} ${className}`}>
+      <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 sm:gap-3">
         <h2 className={`${compact ? 'text-[14px]' : 'text-[16px]'} font-bold`}>{title}</h2>
         {action}
       </div>
