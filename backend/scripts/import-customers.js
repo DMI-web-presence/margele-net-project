@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required in backend/.env');
 }
 
-const dbSearchPath = 'catalog,app_auth,auth,commerce,content,public';
+const dbSearchPath = 'app_auth,catalog,commerce,content,public,auth';
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const dumpArg = args.find((arg) => !arg.startsWith('--'));
