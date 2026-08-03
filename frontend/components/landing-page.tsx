@@ -23,12 +23,12 @@ type LandingPageProps = {
 
 const heroBenefits = [
   {
-    title: 'Selectie variata',
-    description: 'Mii de produse pentru bijuterii si decoratiuni.',
+    title: 'Retur 14 zile',
+    description: 'Poti returna produsele comandate timp de 14 zile.',
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7">
-        <path d="M12 3 3.8 9.2 12 21l8.2-11.8L12 3Z" className="fill-none stroke-current stroke-[1.8]" />
-        <path d="M3.8 9.2h16.4M8.5 9.2 12 21l3.5-11.8M8.5 9.2 12 3l3.5 6.2" className="fill-none stroke-current stroke-[1.8]" />
+        <path d="M4 9a8 8 0 1 1 2.4 5.7" className="fill-none stroke-current stroke-[1.8]" />
+        <path d="M4 4v5h5" className="fill-none stroke-current stroke-[1.8]" />
       </svg>
     ),
   },
@@ -55,8 +55,8 @@ const heroBenefits = [
     ),
   },
   {
-    title: 'Livrare rapida',
-    description: 'Comenzi livrate rapid in toata Romania.',
+    title: 'Transport Gratuit*',
+    description: '* Prin Posta, la comenzile peste 150 de lei. Prin curier, la comenzile peste 300 de lei.',
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7">
         <path d="M3 6h11v9H3V6ZM14 9h3.8l3.2 3.2V15h-7V9Z" className="fill-none stroke-current stroke-[1.8]" />

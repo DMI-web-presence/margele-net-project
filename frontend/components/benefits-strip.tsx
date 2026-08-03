@@ -22,7 +22,7 @@ const benefits = [
   },
   {
     title: 'Transport',
-    description: 'Livrare estimata in 1-3 zile lucratoare pentru produsele disponibile.',
+    description: 'Gratuit prin Posta peste 150 lei si prin curier peste 300 lei.',
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-9 w-9 fill-none stroke-current stroke-[1.7]">
         <path d="M3 6h11v10H3V6Z" />
