@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { ChangeEvent, DragEvent, FormEvent, ReactNode, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1249,7 +1250,11 @@ export default function AdminPanel() {
       });
 
       if (!response.ok) {
-        setErrorMessage('Emailul sau parola nu sunt corecte.');
+        const result = (await response.json().catch(() => null)) as {
+          code?: string;
+          message?: string;
+        } | null;
+        setErrorMessage(result?.message ?? 'Emailul sau parola nu sunt corecte.');
         return;
       }
 
@@ -4216,12 +4221,12 @@ export default function AdminPanel() {
               <Button onClick={handleLogout} variant="secondary" className="rounded-2xl">
                 Deconectare
               </Button>
-              <a
+              <Link
                 href="/"
                 className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-violet-200 hover:bg-violet-50 hover:text-violet-800"
               >
                 Inapoi la magazin
-              </a>
+              </Link>
             </div>
           </div>
         </CenteredCard>

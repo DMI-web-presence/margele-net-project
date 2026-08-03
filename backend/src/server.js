@@ -325,6 +325,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === 'GET' && requestUrl.pathname === '/auth/email-verification/confirm') {
+      await handleEmailVerificationConfirm(requestUrl, res);
+      return;
+    }
+
     if (req.method === 'POST' && requestUrl.pathname === '/auth/login') {
       await handleLogin(req, res);
       return;
@@ -3311,6 +3316,10 @@ async function handleRegister(req, res) {
     insertData.role = roleForEmail(email);
   }
 
+  if (columns.has('email_verified_at')) {
+    insertData.email_verified_at = null;
+  }
+
   addOptionalUserData(insertData, columns, body);
 
   const insertedUser = await insertUser(insertData).catch((error) => {
@@ -3321,6 +3330,20 @@ async function handleRegister(req, res) {
     }
     throw error;
   });
+
+  if (columns.has('email_verified_at')) {
+    const verificationResult = await issueEmailVerification(insertedUser);
+    const message = verificationResult?.skipped
+      ? 'Contul a fost creat, dar nu am putut trimite emailul de confirmare. Incearca sa te conectezi pentru a retrimite linkul.'
+      : 'Ti-am trimis un email. Da click pe link pentru a finaliza crearea contului.';
+
+    sendJson(res, 201, {
+      pendingVerification: true,
+      message,
+      email: insertedUser.email,
+    });
+    return;
+  }
 
   setAuthCookie(res, signToken({ sub: insertedUser.id, email: insertedUser.email }));
   void bestEffortEmail('welcome email', () => brevoMailer.sendWelcomeEmail(insertedUser));
@@ -3346,7 +3369,111 @@ async function findOrCreateGoogleUser({ email, fullName }) {
     insertData.role = roleForEmail(email);
   }
 
+  if (columns.has('email_verified_at')) {
+    insertData.email_verified_at = new Date();
+  }
+
   return insertUser(insertData);
+}
+
+async function issueEmailVerification(user) {
+  const columns = await getUserColumns();
+  if (!columns.has('email_verified_at') || user?.email_verified_at) {
+    return { skipped: true, reason: 'email_verification_not_required' };
+  }
+
+  if (!(await hasTable('email_verification_tokens'))) {
+    return { skipped: true, reason: 'missing_email_verification_tokens_table' };
+  }
+
+  const token = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = hashResetToken(token);
+  const verificationUrl = new URL('/auth/email-verification/confirm', config.backendPublicUrl);
+  verificationUrl.searchParams.set('token', token);
+
+  await withTransaction(async (client) => {
+    await client.query(
+      `
+        UPDATE email_verification_tokens
+        SET used_at = CURRENT_TIMESTAMP
+        WHERE user_id = $1 AND used_at IS NULL
+      `,
+      [user.id],
+    );
+    await client.query(
+      `
+        INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+        VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '24 hours')
+      `,
+      [user.id, tokenHash],
+    );
+  });
+
+  return bestEffortEmail('email verification', () =>
+    brevoMailer.sendEmailVerificationEmail({
+      user,
+      verificationUrl: verificationUrl.toString(),
+    }),
+  );
+}
+
+async function handleEmailVerificationConfirm(requestUrl, res) {
+  const token = String(requestUrl.searchParams.get('token') || '').trim();
+  if (!token || !(await hasTable('email_verification_tokens'))) {
+    redirectToFrontend(res, '/autentificare?error=email-verification');
+    return;
+  }
+
+  const columns = await getUserColumns();
+  if (!columns.has('email_verified_at')) {
+    redirectToFrontend(res, '/autentificare?error=email-verification');
+    return;
+  }
+
+  const tokenHash = hashResetToken(token);
+  const verifiedUser = await withTransaction(async (client) => {
+    const tokenResult = await client.query(
+      `
+        SELECT evt.id, evt.user_id, u.email, u.full_name
+        FROM email_verification_tokens evt
+        JOIN users u ON u.id = evt.user_id
+        WHERE evt.token_hash = $1
+          AND evt.used_at IS NULL
+          AND evt.expires_at > CURRENT_TIMESTAMP
+        LIMIT 1
+      `,
+      [tokenHash],
+    );
+    const verificationToken = tokenResult.rows[0];
+    if (!verificationToken) return null;
+
+    const updatedAtSet = columns.has('updated_at') ? ', updated_at = CURRENT_TIMESTAMP' : '';
+    const userResult = await client.query(
+      `
+        UPDATE users
+        SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP)${updatedAtSet}
+        WHERE id = $1
+        RETURNING *
+      `,
+      [verificationToken.user_id],
+    );
+    await client.query(
+      'UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [verificationToken.id],
+    );
+    return userResult.rows[0] || null;
+  });
+
+  if (!verifiedUser) {
+    redirectToFrontend(res, '/autentificare?error=email-verification');
+    return;
+  }
+
+  void bestEffortEmail('welcome email', () => brevoMailer.sendWelcomeEmail(verifiedUser));
+  redirectToFrontend(
+    res,
+    `/autentificare/conectare?email=${encodeURIComponent(verifiedUser.email)}&verified=1`,
+  );
 }
 
 async function handleLogin(req, res) {
@@ -3364,8 +3491,9 @@ async function handleLogin(req, res) {
   const selectRequiresPasswordReset = userColumns.has('requires_password_reset')
     ? ', requires_password_reset'
     : '';
+  const selectEmailVerifiedAt = userColumns.has('email_verified_at') ? ', email_verified_at' : '';
   const result = await pool.query(
-    `SELECT id, full_name, email, password_hash${selectRole}${selectRequiresPasswordReset} FROM users WHERE lower(email) = lower($1) LIMIT 1`,
+    `SELECT id, full_name, email, password_hash${selectRole}${selectRequiresPasswordReset}${selectEmailVerifiedAt} FROM users WHERE lower(email) = lower($1) LIMIT 1`,
     [email],
   );
   const user = result.rows[0];
@@ -3380,6 +3508,17 @@ async function handleLogin(req, res) {
 
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     sendJson(res, 401, { message: 'Emailul sau parola nu sunt corecte.' });
+    return;
+  }
+
+  if (userColumns.has('email_verified_at') && !user.email_verified_at) {
+    const verificationResult = await issueEmailVerification(user);
+    sendJson(res, 403, {
+      code: 'email_verification_required',
+      message: verificationResult?.skipped
+        ? 'Contul exista, dar emailul nu este confirmat. Nu am putut retrimite linkul de confirmare momentan.'
+        : 'Contul exista, dar emailul nu este confirmat. Ti-am trimis un link nou pentru finalizarea contului.',
+    });
     return;
   }
 

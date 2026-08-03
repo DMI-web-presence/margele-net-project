@@ -30,6 +30,7 @@ function ConectareContent() {
     const emailParam = searchParams.get('email');
     return emailParam && emailParam.trim() ? emailParam : 'exemplu@email.com';
   }, [searchParams]);
+  const isEmailVerified = searchParams.get('verified') === '1';
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -75,6 +76,11 @@ function ConectareContent() {
           <div className="space-y-8">
             <div className="space-y-3">
               <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Conectare</h1>
+              {isEmailVerified ? (
+                <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-800">
+                  Emailul a fost confirmat. Te poti conecta acum.
+                </p>
+              ) : null}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
