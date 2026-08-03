@@ -13,7 +13,7 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  options: '-c search_path=catalog,app_auth,auth,commerce,content,public',
+  options: '-c search_path=app_auth,catalog,commerce,content,public,auth',
 });
 
 async function main() {

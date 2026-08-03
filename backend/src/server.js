@@ -70,7 +70,7 @@ const config = {
   cookieName: 'auth_token',
 };
 
-const dbSearchSchemas = ['catalog', 'app_auth', 'auth', 'commerce', 'content', 'public'];
+const dbSearchSchemas = ['app_auth', 'catalog', 'commerce', 'content', 'public', 'auth'];
 const dbSearchPath = dbSearchSchemas.join(',');
 const uploadRoot = path.join(__dirname, '..', 'uploads');
 const productUploadDir = path.join(uploadRoot, 'products');
