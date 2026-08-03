@@ -137,10 +137,10 @@ function ConectareContent() {
             </form>
 
             <div className="flex items-center justify-center gap-8 text-sm">
-              <Link href="#" className="underline text-slate-700 hover:text-slate-900">
+              <Link href="/cum-cumpar" className="underline text-slate-700 hover:text-slate-900">
                 Informare legala
               </Link>
-              <Link href="#" className="underline text-slate-700 hover:text-slate-900">
+              <Link href="/gdpr" className="underline text-slate-700 hover:text-slate-900">
                 Nota de confidentialitate
               </Link>
             </div>

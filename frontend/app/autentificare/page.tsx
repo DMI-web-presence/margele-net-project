@@ -95,11 +95,11 @@ export default function AutentificarePage() {
 
             <p className="text-sm leading-6 text-slate-700">
               Cand iti creezi un cont, esti de acord cu{' '}
-              <Link href="#" className="font-semibold underline">
+              <Link href="/cum-cumpar" className="font-semibold underline">
                 Termenii de utilizare
               </Link>
               . Afla cum iti prelucram datele in{' '}
-              <Link href="#" className="font-semibold underline">
+              <Link href="/gdpr" className="font-semibold underline">
                 Nota de confidentialitate
               </Link>
               .
@@ -137,10 +137,10 @@ export default function AutentificarePage() {
             </Link>
 
             <div className="flex items-center justify-center gap-8 text-sm">
-              <Link href="#" className="underline text-slate-700 hover:text-slate-900">
+              <Link href="/cum-cumpar" className="underline text-slate-700 hover:text-slate-900">
                 Informare legala
               </Link>
-              <Link href="#" className="underline text-slate-700 hover:text-slate-900">
+              <Link href="/gdpr" className="underline text-slate-700 hover:text-slate-900">
                 Nota de confidentialitate
               </Link>
             </div>
