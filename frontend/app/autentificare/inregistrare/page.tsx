@@ -24,6 +24,7 @@ function InregistrareContent() {
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const email = useMemo(() => {
     const emailParam = searchParams.get('email');
     return emailParam && emailParam.trim() ? emailParam : 'exemplu@email.com';
@@ -32,6 +33,7 @@ function InregistrareContent() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage('');
+    setSuccessMessage('');
     setIsSubmitting(true);
 
     try {
@@ -55,6 +57,18 @@ function InregistrareContent() {
       if (!response.ok) {
         const result = (await response.json().catch(() => null)) as { message?: string } | null;
         setErrorMessage(result?.message ?? 'Nu am putut crea contul.');
+        return;
+      }
+
+      const result = (await response.json().catch(() => null)) as {
+        pendingVerification?: boolean;
+        message?: string;
+      } | null;
+      if (result?.pendingVerification) {
+        setPassword('');
+        setSuccessMessage(
+          result.message ?? 'Ti-am trimis un email. Da click pe link pentru a finaliza crearea contului.',
+        );
         return;
       }
 
@@ -252,10 +266,15 @@ function InregistrareContent() {
               {errorMessage ? (
                 <p className="text-sm font-semibold text-red-600">{errorMessage}</p>
               ) : null}
+              {successMessage ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold leading-6 text-emerald-800">
+                  {successMessage}
+                </div>
+              ) : null}
 
               <Button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || Boolean(successMessage)}
                 className="w-full rounded-2xl bg-slate-900 py-3 text-base hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? 'Se creeaza contul...' : 'Inregistrare'}

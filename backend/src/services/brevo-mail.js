@@ -104,6 +104,51 @@ function createBrevoMailer(config = {}) {
     });
   }
 
+  async function sendEmailVerificationEmail({ user, verificationUrl }) {
+    const email = cleanEmail(user?.email);
+    if (!email) {
+      return { skipped: true, reason: 'missing_user_email' };
+    }
+
+    const fullName = String(user?.full_name || user?.fullName || '').trim();
+    const safeVerificationUrl = String(verificationUrl || '').trim();
+    if (!safeVerificationUrl) {
+      return { skipped: true, reason: 'missing_verification_url' };
+    }
+
+    return sendTransactionalEmail({
+      to: [{ email, name: fullName || undefined }],
+      subject: 'Finalizeaza crearea contului Margele.net',
+      textContent: [
+        `Salut${fullName ? `, ${fullName}` : ''}!`,
+        '',
+        'Contul tau Margele.net este aproape gata.',
+        'Da click aici pentru a finaliza crearea contului:',
+        safeVerificationUrl,
+        '',
+        'Linkul este valabil timp de 24 de ore.',
+        'Daca nu ai creat acest cont, poti ignora acest mesaj.',
+        '',
+        'Echipa Margele.net',
+      ].join('\n'),
+      htmlContent: `
+        <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+          <h2 style="margin: 0 0 16px;">Finalizeaza crearea contului</h2>
+          <p style="margin: 0 0 12px;">Salut${fullName ? `, ${escapeHtml(fullName)}` : ''}!</p>
+          <p style="margin: 0 0 16px;">Contul tau <strong>Margele.net</strong> este aproape gata.</p>
+          <p style="margin: 0 0 20px;">
+            <a href="${escapeHtml(safeVerificationUrl)}" style="display: inline-block; background: #4f2048; color: #ffffff; padding: 12px 18px; border-radius: 12px; text-decoration: none; font-weight: 700;">
+              Da click aici pentru a finaliza crearea contului
+            </a>
+          </p>
+          <p style="margin: 0 0 12px;">Linkul este valabil timp de 24 de ore.</p>
+          <p style="margin: 0;">Daca nu ai creat acest cont, poti ignora acest mesaj.</p>
+        </div>
+      `,
+      tags: ['account', 'email-verification'],
+    });
+  }
+
   async function sendPasswordResetEmail({ user, resetUrl }) {
     const email = cleanEmail(user?.email);
     if (!email) {
@@ -513,6 +558,7 @@ function createBrevoMailer(config = {}) {
     isConfigured,
     sendTransactionalEmail,
     sendWelcomeEmail,
+    sendEmailVerificationEmail,
     sendPasswordResetEmail,
     sendOrderConfirmationEmail,
     sendNewOrderAdminAlert,

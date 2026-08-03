@@ -25,6 +25,7 @@
     "apply:curated-categories": "node scripts/apply-curated-categories.js",
     "seed:smartbill-mock": "node scripts/seed-smartbill-mock.js",
     "seed:smartbill-mock:remove": "node scripts/seed-smartbill-mock.js --remove",
+    "admin:set-user": "node scripts/set-admin-user.js",
     "security:audit": "node scripts/audit-security-config.js",
     "security:r2-lifecycle": "node scripts/configure-r2-lifecycle.js",
     "test": "node --test",
