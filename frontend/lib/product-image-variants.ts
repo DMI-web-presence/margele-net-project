@@ -103,5 +103,9 @@ function resolveTransformSourceUrl(src: string) {
     return `${imageSourceBaseUrl}${src}`;
   }
 
+  if (imageSourceBaseUrl) {
+    return `${imageSourceBaseUrl}/${src.replace(/^\/+/, '')}`;
+  }
+
   return null;
 }

@@ -6,8 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { getProductImageUrl, type ProductImageVariant } from '@/lib/product-image-variants';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
+function getAdminImageUrl(src: string | null | undefined, variant: ProductImageVariant = 'thumb') {
+  return getProductImageUrl(String(src || ''), variant);
+}
 
 const frontendVisibleRootCategorySlugs = [
   'margele',
@@ -2835,7 +2840,7 @@ export default function AdminPanel() {
                       className="product-editor-image-drop flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-[9px] border border-dashed border-[#cbd4e2] bg-[#fbfcfe] px-4 py-2 text-left transition hover:border-violet-300 hover:bg-violet-50/30"
                     >
                       {previewImage ? (
-                        <img src={previewImage} alt="" className="h-8 w-10 rounded-md object-cover" />
+                        <img src={getAdminImageUrl(previewImage, 'thumb')} alt="" className="h-8 w-10 rounded-md object-cover" />
                       ) : (
                         <EditorGlyph name="image" className="h-6 w-6 shrink-0 text-[#64748b]" />
                       )}
@@ -3063,7 +3068,7 @@ export default function AdminPanel() {
                       >
                         {activeDetailedVariant.imageUrl ? (
                           <img
-                            src={activeDetailedVariant.imageUrl}
+                            src={getAdminImageUrl(activeDetailedVariant.imageUrl, 'thumb')}
                             alt=""
                             className="h-8 w-10 rounded-md object-cover"
                           />
@@ -3243,7 +3248,7 @@ export default function AdminPanel() {
                         {image.imageUrl ? (
                           <>
                             <img
-                              src={image.imageUrl}
+                              src={getAdminImageUrl(image.imageUrl, 'card')}
                               alt={image.altText || `Imagine produs ${index + 1}`}
                               className="absolute inset-0 h-full w-full object-cover"
                             />
@@ -3544,7 +3549,7 @@ export default function AdminPanel() {
                                   >
                                     {variant.imageUrl ? (
                                       <img
-                                        src={variant.imageUrl}
+                                        src={getAdminImageUrl(variant.imageUrl, 'thumb')}
                                         alt=""
                                         className="h-7 w-9 rounded object-cover"
                                       />
@@ -3663,7 +3668,7 @@ export default function AdminPanel() {
 
               <div className="flex h-[190px] items-center justify-center overflow-hidden rounded-[10px] border border-[#e1e7ef] bg-[linear-gradient(145deg,#fbfcfe,#f5f7fa)]">
                 {previewImage ? (
-                  <img src={previewImage} alt={draft.name || 'Preview produs'} className="h-full w-full object-cover" />
+                  <img src={getAdminImageUrl(previewImage, 'card')} alt={draft.name || 'Preview produs'} className="h-full w-full object-cover" />
                 ) : (
                   <div className="text-center text-[#9aa7ba]">
                     <EditorGlyph name="image" className="mx-auto h-8 w-8" />
@@ -3978,7 +3983,7 @@ export default function AdminPanel() {
                         <div className="space-y-3">
                           <div className="relative flex h-44 items-center justify-center overflow-hidden rounded-[24px] border border-slate-200 bg-white">
                             {image.imageUrl ? (
-                              <img src={image.imageUrl} alt={image.altText || `Imagine produs ${index + 1}`} className="h-full w-full object-cover" />
+                              <img src={getAdminImageUrl(image.imageUrl, 'card')} alt={image.altText || `Imagine produs ${index + 1}`} className="h-full w-full object-cover" />
                             ) : (
                               <div className="px-6 text-center text-sm text-slate-400">Nu exista imagine incarcata.</div>
                             )}
@@ -4515,7 +4520,7 @@ export default function AdminPanel() {
                                     {product.imageUrl ? (
                                       <div className="h-12 w-12 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
                                         <img
-                                          src={product.imageUrl}
+                                          src={getAdminImageUrl(product.imageUrl, 'thumb')}
                                           alt={product.name || 'Imagine produs'}
                                           className="h-full w-full object-cover"
                                         />
@@ -5061,7 +5066,7 @@ export default function AdminPanel() {
                   <p className="text-sm font-semibold text-slate-700">Previzualizare</p>
                   <div className="flex h-64 items-center justify-center overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
                     {imageUploadPreview ? (
-                      <img src={imageUploadPreview} alt="Previzualizare imagine produs" className="h-full w-full object-contain" />
+                      <img src={getAdminImageUrl(imageUploadPreview, 'product')} alt="Previzualizare imagine produs" className="h-full w-full object-contain" />
                     ) : (
                       <div className="px-8 text-center text-sm text-slate-400">
                         Alege o imagine pentru a vedea previzualizarea aici.
@@ -5327,7 +5332,7 @@ export default function AdminPanel() {
                         <div key={item.id} className="flex items-center justify-between gap-4 rounded-[24px] border border-slate-100 bg-slate-50/80 px-4 py-4">
                           <div className="flex items-center gap-3">
                             {item.productImageUrl ? (
-                              <img src={item.productImageUrl} alt={item.productName} className="h-14 w-14 rounded-2xl object-cover" />
+                              <img src={getAdminImageUrl(item.productImageUrl, 'thumb')} alt={item.productName} className="h-14 w-14 rounded-2xl object-cover" />
                             ) : (
                               <div className="h-14 w-14 rounded-2xl bg-slate-100" />
                             )}
@@ -6246,7 +6251,7 @@ function DashboardOverviewReference({
               const product = item.id ? productMap.get(item.id) : null;
               return (
                 <div key={`${item.id}-${item.name}`} className="grid grid-cols-[1fr_56px_82px] items-center border-b border-[#f0f2f6] py-2 text-[10px] last:border-0">
-                  <div className="flex min-w-0 items-center gap-2">{product?.imageUrl ? <img src={product.imageUrl} alt="" className="h-7 w-7 rounded-md object-cover" /> : <span className="h-7 w-7 rounded-md bg-[#f0f3f7]" />}<span className="truncate font-semibold">{item.name}</span></div>
+                  <div className="flex min-w-0 items-center gap-2">{product?.imageUrl ? <img src={getAdminImageUrl(product.imageUrl, 'thumb')} alt="" className="h-7 w-7 rounded-md object-cover" /> : <span className="h-7 w-7 rounded-md bg-[#f0f3f7]" />}<span className="truncate font-semibold">{item.name}</span></div>
                   <strong>{numberFormat.format(item.sold)}</strong><strong className="text-right">{compactFormat.format(item.revenue)} RON</strong>
                 </div>
               );
@@ -6264,7 +6269,7 @@ function DashboardOverviewReference({
                   const item = order.items[0];
                   return (
                     <tr key={order.id} className="text-[10px]">
-                      <td className="px-4 py-2"><div className="flex items-center gap-2">{item?.productImageUrl ? <img src={item.productImageUrl} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="h-7 w-7 rounded-full bg-[#eef1f5]" />}<div><b>#{order.orderNumber}</b><p className="text-[10px] text-[#8d99ab]">{new Date(order.createdAt).toLocaleDateString('ro-RO')}</p></div></div></td>
+                      <td className="px-4 py-2"><div className="flex items-center gap-2">{item?.productImageUrl ? <img src={getAdminImageUrl(item.productImageUrl, 'thumb')} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="h-7 w-7 rounded-full bg-[#eef1f5]" />}<div><b>#{order.orderNumber}</b><p className="text-[10px] text-[#8d99ab]">{new Date(order.createdAt).toLocaleDateString('ro-RO')}</p></div></div></td>
                       <td className="px-3 py-2"><b>{order.customer.name || 'Client'}</b><p className="max-w-[130px] truncate text-[10px] text-[#8d99ab]">{order.customer.email}</p></td>
                       <td className="px-3 py-2"><OrderStatusPill status={order.status} /></td>
                       <td className="px-3 py-2">{order.courier || 'Curier'}</td>
@@ -6678,7 +6683,7 @@ function DashboardOverview({
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {product.imageUrl ? (
-                          <img src={product.imageUrl} alt={product.name} className="h-11 w-11 rounded-2xl object-cover" />
+                          <img src={getAdminImageUrl(product.imageUrl, 'thumb')} alt={product.name} className="h-11 w-11 rounded-2xl object-cover" />
                         ) : (
                           <div className="h-11 w-11 rounded-2xl bg-slate-100" />
                         )}
@@ -6937,7 +6942,7 @@ function ProductsOverview({
                       <button type="button" onClick={() => onSelectProduct(product)} className="flex items-center gap-3 text-left">
                         {product.imageUrl ? (
                           <div className="h-12 w-12 overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200">
-                            <img src={product.imageUrl} alt={product.name || 'Imagine produs'} className="h-full w-full object-cover" />
+                            <img src={getAdminImageUrl(product.imageUrl, 'card')} alt={product.name || 'Imagine produs'} className="h-full w-full object-cover" />
                           </div>
                         ) : null}
                         <div>
@@ -7241,7 +7246,7 @@ function ReviewsOverview({
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       {review.product.imageUrl ? (
-                        <img src={review.product.imageUrl} alt={review.product.name} className="h-12 w-12 rounded-2xl object-cover" />
+                        <img src={getAdminImageUrl(review.product.imageUrl, 'thumb')} alt={review.product.name} className="h-12 w-12 rounded-2xl object-cover" />
                       ) : (
                         <div className="h-12 w-12 rounded-2xl bg-slate-100" />
                       )}
@@ -7434,7 +7439,7 @@ function OrdersOverview({
                     <td className="px-6 py-4">
                       <button type="button" onClick={() => onOpenOrder(order)} className="flex items-center gap-3 text-left">
                         {previewItem?.productImageUrl ? (
-                          <img src={previewItem.productImageUrl} alt={previewItem.productName} className="h-12 w-12 rounded-2xl object-cover" />
+                          <img src={getAdminImageUrl(previewItem.productImageUrl, 'thumb')} alt={previewItem.productName} className="h-12 w-12 rounded-2xl object-cover" />
                         ) : (
                           <div className="h-12 w-12 rounded-2xl bg-slate-100" />
                         )}
