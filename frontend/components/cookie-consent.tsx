@@ -111,7 +111,7 @@ export default function CookieConsent() {
 
           <div className="flex min-w-0 flex-col gap-3 xl:min-w-[860px] xl:flex-row xl:items-stretch xl:justify-end">
             <CookieActionButton onClick={rejectOptional} icon={<BanIcon className="h-5 w-5" />}>
-              Refuza optionale
+              Doar cookie-uri necesare
             </CookieActionButton>
             <CookieActionButton
               onClick={() => setIsCustomizing((current) => !current)}
@@ -120,7 +120,7 @@ export default function CookieConsent() {
               Personalizeaza
             </CookieActionButton>
             <CookieLinkButton href="/gdpr" icon={<ArrowUpRightIcon className="h-5 w-5" />}>
-              Vezi pagina
+              Vezi detalii
             </CookieLinkButton>
             <button
               type="button"
