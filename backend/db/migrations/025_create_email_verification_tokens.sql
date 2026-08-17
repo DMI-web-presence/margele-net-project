@@ -4,9 +4,13 @@ DECLARE
   has_email_verified_at boolean;
 BEGIN
   FOR user_schema IN
-    SELECT schema_name
-    FROM (VALUES ('app_auth'), ('auth'), ('public')) AS schemas(schema_name)
-    WHERE to_regclass(format('%I.users', schema_name)) IS NOT NULL
+    SELECT namespace.nspname
+    FROM pg_class class
+    JOIN pg_namespace namespace ON namespace.oid = class.relnamespace
+    WHERE namespace.nspname IN ('app_auth', 'auth', 'public')
+      AND class.relname = 'users'
+      AND class.relkind IN ('r', 'p')
+      AND pg_has_role(class.relowner, 'MEMBER')
   LOOP
     SELECT EXISTS (
       SELECT 1
