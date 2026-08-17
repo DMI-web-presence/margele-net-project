@@ -931,21 +931,21 @@ async function handleProductList(requestUrl, res) {
 }
 
 async function handleProductDetails(res, productIdentifier) {
-  if (!(await hasTable('products'))) {
+  if (!(await hasTableInSchema('catalog', 'products'))) {
     sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
     return;
   }
 
   if (
-    !(await hasTable('categories')) ||
-    !(await hasTable('product_images')) ||
-    !(await hasTable('product_attributes')) ||
-    !(await hasTable('product_option_values'))
+    !(await hasTableInSchema('catalog', 'categories')) ||
+    !(await hasTableInSchema('catalog', 'product_images')) ||
+    !(await hasTableInSchema('catalog', 'product_attributes')) ||
+    !(await hasTableInSchema('catalog', 'product_option_values'))
   ) {
     const numericId = normalizeInteger(productIdentifier);
     const result = numericId
-      ? await pool.query('SELECT * FROM products WHERE id = $1 LIMIT 1', [numericId])
-      : await pool.query('SELECT * FROM products WHERE slug = $1 LIMIT 1', [productIdentifier]);
+      ? await pool.query('SELECT * FROM catalog.products WHERE id = $1 LIMIT 1', [numericId])
+      : await pool.query('SELECT * FROM catalog.products WHERE slug = $1 LIMIT 1', [productIdentifier]);
     const product = result.rows[0];
     if (!product) {
       sendJson(res, 404, { message: 'Produsul nu a fost gasit.' });
@@ -1024,31 +1024,31 @@ async function handleProductDetails(res, productIdentifier) {
               )
               ORDER BY product_category.is_primary DESC, linked_category.sort_order ASC, linked_category.name ASC
             )
-            FROM product_categories product_category
-            JOIN categories linked_category ON linked_category.id = product_category.category_id
+            FROM catalog.product_categories product_category
+            JOIN catalog.categories linked_category ON linked_category.id = product_category.category_id
             WHERE product_category.product_id = p.id
           ),
           '[]'::jsonb
         ) AS categories,
         COALESCE(review_summary.reviews_count, 0)::int AS reviews_count,
         COALESCE(review_summary.average_rating, 0)::numeric AS average_rating
-      FROM products p
-      LEFT JOIN categories c ON c.id = p.category_id
+      FROM catalog.products p
+      LEFT JOIN catalog.categories c ON c.id = p.category_id
       LEFT JOIN LATERAL (
         SELECT image_url
-        FROM product_images
+        FROM catalog.product_images
         WHERE product_id = p.id
         ORDER BY is_primary DESC, sort_order ASC, id ASC
         LIMIT 1
       ) primary_image ON true
-      LEFT JOIN product_images pi ON pi.product_id = p.id
-      LEFT JOIN product_attributes pa ON pa.product_id = p.id
-      LEFT JOIN product_option_values pov ON pov.product_id = p.id
+      LEFT JOIN catalog.product_images pi ON pi.product_id = p.id
+      LEFT JOIN catalog.product_attributes pa ON pa.product_id = p.id
+      LEFT JOIN catalog.product_option_values pov ON pov.product_id = p.id
       LEFT JOIN LATERAL (
         SELECT
           COUNT(*)::int AS reviews_count,
           ROUND(AVG(rating)::numeric, 2) AS average_rating
-        FROM product_reviews
+        FROM content.product_reviews
         WHERE product_id = p.id AND status = 'approved'
       ) review_summary ON true
       WHERE ${productFilter} AND COALESCE(p.status, 'active') = 'active'
