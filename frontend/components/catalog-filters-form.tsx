@@ -54,7 +54,7 @@ export default function CatalogFiltersForm({
   const [selectedSort, setSelectedSort] = useState(sort);
   const [activeColors, setActiveColors] = useState(selectedColors);
   const [activeSizes, setActiveSizes] = useState(selectedSizes);
-  const [isMounted, setIsMounted] = useState(false);
+  const portalRoot = typeof document === 'undefined' ? null : document.body;
 
   const selectedGroup = useMemo(
     () => categoryGroups.find((group) => group.id === selectedCategory) ?? categoryGroups[0],
@@ -80,10 +80,6 @@ export default function CatalogFiltersForm({
       setActiveSizes([]);
     });
   };
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!isMobileOpen) return;
@@ -149,7 +145,7 @@ export default function CatalogFiltersForm({
         </span>
       </button>
 
-      {isMounted && isMobileOpen
+      {portalRoot && isMobileOpen
         ? createPortal(
             <div className="fixed inset-0 z-50 touch-none bg-slate-950/35 lg:hidden">
               <button
@@ -166,7 +162,7 @@ export default function CatalogFiltersForm({
                 />
               </div>
             </div>,
-            document.body,
+            portalRoot,
           )
         : null}
 

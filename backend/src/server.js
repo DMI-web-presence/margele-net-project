@@ -8,6 +8,8 @@ const { URL } = require('url');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { Pool } = require('pg');
 const sharp = require('sharp');
+const { config, dbSearchPath, dbSearchSchemas } = require('./config');
+const { readJson, sendJson, setCorsHeaders } = require('./http-utils');
 const { createBrevoMailer } = require('./services/brevo-mail');
 const {
   SmartBillError,
@@ -15,63 +17,6 @@ const {
   createSmartBillClient,
 } = require('./services/smartbill');
 
-loadEnv(path.join(__dirname, '..', '.env'));
-loadEnv(path.join(__dirname, '..', '..', 'frontend', '.env'), false, [
-  'DATABASE_URL',
-  'JWT_SECRET',
-  'FRONTEND_ORIGIN',
-]);
-
-const config = {
-  port: Number(process.env.PORT || 3001),
-  databaseUrl: process.env.DATABASE_URL,
-  jwtSecret: process.env.JWT_SECRET,
-  frontendOrigin: normalizeConfiguredUrl(process.env.FRONTEND_ORIGIN) || 'http://localhost:3000',
-  adminEmails: parseCsv(process.env.ADMIN_EMAILS || ''),
-  googleClientId: process.env.GOOGLE_CLIENT_ID,
-  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  googleCallbackUrl:
-    normalizeConfiguredUrl(process.env.GOOGLE_CALLBACK_URL) ||
-    `http://localhost:${process.env.PORT || 3001}/auth/google/callback`,
-  backendPublicUrl:
-    normalizeConfiguredUrl(process.env.BACKEND_PUBLIC_URL) ||
-    `http://localhost:${process.env.PORT || 3001}`,
-  netopiaMode: process.env.NETOPIA_MODE || 'sandbox',
-  netopiaApiKey: process.env.NETOPIA_API_KEY,
-  netopiaPosSignature: process.env.NETOPIA_POS_SIGNATURE,
-  netopiaNotifyToken: process.env.NETOPIA_NOTIFY_TOKEN,
-  netopiaEmailTemplate: process.env.NETOPIA_EMAIL_TEMPLATE || '',
-  netopiaLanguage: process.env.NETOPIA_LANGUAGE || 'ro',
-  brevoEnabled: String(process.env.BREVO_ENABLED || '').toLowerCase() === 'true',
-  brevoApiKey: process.env.BREVO_API_KEY || '',
-  brevoSenderEmail: process.env.BREVO_SENDER_EMAIL || '',
-  brevoSenderName: process.env.BREVO_SENDER_NAME || 'Margele.net',
-  brevoReplyToEmail: process.env.BREVO_REPLY_TO_EMAIL || '',
-  brevoReplyToName: process.env.BREVO_REPLY_TO_NAME || '',
-  brevoAdminEmail: process.env.BREVO_ADMIN_EMAIL || '',
-  smartbillEnabled: String(process.env.SMARTBILL_ENABLED || '').toLowerCase() === 'true',
-  smartbillBaseUrl:
-    process.env.SMARTBILL_BASE_URL || 'https://ws.smartbill.ro/SBORO/api',
-  smartbillEmail: process.env.SMARTBILL_EMAIL || '',
-  smartbillToken: process.env.SMARTBILL_TOKEN || '',
-  smartbillCompanyVatCode: process.env.SMARTBILL_COMPANY_VAT_CODE || '',
-  smartbillInvoiceSeries: process.env.SMARTBILL_INVOICE_SERIES || '',
-  smartbillTaxName: process.env.SMARTBILL_TAX_NAME || 'Normala',
-  smartbillTaxPercentage: Number(process.env.SMARTBILL_TAX_PERCENTAGE || 21),
-  smartbillDueDays: Number(process.env.SMARTBILL_DUE_DAYS || 0),
-  smartbillSendEmail: String(process.env.SMARTBILL_SEND_EMAIL || '').toLowerCase() === 'true',
-  r2AccessKeyId: process.env.R2_ACCESS_KEY_ID || '',
-  r2SecretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
-  r2BucketName: process.env.R2_BUCKET_NAME || '',
-  r2Endpoint: process.env.R2_ENDPOINT || '',
-  r2PublicBaseUrl: process.env.R2_PUBLIC_BASE_URL || '',
-  r2Region: process.env.R2_REGION || 'auto',
-  productImageStorage: (process.env.PRODUCT_IMAGE_STORAGE || 'auto').toLowerCase(),
-  cookieName: 'auth_token',
-};
-
-const dbSearchSchemas = ['app_auth', 'catalog', 'commerce', 'content', 'public', 'auth'];
-const dbSearchPath = dbSearchSchemas.join(',');
 const uploadRoot = path.join(__dirname, '..', 'uploads');
 const productUploadDir = path.join(uploadRoot, 'products');
 const passwordResetCooldownSeconds = 60;
@@ -133,7 +78,7 @@ let conversationMessageColumnsCache = null;
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
-  setCorsHeaders(req, res);
+  setCorsHeaders(req, res, config);
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -463,76 +408,6 @@ server.on('error', (error) => {
 server.listen(config.port, () => {
   console.log(`Backend listening on http://127.0.0.1:${config.port}`);
 });
-
-function loadEnv(filePath, override = true, allowedKeys = null) {
-  let content = '';
-  try {
-    content = require('fs').readFileSync(filePath, 'utf8');
-  } catch {
-    return;
-  }
-
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const equalsIndex = trimmed.indexOf('=');
-    if (equalsIndex === -1) continue;
-
-    const key = trimmed.slice(0, equalsIndex).trim();
-    if (allowedKeys && !allowedKeys.includes(key)) continue;
-
-    const value = trimmed.slice(equalsIndex + 1).trim().replace(/^["']|["']$/g, '');
-    if (override || !process.env[key]) {
-      process.env[key] = value;
-    }
-  }
-}
-
-function setCorsHeaders(req, res) {
-  const origin = req.headers.origin;
-  const allowedOrigins = new Set([
-    config.frontendOrigin,
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-  ]);
-
-  if (origin && allowedOrigins.has(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
-}
-
-function sendJson(res, status, data, extraHeaders = {}) {
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    ...extraHeaders,
-  });
-  res.end(JSON.stringify(data));
-}
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-
-  const raw = Buffer.concat(chunks).toString('utf8');
-  if (!raw) return {};
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    const error = new Error('Invalid JSON body.');
-    error.status = 400;
-    throw error;
-  }
-}
 
 async function handleUploadedFile(requestUrl, res) {
   const relativePath = decodeURIComponent(requestUrl.pathname.replace(/^\/uploads\//, ''));
@@ -6867,22 +6742,6 @@ function cleanOptionalValue(value) {
   if (typeof value === 'boolean') return value;
   const text = String(value || '').trim();
   return text === '--' ? '' : text;
-}
-
-function normalizeConfiguredUrl(value) {
-  const text = String(value || '').trim();
-  if (!text) return '';
-  if (text.startsWith('//')) return `https:${text}`;
-  return text;
-}
-
-function parseCsv(value) {
-  return new Set(
-    String(value || '')
-      .split(',')
-      .map((item) => normalizeEmail(item))
-      .filter(Boolean),
-  );
 }
 
 function slugify(value) {

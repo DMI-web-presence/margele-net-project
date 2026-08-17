@@ -27,13 +27,13 @@ function EmptyFavoritesIllustration() {
         strokeLinejoin="round"
       />
       <path
-        d="M116 85c12-19 40-20 56 3"
+        d="M136 121c12-20 42-20 56 0"
         className="fill-none stroke-[#e11d48]"
         strokeWidth="8"
         strokeLinecap="round"
       />
-      <circle cx="79" cy="54" r="7" className="fill-[#e11d48]" />
-      <circle cx="282" cy="88" r="6" className="fill-[#e11d48]" />
+      <circle cx="137" cy="87" r="7" className="fill-[#e11d48]" />
+      <circle cx="223" cy="87" r="7" className="fill-[#e11d48]" />
       <circle cx="255" cy="159" r="5" className="fill-slate-300" />
     </svg>
   );

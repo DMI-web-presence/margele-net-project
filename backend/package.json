@@ -28,7 +28,9 @@
     "admin:set-user": "node scripts/set-admin-user.js",
     "security:audit": "node scripts/audit-security-config.js",
     "security:r2-lifecycle": "node scripts/configure-r2-lifecycle.js",
-    "test": "node --test",
+    "test": "npm run test:unit",
+    "test:unit": "node --test \"src/**/*.test.js\"",
+    "test:restore": "node scripts/test-restore.js",
     "dev": "node scripts/kill-dev-port.js 3001 && node src/server.js",
     "start": "node src/server.js"
   },

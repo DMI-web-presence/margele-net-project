@@ -73,8 +73,10 @@ Or run the automated restore smoke test. It creates a temporary database, restor
 
 ```bash
 cd backend
-npm.cmd run backup:test-restore
+npm.cmd run test:restore
 ```
+
+`npm test` runs lightweight backend unit tests only. Keep restore drills separate because they require a real local database and a backup file.
 
 ## Production Rule
 
@@ -238,3 +240,4 @@ More detail:
 - `docs/restore-drill.md`
 - `docs/r2-security-checklist.md`
 - `docs/db-hardening.md`
+- `docs/product-platform-boundaries.md`

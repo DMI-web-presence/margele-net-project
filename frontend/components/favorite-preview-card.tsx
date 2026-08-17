@@ -18,13 +18,14 @@ const numberFormatter = new Intl.NumberFormat('ro-RO', {
 type FavoritePreviewCardProps = {
   items: CartItem[];
   totalCount: number;
+  className?: string;
 };
 
-export default function FavoritePreviewCard({ items, totalCount }: FavoritePreviewCardProps) {
+export default function FavoritePreviewCard({ items, totalCount, className = '' }: FavoritePreviewCardProps) {
   const { removeFromFavorites } = useCart();
 
   return (
-    <div className="w-[320px] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+    <div className={`w-[320px] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ${className}`}>
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <p className="text-sm font-semibold text-slate-900">Favoritele tale</p>
         <p className="text-xs font-medium uppercase tracking-[0.25em] text-slate-500">{totalCount} produse</p>

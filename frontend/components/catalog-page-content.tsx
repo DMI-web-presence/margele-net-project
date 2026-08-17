@@ -371,9 +371,9 @@ export default function CatalogPageContent({
             subcategory={query.subcategory}
             sort={selectedSort}
             colorOptions={colorOptions}
-            selectedColors={query.colors.filter((value) => colorOptions.includes(value))}
+            selectedColors={getSelectedFacetValues(query.colors, colorOptions, true)}
             sizeOptions={sizeOptions}
-            selectedSizes={query.sizes.filter((value) => sizeOptions.includes(value))}
+            selectedSizes={getSelectedFacetValues(query.sizes, sizeOptions)}
             sortOptions={sortOptions}
             totalProducts={filteredProducts.length}
           />
@@ -868,15 +868,60 @@ function getProductFacetValues(product: Product, preferredNames: string[]) {
         ? getTextDimensionValues(product)
         : [];
 
-  return Array.from(new Set([...structuredValues, ...textValues]))
-    .filter(Boolean)
+  return uniqueFacetValues([...structuredValues, ...textValues], preferredNames === colorOptionNames)
     .sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
 }
 
 function getOptionValuesByName(products: Product[], preferredNames: string[]) {
-  return Array.from(
-    new Set(products.flatMap((product) => getProductFacetValues(product, preferredNames))),
+  return uniqueFacetValues(
+    products.flatMap((product) => getProductFacetValues(product, preferredNames)),
+    preferredNames === colorOptionNames,
   ).sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
+}
+
+function getSelectedFacetValues(selectedValues: string[], options: string[], caseInsensitive = false) {
+  const optionMap = caseInsensitive
+    ? new Map(options.map((option) => [normalizeFacetValue(option), option]))
+    : null;
+  const matchedValues = selectedValues.map((value) =>
+    optionMap ? optionMap.get(normalizeFacetValue(value)) || '' : options.includes(value) ? value : '',
+  );
+
+  return uniqueFacetValues(matchedValues, caseInsensitive);
+}
+
+function uniqueFacetValues(values: string[], preferCapitalized = false) {
+  const valueMap = new Map<string, string>();
+
+  for (const rawValue of values) {
+    const value = String(rawValue || '').trim();
+    if (!value) continue;
+
+    const key = preferCapitalized ? normalizeFacetValue(value) : value;
+    const current = valueMap.get(key);
+    if (!current || (preferCapitalized && isBetterCapitalizedFacetValue(value, current))) {
+      valueMap.set(key, value);
+    }
+  }
+
+  return Array.from(valueMap.values());
+}
+
+function normalizeFacetValue(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO');
+}
+
+function isBetterCapitalizedFacetValue(candidate: string, current: string) {
+  return startsWithCapitalLetter(candidate) && !startsWithCapitalLetter(current);
+}
+
+function startsWithCapitalLetter(value: string) {
+  const firstLetter = value.trim().match(/\p{L}/u)?.[0];
+  return Boolean(
+    firstLetter &&
+      firstLetter === firstLetter.toLocaleUpperCase('ro-RO') &&
+      firstLetter !== firstLetter.toLocaleLowerCase('ro-RO'),
+  );
 }
 
 function productMatchesFacetValues(
@@ -885,6 +930,11 @@ function productMatchesFacetValues(
   preferredNames: string[],
 ) {
   if (selectedValues.length === 0) return true;
+
+  if (preferredNames === colorOptionNames) {
+    const productValues = new Set(getProductFacetValues(product, preferredNames).map(normalizeFacetValue));
+    return selectedValues.some((value) => productValues.has(normalizeFacetValue(value)));
+  }
 
   const productValues = new Set(getProductFacetValues(product, preferredNames));
   return selectedValues.some((value) => productValues.has(value));

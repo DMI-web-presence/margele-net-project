@@ -702,8 +702,16 @@ export default function NavBar() {
             </Link>
 
             {isFavoritePreviewOpen ? (
-              <div className="absolute right-0 top-full z-30 pt-3">
-                <FavoritePreviewCard items={favoriteItems} totalCount={favoriteCount} />
+              <div
+                className={`absolute right-0 top-full z-30 pt-3 max-md:fixed max-md:left-4 max-md:right-4 max-md:pt-2 ${
+                  isNavCompact ? 'max-md:top-14' : 'max-md:top-20'
+                }`}
+              >
+                <FavoritePreviewCard
+                  items={favoriteItems}
+                  totalCount={favoriteCount}
+                  className="max-md:w-full"
+                />
               </div>
             ) : null}
           </div>

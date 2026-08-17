@@ -551,16 +551,48 @@ const getProductFacetValues = (product: Product, preferredNames: string[]) => {
           ? getTextPackageValues(product)
         : [];
 
-  return Array.from(new Set([...structuredValues, ...textValues]))
-    .filter(Boolean)
+  return uniqueFacetValues([...structuredValues, ...textValues], preferredNames === colorOptionNames)
     .sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
 };
 
 
 const getOptionValuesByName = (products: Product[], preferredNames: string[]) =>
-  Array.from(
-    new Set(products.flatMap((product) => getProductFacetValues(product, preferredNames))),
+  uniqueFacetValues(
+    products.flatMap((product) => getProductFacetValues(product, preferredNames)),
+    preferredNames === colorOptionNames,
   ).sort((left, right) => left.localeCompare(right, 'ro', { numeric: true }));
+
+const uniqueFacetValues = (values: string[], preferCapitalized = false) => {
+  const valueMap = new Map<string, string>();
+
+  for (const rawValue of values) {
+    const value = String(rawValue || '').trim();
+    if (!value) continue;
+
+    const key = preferCapitalized ? normalizeFacetValue(value) : value;
+    const current = valueMap.get(key);
+    if (!current || (preferCapitalized && isBetterCapitalizedFacetValue(value, current))) {
+      valueMap.set(key, value);
+    }
+  }
+
+  return Array.from(valueMap.values());
+};
+
+const normalizeFacetValue = (value: string) =>
+  value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO');
+
+const isBetterCapitalizedFacetValue = (candidate: string, current: string) =>
+  startsWithCapitalLetter(candidate) && !startsWithCapitalLetter(current);
+
+const startsWithCapitalLetter = (value: string) => {
+  const firstLetter = value.trim().match(/\p{L}/u)?.[0];
+  return Boolean(
+    firstLetter &&
+      firstLetter === firstLetter.toLocaleUpperCase('ro-RO') &&
+      firstLetter !== firstLetter.toLocaleLowerCase('ro-RO'),
+  );
+};
 
 const productMatchesFacetValues = (
   product: Product,
@@ -568,6 +600,11 @@ const productMatchesFacetValues = (
   preferredNames: string[],
 ) => {
   if (selectedValues.length === 0) return true;
+
+  if (preferredNames === colorOptionNames) {
+    const productValues = new Set(getProductFacetValues(product, preferredNames).map(normalizeFacetValue));
+    return selectedValues.some((value) => productValues.has(normalizeFacetValue(value)));
+  }
 
   const productValues = new Set(getProductFacetValues(product, preferredNames));
   return selectedValues.some((value) => productValues.has(value));
