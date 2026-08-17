@@ -657,7 +657,7 @@ async function handleEmailExists(requestUrl, res) {
 }
 
 async function handleProductList(requestUrl, res) {
-  if (!(await hasTable('products'))) {
+  if (!(await hasTableInSchema('catalog', 'products'))) {
     sendJson(res, 200, []);
     return;
   }
@@ -698,8 +698,8 @@ async function handleProductList(requestUrl, res) {
               )
               ORDER BY product_category.is_primary DESC, linked_category.sort_order ASC, linked_category.name ASC
             )
-            FROM product_categories product_category
-            JOIN categories linked_category ON linked_category.id = product_category.category_id
+            FROM catalog.product_categories product_category
+            JOIN catalog.categories linked_category ON linked_category.id = product_category.category_id
             WHERE product_category.product_id = p.id
           ),
           '[]'::jsonb
@@ -714,7 +714,7 @@ async function handleProductList(requestUrl, res) {
               )
               ORDER BY pa.sort_order ASC, pa.id ASC
             )
-            FROM product_attributes pa
+            FROM catalog.product_attributes pa
             WHERE pa.product_id = p.id
           ),
           '[]'::jsonb
@@ -740,7 +740,7 @@ async function handleProductList(requestUrl, res) {
               )
               ORDER BY pov.sort_order ASC, pov.id ASC
             )
-            FROM product_option_values pov
+            FROM catalog.product_option_values pov
             WHERE pov.product_id = p.id
           ),
           '[]'::jsonb
@@ -753,11 +753,11 @@ async function handleProductList(requestUrl, res) {
         0::numeric AS average_rating,`
         }
         p.created_at
-      FROM products p
-      LEFT JOIN categories c ON c.id = p.category_id
+      FROM catalog.products p
+      LEFT JOIN catalog.categories c ON c.id = p.category_id
       LEFT JOIN LATERAL (
         SELECT image_url
-        FROM product_images
+        FROM catalog.product_images
         WHERE product_id = p.id
         ORDER BY is_primary DESC, sort_order ASC, id ASC
         LIMIT 1
@@ -768,7 +768,7 @@ async function handleProductList(requestUrl, res) {
         SELECT
           COUNT(*)::int AS reviews_count,
           ROUND(AVG(rating)::numeric, 2) AS average_rating
-        FROM product_reviews
+        FROM content.product_reviews
         WHERE product_id = p.id AND status = 'approved'
       ) review_summary ON true`
           : ''
@@ -1214,7 +1214,7 @@ async function handleAdminReviewUpdate(req, res, reviewId) {
 }
 
 async function handleCategoryList(res) {
-  if (!(await hasTable('categories'))) {
+  if (!(await hasTableInSchema('catalog', 'categories'))) {
     sendJson(res, 200, []);
     return;
   }
@@ -1225,10 +1225,10 @@ async function handleCategoryList(res) {
       parent.name AS parent_name,
       parent.slug AS parent_slug,
       COUNT(DISTINCT p.id)::int AS product_count
-    FROM categories c
-    LEFT JOIN categories parent ON parent.id = c.parent_id
-    LEFT JOIN product_categories pc ON pc.category_id = c.id
-    LEFT JOIN products p ON p.id = pc.product_id AND COALESCE(p.status, 'active') = 'active'
+    FROM catalog.categories c
+    LEFT JOIN catalog.categories parent ON parent.id = c.parent_id
+    LEFT JOIN catalog.product_categories pc ON pc.category_id = c.id
+    LEFT JOIN catalog.products p ON p.id = pc.product_id AND COALESCE(p.status, 'active') = 'active'
     WHERE c.is_active = true
     GROUP BY c.id, parent.id
     ORDER BY c.sort_order ASC, c.name ASC
@@ -1238,7 +1238,7 @@ async function handleCategoryList(res) {
 }
 
 async function handleCategoryDetails(res, categoryIdentifier) {
-  if (!(await hasTable('categories'))) {
+  if (!(await hasTableInSchema('catalog', 'categories'))) {
     sendJson(res, 404, { message: 'Categoria nu a fost gasita.' });
     return;
   }
@@ -1251,10 +1251,10 @@ async function handleCategoryDetails(res, categoryIdentifier) {
         parent.name AS parent_name,
         parent.slug AS parent_slug,
         COUNT(DISTINCT p.id)::int AS product_count
-      FROM categories c
-      LEFT JOIN categories parent ON parent.id = c.parent_id
-      LEFT JOIN product_categories pc ON pc.category_id = c.id
-      LEFT JOIN products p ON p.id = pc.product_id AND COALESCE(p.status, 'active') = 'active'
+      FROM catalog.categories c
+      LEFT JOIN catalog.categories parent ON parent.id = c.parent_id
+      LEFT JOIN catalog.product_categories pc ON pc.category_id = c.id
+      LEFT JOIN catalog.products p ON p.id = pc.product_id AND COALESCE(p.status, 'active') = 'active'
       WHERE ${numericId ? 'c.id = $1' : 'c.slug = $1'} AND c.is_active = true
       GROUP BY c.id, parent.id
       LIMIT 1
@@ -4264,6 +4264,20 @@ async function hasTable(tableName) {
   return result.rowCount > 0;
 }
 
+async function hasTableInSchema(schemaName, tableName) {
+  const result = await pool.query(
+    `
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = $1 AND table_name = $2
+      LIMIT 1
+    `,
+    [schemaName, tableName],
+  );
+
+  return result.rowCount > 0;
+}
+
 async function insertUser(data) {
   return insertRow('users', data);
 }
@@ -6290,7 +6304,7 @@ function buildProductFilters(requestUrl) {
     clauses.push(
       `EXISTS (
         SELECT 1
-        FROM product_categories pc_filter
+        FROM catalog.product_categories pc_filter
         WHERE pc_filter.product_id = p.id AND pc_filter.category_id = $${values.length}
       )`,
     );
@@ -6301,8 +6315,8 @@ function buildProductFilters(requestUrl) {
     clauses.push(
       `EXISTS (
         SELECT 1
-        FROM product_categories pc_filter
-        JOIN categories c_filter ON c_filter.id = pc_filter.category_id
+        FROM catalog.product_categories pc_filter
+        JOIN catalog.categories c_filter ON c_filter.id = pc_filter.category_id
         WHERE pc_filter.product_id = p.id AND c_filter.slug = $${values.length}
       )`,
     );
