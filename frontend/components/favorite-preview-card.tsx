@@ -32,7 +32,15 @@ export default function FavoritePreviewCard({ items, totalCount, className = '' 
       </div>
 
       {items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-500">Nu ai produse favorite momentan.</p>
+        <div className="space-y-3 py-6">
+          <p className="text-center text-sm text-slate-500">Nu ai produse favorite momentan.</p>
+          <Link
+            href="/favorites"
+            className="inline-flex w-full items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700"
+          >
+            Vezi favorite
+          </Link>
+        </div>
       ) : (
         <div className="mt-3 space-y-4">
           <ul className="max-h-72 space-y-3 overflow-auto pr-1">

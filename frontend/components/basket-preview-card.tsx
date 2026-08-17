@@ -18,9 +18,10 @@ const numberFormatter = new Intl.NumberFormat('ro-RO', {
 type BasketPreviewCardProps = {
   items: CartItem[];
   totalCount: number;
+  className?: string;
 };
 
-export default function BasketPreviewCard({ items, totalCount }: BasketPreviewCardProps) {
+export default function BasketPreviewCard({ items, totalCount, className = '' }: BasketPreviewCardProps) {
   const { removeFromCart, incrementCartQuantity, decrementCartQuantity } = useCart();
   const totalCost = items.reduce(
     (sum, item) => sum + Number(item.product.price) * item.quantity,
@@ -28,14 +29,22 @@ export default function BasketPreviewCard({ items, totalCount }: BasketPreviewCa
   );
 
   return (
-    <div className="w-[320px] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+    <div className={`w-[320px] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl ${className}`}>
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <p className="text-sm font-semibold text-slate-900">Cosul tau</p>
         <p className="text-xs font-medium uppercase tracking-[0.25em] text-slate-500">{totalCount} produse</p>
       </div>
 
       {items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-500">Nu ai produse adaugate in cos.</p>
+        <div className="space-y-3 py-6">
+          <p className="text-center text-sm text-slate-500">Nu ai produse adaugate in cos.</p>
+          <Link
+            href="/basket"
+            className="inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+          >
+            Vezi cosul
+          </Link>
+        </div>
       ) : (
         <div className="mt-3 space-y-4">
           <ul className="max-h-72 space-y-3 overflow-auto pr-1">

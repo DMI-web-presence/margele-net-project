@@ -329,6 +329,8 @@ export default function NavBar() {
   const isMobileMenuOpenRef = useRef(false);
   const mobileMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const favoritePreviewRef = useRef<HTMLDivElement | null>(null);
+  const basketPreviewRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     isMobileMenuOpenRef.current = isMobileMenuOpen;
@@ -478,6 +480,28 @@ export default function NavBar() {
     return () => window.removeEventListener('pointerdown', handlePointerDown);
   }, [isMobileMenuOpen]);
 
+  useEffect(() => {
+    if (!isFavoritePreviewOpen && !isBasketPreviewOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+
+      if (
+        favoritePreviewRef.current?.contains(target) ||
+        basketPreviewRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setIsFavoritePreviewOpen(false);
+      setIsBasketPreviewOpen(false);
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [isFavoritePreviewOpen, isBasketPreviewOpen]);
+
   if (pathname?.startsWith('/autentificare')) {
     return null;
   }
@@ -490,6 +514,32 @@ export default function NavBar() {
     router.push(query ? `/catalog?search=${encodeURIComponent(query)}` : '/catalog');
     setSearchQuery('');
     setIsSearchOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
+  const isMobilePreviewInteraction = () =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(max-width: 767px), (hover: none), (pointer: coarse)').matches;
+
+  const handleFavoriteTriggerClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isMobilePreviewInteraction()) return;
+
+    event.preventDefault();
+    setIsHiddenOnMobile(false);
+    setIsFavoritePreviewOpen((current) => !current);
+    setIsBasketPreviewOpen(false);
+    setIsAccountPreviewOpen(false);
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleBasketTriggerClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isMobilePreviewInteraction()) return;
+
+    event.preventDefault();
+    setIsHiddenOnMobile(false);
+    setIsBasketPreviewOpen((current) => !current);
+    setIsFavoritePreviewOpen(false);
+    setIsAccountPreviewOpen(false);
     setIsMobileMenuOpen(false);
   };
 
@@ -677,19 +727,26 @@ export default function NavBar() {
           </div>
 
           <div
+            ref={favoritePreviewRef}
             className="relative"
-            onMouseEnter={() => setIsFavoritePreviewOpen(true)}
-            onMouseLeave={() => setIsFavoritePreviewOpen(false)}
+            onMouseEnter={() => {
+              if (!isMobilePreviewInteraction()) setIsFavoritePreviewOpen(true);
+            }}
+            onMouseLeave={() => {
+              if (!isMobilePreviewInteraction()) setIsFavoritePreviewOpen(false);
+            }}
           >
             <Link
               href="/favorites"
               aria-label="Favorite"
               id="favorite-icon-button"
+              aria-expanded={isFavoritePreviewOpen}
               className={`relative inline-flex items-center justify-center rounded-full border border-violet-200 transition-[height,width,background-color,border-color] duration-500 ease-out hover:border-violet-300 hover:bg-slate-100 ${
                 isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
               } ${
                 isFavoritePulsing ? 'animate-[favorite-bump_400ms_ease-out]' : ''
               }`}
+              onClick={handleFavoriteTriggerClick}
             >
               <span className={favoriteCount > 0 ? 'text-rose-600' : 'text-slate-700'}>
                 <FavoriteIcon filled={favoriteCount > 0} />
@@ -717,19 +774,26 @@ export default function NavBar() {
           </div>
 
           <div
+            ref={basketPreviewRef}
             className="relative"
-            onMouseEnter={() => setIsBasketPreviewOpen(true)}
-            onMouseLeave={() => setIsBasketPreviewOpen(false)}
+            onMouseEnter={() => {
+              if (!isMobilePreviewInteraction()) setIsBasketPreviewOpen(true);
+            }}
+            onMouseLeave={() => {
+              if (!isMobilePreviewInteraction()) setIsBasketPreviewOpen(false);
+            }}
           >
             <Link
               href="/basket"
               aria-label="Cos"
               id="basket-icon-button"
+              aria-expanded={isBasketPreviewOpen}
               className={`relative inline-flex items-center justify-center rounded-full border border-violet-200 text-slate-700 transition-[height,width,background-color,border-color,color] duration-500 ease-out hover:border-violet-300 hover:bg-slate-100 hover:text-slate-900 ${
                 isNavCompact ? 'h-9 w-9' : 'h-10 w-10'
               } ${
                 isBasketPulsing ? 'animate-[basket-bump_400ms_ease-out]' : ''
               }`}
+              onClick={handleBasketTriggerClick}
             >
               <span className={count > 0 ? 'text-indigo-600' : 'text-slate-700'}>
                 <BasketIcon filled={count > 0} />
@@ -742,8 +806,12 @@ export default function NavBar() {
             </Link>
 
             {isBasketPreviewOpen ? (
-              <div className="absolute right-0 top-full z-30 pt-3">
-                <BasketPreviewCard items={items} totalCount={count} />
+              <div
+                className={`absolute right-0 top-full z-30 pt-3 max-md:fixed max-md:left-4 max-md:right-4 max-md:pt-2 ${
+                  isNavCompact ? 'max-md:top-14' : 'max-md:top-20'
+                }`}
+              >
+                <BasketPreviewCard items={items} totalCount={count} className="max-md:w-full" />
               </div>
             ) : null}
           </div>
