@@ -4034,14 +4034,7 @@ async function handleNetopiaPaymentStart(req, res) {
     });
     const responseOrder = orderResponse(updatedOrder || order, insertedItems);
     void sendOrderEmails({ user, order: responseOrder, items: insertedItems });
-    if (paymentState.paymentStatus === 'paid' && smartBillClient.isConfigured()) {
-      void issueSmartBillInvoice(order.id, {
-        requirePaid: true,
-        sendEmail: config.smartbillSendEmail,
-      }).catch((error) => {
-        console.error(`SmartBill invoice failed for order ${order.order_number}:`, error);
-      });
-    }
+    // Automatic invoicing disabled
 
     sendJson(res, 201, {
       order: responseOrder,
@@ -4131,14 +4124,7 @@ async function handleNetopiaNotify(req, requestUrl, res) {
 
   sendJson(res, 200, { ok: true });
 
-  if (paymentState.paymentStatus === 'paid' && smartBillClient.isConfigured()) {
-    void issueSmartBillInvoice(order.id, {
-      requirePaid: true,
-      sendEmail: config.smartbillSendEmail,
-    }).catch((error) => {
-      console.error(`SmartBill invoice failed for order ${order.order_number}:`, error);
-    });
-  }
+  // Automatic invoicing disabled
 }
 
 async function handleAddressCreate(req, res) {
