@@ -43,6 +43,9 @@ if (!config.jwtSecret) {
 const pool = new Pool({
   connectionString: config.databaseUrl,
   options: `-c search_path=${dbSearchPath}`,
+  ssl: config.databaseUrl.includes('localhost') || config.databaseUrl.includes('127.0.0.1')
+    ? false
+    : { rejectUnauthorized: false },
 });
 
 const r2Client = createR2Client(config);
