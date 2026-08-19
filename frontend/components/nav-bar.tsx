@@ -558,7 +558,13 @@ export default function NavBar() {
           href="/"
           className="inline-flex items-center"
           aria-label="Margele.net"
-          onClick={() => setIsMobileMenuOpen(false)}
+          onClick={(event) => {
+            setIsMobileMenuOpen(false);
+            if (pathname === '/') {
+              event.preventDefault();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
         >
           <Image
             src="/margelenet-logo-nav-bar-cropped.png"

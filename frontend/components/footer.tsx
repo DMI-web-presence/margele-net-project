@@ -318,14 +318,13 @@ export default function Footer() {
           <p>
             Crafted with ❤️ by{' '}
             <a
-              href="https://www.linkedin.com/in/marius-dorobantu-07986a129/"
+              href="https://mdisoftware.dev/"
               target="_blank"
               rel="noreferrer noopener"
               className="font-medium text-white transition hover:text-white/80"
             >
-              MDI
-            </a>{' '}
-            - Building your modern web presence
+              MDI - Building your modern web presence
+            </a>
           </p>
         </div>
       </div>
