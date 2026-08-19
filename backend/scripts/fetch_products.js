@@ -1,6 +1,6 @@
-const http = require('http');
+const https = require('https');
 
-http.get('http://localhost:3001/products', (res) => {
+https.get('https://margele-net-project.onrender.com/products', (res) => {
   let data = '';
   res.on('data', (chunk) => data += chunk);
   res.on('end', () => {

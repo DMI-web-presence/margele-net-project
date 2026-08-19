@@ -1649,6 +1649,13 @@ async function handleAdminOrderUpdate(req, res, orderId) {
   const input = normalizeAdminOrderUpdateInput(body, existing);
 
   await updateRow('orders', orderId, input);
+
+  if (input.payment_status === 'paid' && existing.paymentStatus !== 'paid') {
+    await reduceStockForOrder(orderId).catch((err) => {
+      console.error(`Failed to reduce stock for order ${orderId} on manual payment update:`, err);
+    });
+  }
+
   const updated = await getAdminOrderById(orderId);
 
   sendJson(res, 200, updated);
@@ -4092,15 +4099,32 @@ async function handleNetopiaNotify(req, requestUrl, res) {
   }
 
   const paymentState = netopiaPaymentState(body);
-  await updateOrderPayment(order.id, {
-    status: paymentState.orderStatus,
-    payment_status: paymentState.paymentStatus,
-    provider_payment_id: payment.ntpID || order.provider_payment_id || null,
-    provider_response: JSON.stringify(body),
-    paid_at: paymentState.paymentStatus === 'paid' ? new Date() : order.paid_at || null,
-    cancelled_at: paymentState.paymentStatus === 'cancelled' ? new Date() : order.cancelled_at || null,
-    payment_error: paymentState.errorMessage || payment.message || null,
-  });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query('BEGIN');
+
+    await updateRowWithClient(dbClient, 'orders', order.id, {
+      status: paymentState.orderStatus,
+      payment_status: paymentState.paymentStatus,
+      provider_payment_id: payment.ntpID || order.provider_payment_id || null,
+      provider_response: JSON.stringify(body),
+      paid_at: paymentState.paymentStatus === 'paid' ? new Date() : order.paid_at || null,
+      cancelled_at: paymentState.paymentStatus === 'cancelled' ? new Date() : order.cancelled_at || null,
+      payment_error: paymentState.errorMessage || payment.message || null,
+      updated_at: new Date(),
+    });
+
+    if (paymentState.paymentStatus === 'paid') {
+      await reduceStockForOrder(order.id, dbClient);
+    }
+
+    await dbClient.query('COMMIT');
+  } catch (error) {
+    await dbClient.query('ROLLBACK');
+    throw error;
+  } finally {
+    dbClient.release();
+  }
 
   sendJson(res, 200, { ok: true });
 
@@ -5220,6 +5244,77 @@ function netopiaAmountMatches(providerAmount, orderTotal) {
 
 async function updateOrderPayment(orderId, updates) {
   return updateRow('orders', orderId, updates);
+}
+
+async function reduceStockForOrder(orderId, client = null) {
+  const dbClient = client || await pool.connect();
+  const releaseNeeded = !client;
+
+  try {
+    if (releaseNeeded) {
+      await dbClient.query('BEGIN');
+    }
+
+    // Lock the order row to prevent concurrent updates
+    const orderResult = await dbClient.query(
+      'SELECT id, payment_status, stock_reduced FROM orders WHERE id = $1 FOR UPDATE',
+      [orderId]
+    );
+    const order = orderResult.rows[0];
+    if (!order) {
+      throw new Error('Comanda nu a fost gasita pentru actualizarea stocului.');
+    }
+
+    // Only reduce stock if it has not been reduced already
+    if (!order.stock_reduced) {
+      const itemsResult = await dbClient.query(
+        'SELECT product_id, variant_id, quantity FROM order_items WHERE order_id = $1',
+        [orderId]
+      );
+      const items = itemsResult.rows;
+
+      for (const item of items) {
+        const qty = Number(item.quantity || 0);
+        if (qty <= 0) continue;
+
+        if (item.variant_id) {
+          // Decrement variant quantity
+          await dbClient.query(
+            'UPDATE product_option_values SET quantity = GREATEST(0, quantity - $1) WHERE id = $2',
+            [qty, item.variant_id]
+          );
+          console.log(`[STOCK] Decremented variant ID ${item.variant_id} by ${qty}`);
+        } else if (item.product_id) {
+          // Decrement simple product quantity
+          await dbClient.query(
+            'UPDATE products SET stock_quantity = GREATEST(0, stock_quantity - $1) WHERE id = $2',
+            [qty, item.product_id]
+          );
+          console.log(`[STOCK] Decremented product ID ${item.product_id} by ${qty}`);
+        }
+      }
+
+      // Mark stock as reduced
+      await dbClient.query(
+        'UPDATE orders SET stock_reduced = true, updated_at = NOW() WHERE id = $1',
+        [orderId]
+      );
+      console.log(`[STOCK] Order ID ${orderId} stock marked as reduced`);
+    }
+
+    if (releaseNeeded) {
+      await dbClient.query('COMMIT');
+    }
+  } catch (error) {
+    if (releaseNeeded) {
+      await dbClient.query('ROLLBACK');
+    }
+    throw error;
+  } finally {
+    if (releaseNeeded) {
+      dbClient.release();
+    }
+  }
 }
 
 async function issueSmartBillInvoice(orderId, options = {}) {
