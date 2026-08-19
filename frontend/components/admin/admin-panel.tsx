@@ -5024,28 +5024,6 @@ export default function AdminPanel() {
                         >
                           {smartBillAction === 'create' ? 'Se emite...' : 'Emite in SmartBill'}
                         </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => void handleSmartBillPdf()}
-                          disabled={smartBillAction !== null || !selectedBillingOrder.smartbillNumber}
-                          className="cursor-pointer rounded-2xl"
-                        >
-                          {smartBillAction === 'pdf' ? 'Se descarca...' : 'Descarca PDF'}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => void handleSmartBillSend()}
-                          disabled={
-                            smartBillAction !== null ||
-                            !selectedBillingOrder.smartbillNumber ||
-                            !selectedBillingOrder.customer.email
-                          }
-                          className="cursor-pointer rounded-2xl"
-                        >
-                          {smartBillAction === 'send' ? 'Se trimite...' : 'Trimite pe email'}
-                        </Button>
                       </div>
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
