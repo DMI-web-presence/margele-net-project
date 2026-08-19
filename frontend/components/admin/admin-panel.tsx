@@ -5050,17 +5050,10 @@ export default function AdminPanel() {
                     </div>
                     <div className="grid gap-4 md:grid-cols-2">
                       <DashboardField label="Status factura">
-                        <DashboardSelect
+                        <DashboardInput
                           value={billingDraftInvoiceStatus}
-                          onChange={(event) => setBillingDraftInvoiceStatus(event.target.value)}
-                          disabled={selectedBillingOrder.invoiceProvider === 'smartbill'}
-                        >
-                          {['negenerata', 'in_generare', 'generata', 'trimisa', 'eroare', 'anulata'].map((statusOption) => (
-                            <option key={statusOption} value={statusOption}>
-                              {statusOption}
-                            </option>
-                          ))}
-                        </DashboardSelect>
+                          readOnly
+                        />
                       </DashboardField>
                       <DashboardField label="Numar factura">
                         <DashboardInput value={billingDraftInvoiceNumber} onChange={(event) => setBillingDraftInvoiceNumber(event.target.value)} placeholder="Ex: INV-2026-0012" readOnly={selectedBillingOrder.invoiceProvider === 'smartbill'} />
