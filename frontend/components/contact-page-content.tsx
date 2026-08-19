@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import Reveal from '@/components/reveal';
 import { Textarea } from '@/components/ui/textarea';
 import { createFormSpamState } from '@/lib/form-spam-protection';
+import { z } from 'zod';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
@@ -20,16 +21,60 @@ const inquiryTopics = [
   'Alt subiect',
 ];
 
+const contactFormSchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Numele complet trebuie sa aiba cel putin 2 caractere')
+    .max(100, 'Numele complet nu poate depasi 100 de caractere'),
+  contactDetail: z
+    .string()
+    .min(5, 'Emailul sau telefonul este prea scurt')
+    .max(100, 'Emailul sau telefonul este prea lung')
+    .refine(
+      (val) => {
+        const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+        if (isEmail) return true;
+        const clean = val.replace(/\s+/g, '').replace(/[-\(\)\.]/g, '');
+        return /^(?:\+40|0040|40)?(0?[237][0-9]{8})$/.test(clean);
+      },
+      { message: 'Introdu o adresa de email valida sau un numar de telefon valid (ex: 07xx xxx xxx)' }
+    ),
+  topic: z.string().optional().or(z.literal('')),
+  message: z
+    .string()
+    .min(10, 'Mesajul trebuie sa aiba cel putin 10 caractere')
+    .max(3000, 'Mesajul nu poate depasi 3000 de caractere'),
+});
+
 export default function ContactPageContent() {
   const [name, setName] = useState('');
   const [contactDetail, setContactDetail] = useState('');
   const [topic, setTopic] = useState('');
   const [message, setMessage] = useState('');
+  const [validationErrors, setValidationErrors] = useState<Partial<Record<'name' | 'contactDetail' | 'topic' | 'message', string>>>({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitAnimationVisible, setIsSubmitAnimationVisible] = useState(false);
   const [spamState, setSpamState] = useState(() => createFormSpamState());
+
+  const handleFieldChange = (key: 'name' | 'contactDetail' | 'topic' | 'message', value: string) => {
+    let finalValue = value;
+    if (key === 'contactDetail') {
+      const isPhoneLike = /^[+\d\s\-(\)\.]*$/.test(value) && !/[a-zA-Z]/.test(value);
+      if (isPhoneLike) {
+        finalValue = formatRomanianPhone(value);
+      }
+    }
+    if (key === 'name') setName(finalValue);
+    if (key === 'contactDetail') setContactDetail(finalValue);
+    if (key === 'topic') setTopic(finalValue);
+    if (key === 'message') setMessage(finalValue);
+
+    if (validationErrors[key]) {
+      setValidationErrors((current) => ({ ...current, [key]: undefined }));
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -43,16 +88,26 @@ export default function ContactPageContent() {
       formStartedAt: spamState.formStartedAt,
     };
 
-    if (!payload.name || !payload.contactDetail || !payload.message) {
-      setSuccess('');
-      setError('Completeaza numele, un mod de contact si mesajul.');
+    setValidationErrors({});
+    setError('');
+    setSuccess('');
+
+    const validation = contactFormSchema.safeParse(payload);
+    if (!validation.success) {
+      const fieldErrors: Partial<Record<'name' | 'contactDetail' | 'topic' | 'message', string>> = {};
+      for (const issue of validation.error.issues) {
+        const path = issue.path[0] as 'name' | 'contactDetail' | 'topic' | 'message';
+        if (path && !fieldErrors[path]) {
+          fieldErrors[path] = issue.message;
+        }
+      }
+      setValidationErrors(fieldErrors);
+      setError('Te rugam sa corectezi erorile din formular.');
       return;
     }
 
     setIsSubmitting(true);
     setIsSubmitAnimationVisible(true);
-    setError('');
-    setSuccess('');
 
     try {
       const response = await fetch(`${backendUrl}/contact-messages`, {
@@ -199,24 +254,28 @@ export default function ContactPageContent() {
                   id="contact-name"
                   placeholder="Ex. Maria Popescu"
                   value={name}
-                  onChange={setName}
+                  onChange={(value) => handleFieldChange('name', value)}
+                  error={validationErrors.name}
+                  maxLength={100}
                 />
                 <Field
                   label="Email sau telefon"
                   id="contact-detail"
                   placeholder="exemplu@email.com sau 07xx xxx xxx"
                   value={contactDetail}
-                  onChange={setContactDetail}
+                  onChange={(value) => handleFieldChange('contactDetail', value)}
+                  error={validationErrors.contactDetail}
+                  maxLength={100}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="contact-topic">Subiect</Label>
+                <Label htmlFor="contact-topic">Subiect (optional)</Label>
                 <select
                   id="contact-topic"
                   value={topic}
-                  onChange={(event) => setTopic(event.target.value)}
-                  className="flex h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                  onChange={(event) => handleFieldChange('topic', event.target.value)}
+                  className={`flex h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-950 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${validationErrors.topic ? 'border-red-500 focus-visible:ring-red-500' : 'border-slate-200 focus-visible:ring-indigo-500'}`}
                 >
                   <option value="">Alege un subiect</option>
                   {inquiryTopics.map((item) => (
@@ -225,16 +284,29 @@ export default function ContactPageContent() {
                     </option>
                   ))}
                 </select>
+                {validationErrors.topic ? (
+                  <p className="text-xs font-semibold text-red-500">{validationErrors.topic}</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="contact-message">Mesaj</Label>
+                <div className="flex justify-between items-baseline">
+                  <Label htmlFor="contact-message">Mesaj</Label>
+                  <span className="text-[10px] text-slate-400">
+                    {message.length}/3000
+                  </span>
+                </div>
                 <Textarea
                   id="contact-message"
                   placeholder="Scrie-ne ce produs te intereseaza sau cu ce te putem ajuta."
                   value={message}
-                  onChange={(event) => setMessage(event.target.value)}
+                  onChange={(event) => handleFieldChange('message', event.target.value)}
+                  maxLength={3000}
+                  className={validationErrors.message ? 'border-red-500 focus-visible:ring-red-500' : ''}
                 />
+                {validationErrors.message ? (
+                  <p className="text-xs font-semibold text-red-500">{validationErrors.message}</p>
+                ) : null}
               </div>
 
               {error ? <p className="text-sm font-semibold text-red-600">{error}</p> : null}
@@ -259,6 +331,7 @@ export default function ContactPageContent() {
                     setContactDetail('');
                     setTopic('');
                     setMessage('');
+                    setValidationErrors({});
                     setSpamState(createFormSpamState());
                     setError('');
                     setSuccess('');
@@ -307,17 +380,38 @@ function Field({
   placeholder,
   value,
   onChange,
+  error,
+  maxLength,
 }: {
   label: string;
   id: string;
   placeholder?: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
+  maxLength?: number;
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Input id={id} placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />
+      <div className="flex justify-between items-baseline">
+        <Label htmlFor={id}>{label}</Label>
+        {maxLength && value.length > 0 && (
+          <span className="text-[10px] text-slate-400">
+            {value.length}/{maxLength}
+          </span>
+        )}
+      </div>
+      <Input
+        id={id}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        maxLength={maxLength}
+        className={error ? 'border-red-500 focus-visible:ring-red-500' : ''}
+      />
+      {error ? (
+        <p className="text-xs font-semibold text-red-500">{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -329,4 +423,48 @@ function InfoCard({ title, body }: { title: string; body: string }) {
       <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
     </div>
   );
+}
+
+function formatRomanianPhone(value: string): string {
+  const clean = value.replace(/[^\d+]/g, '');
+  
+  if (clean.startsWith('+')) {
+    if (clean.startsWith('+40')) {
+      const rest = clean.slice(3).replace(/\D/g, '');
+      return `+40 ${formatDigits(rest, false)}`.trim();
+    }
+    return clean;
+  }
+  
+  if (clean.startsWith('0040')) {
+    const rest = clean.slice(4).replace(/\D/g, '');
+    return `0040 ${formatDigits(rest, false)}`.trim();
+  }
+  
+  if (clean.startsWith('40') && clean.length > 2 && clean[2] !== '0') {
+    const rest = clean.slice(2).replace(/\D/g, '');
+    return `40 ${formatDigits(rest, false)}`.trim();
+  }
+  
+  return formatDigits(clean, true);
+}
+
+function formatDigits(digits: string, hasLeadingZero: boolean): string {
+  if (hasLeadingZero) {
+    if (digits.length <= 4) {
+      return digits;
+    }
+    if (digits.length <= 7) {
+      return `${digits.slice(0, 4)} ${digits.slice(4)}`;
+    }
+    return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 10)}`;
+  } else {
+    if (digits.length <= 3) {
+      return digits;
+    }
+    if (digits.length <= 6) {
+      return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+    }
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+  }
 }

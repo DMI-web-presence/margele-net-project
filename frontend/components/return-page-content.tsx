@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import Reveal from '@/components/reveal';
 import { Textarea } from '@/components/ui/textarea';
 import { createFormSpamState } from '@/lib/form-spam-protection';
+import { z } from 'zod';
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
@@ -79,13 +80,67 @@ const initialFormState = {
 
 type ReturnFormState = typeof initialFormState;
 
+const returnFormSchema = z.object({
+  fullName: z
+    .string()
+    .min(3, 'Numele complet trebuie sa aiba cel putin 3 caractere')
+    .max(100, 'Numele complet nu poate depasi 100 de caractere'),
+  email: z
+    .string()
+    .email('Adresa de email nu este valida')
+    .max(100, 'Emailul nu poate depasi 100 de caractere'),
+  phone: z
+    .string()
+    .min(10, 'Numarul de telefon este prea scurt')
+    .max(15, 'Numarul de telefon este prea lung')
+    .refine(
+      (val) => {
+        const clean = val.replace(/\s+/g, '').replace(/[-\(\)\.]/g, '');
+        return /^(?:\+40|0040|40)?(0?[237][0-9]{8})$/.test(clean);
+      },
+      { message: 'Numarul de telefon nu este un numar valid din Romania (ex: 07xx xxx xxx)' }
+    ),
+  orderNumber: z
+    .string()
+    .min(1, 'Numarul comenzii este obligatoriu')
+    .max(30, 'Numarul comenzii nu poate depasi 30 de caractere'),
+  productName: z
+    .string()
+    .min(3, 'Numele produsului trebuie sa aiba cel putin 3 caractere')
+    .max(200, 'Numele produsului nu poate depasi 200 de caractere'),
+  sku: z
+    .string()
+    .max(50, 'SKU-ul nu poate depasi 50 de caractere')
+    .optional()
+    .or(z.literal('')),
+  reason: z.string().min(1, 'Selecteaza motivul returului'),
+  outcome: z.string().min(1, 'Selecteaza ce iti doresti mai departe'),
+  details: z
+    .string()
+    .max(2000, 'Detaliile nu pot depasi 2000 de caractere')
+    .optional()
+    .or(z.literal('')),
+});
+
 export default function ReturnPageContent() {
   const [form, setForm] = useState<ReturnFormState>(initialFormState);
+  const [validationErrors, setValidationErrors] = useState<Partial<Record<keyof ReturnFormState, string>>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitAnimationVisible, setIsSubmitAnimationVisible] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [spamState, setSpamState] = useState(() => createFormSpamState());
+
+  const handleFieldChange = (key: keyof ReturnFormState, value: string) => {
+    let finalValue = value;
+    if (key === 'phone') {
+      finalValue = formatRomanianPhone(value);
+    }
+    setForm((current) => ({ ...current, [key]: finalValue }));
+    if (validationErrors[key]) {
+      setValidationErrors((current) => ({ ...current, [key]: undefined }));
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -104,22 +159,26 @@ export default function ReturnPageContent() {
       formStartedAt: spamState.formStartedAt,
     };
 
-    if (!payload.fullName || !payload.email || !payload.phone || !payload.orderNumber || !payload.productName) {
-      setSuccess('');
-      setError('Completeaza toate campurile obligatorii din formular.');
-      return;
-    }
+    setValidationErrors({});
+    setError('');
+    setSuccess('');
 
-    if (!payload.reason || !payload.outcome) {
-      setSuccess('');
-      setError('Selecteaza motivul returului si ce iti doresti mai departe.');
+    const validation = returnFormSchema.safeParse(payload);
+    if (!validation.success) {
+      const fieldErrors: Partial<Record<keyof ReturnFormState, string>> = {};
+      for (const issue of validation.error.issues) {
+        const path = issue.path[0] as keyof ReturnFormState;
+        if (path && !fieldErrors[path]) {
+          fieldErrors[path] = issue.message;
+        }
+      }
+      setValidationErrors(fieldErrors);
+      setError('Te rugam sa corectezi erorile din formular.');
       return;
     }
 
     setIsSubmitting(true);
     setIsSubmitAnimationVisible(true);
-    setError('');
-    setSuccess('');
 
     try {
       const response = await fetch(`${backendUrl}/returns`, {
@@ -154,6 +213,7 @@ export default function ReturnPageContent() {
 
   const handleReset = () => {
     setForm(initialFormState);
+    setValidationErrors({});
     setSpamState(createFormSpamState());
     setError('');
     setIsSubmitAnimationVisible(false);
@@ -255,7 +315,9 @@ export default function ReturnPageContent() {
                   id="full-name"
                   placeholder="Ex. Maria Popescu"
                   value={form.fullName}
-                  onChange={(value) => setForm((current) => ({ ...current, fullName: value }))}
+                  onChange={(value) => handleFieldChange('fullName', value)}
+                  error={validationErrors.fullName}
+                  maxLength={100}
                 />
                 <Field
                   label="Email"
@@ -263,7 +325,9 @@ export default function ReturnPageContent() {
                   type="email"
                   placeholder="exemplu@email.com"
                   value={form.email}
-                  onChange={(value) => setForm((current) => ({ ...current, email: value }))}
+                  onChange={(value) => handleFieldChange('email', value)}
+                  error={validationErrors.email}
+                  maxLength={100}
                 />
                 <Field
                   label="Telefon"
@@ -271,28 +335,36 @@ export default function ReturnPageContent() {
                   type="tel"
                   placeholder="07xx xxx xxx"
                   value={form.phone}
-                  onChange={(value) => setForm((current) => ({ ...current, phone: value }))}
+                  onChange={(value) => handleFieldChange('phone', value)}
+                  error={validationErrors.phone}
+                  maxLength={15}
                 />
                 <Field
                   label="Numar comanda"
                   id="order-number"
                   placeholder="Ex. 12345"
                   value={form.orderNumber}
-                  onChange={(value) => setForm((current) => ({ ...current, orderNumber: value }))}
+                  onChange={(value) => handleFieldChange('orderNumber', value)}
+                  error={validationErrors.orderNumber}
+                  maxLength={30}
                 />
                 <Field
                   label="Produs returnat"
                   id="product-name"
                   placeholder="Ex. Margele de nisip mate 4mm"
                   value={form.productName}
-                  onChange={(value) => setForm((current) => ({ ...current, productName: value }))}
+                  onChange={(value) => handleFieldChange('productName', value)}
+                  error={validationErrors.productName}
+                  maxLength={200}
                 />
                 <Field
-                  label="SKU produs"
+                  label="SKU produs (optional)"
                   id="sku"
                   placeholder="Ex. rou-4mm-01"
                   value={form.sku}
-                  onChange={(value) => setForm((current) => ({ ...current, sku: value }))}
+                  onChange={(value) => handleFieldChange('sku', value)}
+                  error={validationErrors.sku}
+                  maxLength={50}
                 />
               </div>
 
@@ -301,9 +373,9 @@ export default function ReturnPageContent() {
                   <Label htmlFor="reason">Motivul returului</Label>
                   <select
                     id="reason"
-                    className="flex h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                    className={`flex h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-950 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${validationErrors.reason ? 'border-red-500 focus-visible:ring-red-500' : 'border-slate-200 focus-visible:ring-indigo-500'}`}
                     value={form.reason}
-                    onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
+                    onChange={(event) => handleFieldChange('reason', event.target.value)}
                   >
                     <option value="" disabled>
                       Alege un motiv
@@ -314,15 +386,18 @@ export default function ReturnPageContent() {
                       </option>
                     ))}
                   </select>
+                  {validationErrors.reason ? (
+                    <p className="text-xs font-semibold text-red-500">{validationErrors.reason}</p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="outcome">Ce iti doresti mai departe?</Label>
                   <select
                     id="outcome"
-                    className="flex h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-950 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                    className={`flex h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-950 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${validationErrors.outcome ? 'border-red-500 focus-visible:ring-red-500' : 'border-slate-200 focus-visible:ring-indigo-500'}`}
                     value={form.outcome}
-                    onChange={(event) => setForm((current) => ({ ...current, outcome: event.target.value }))}
+                    onChange={(event) => handleFieldChange('outcome', event.target.value)}
                   >
                     <option value="" disabled>
                       Alege optiunea
@@ -333,17 +408,30 @@ export default function ReturnPageContent() {
                       </option>
                     ))}
                   </select>
+                  {validationErrors.outcome ? (
+                    <p className="text-xs font-semibold text-red-500">{validationErrors.outcome}</p>
+                  ) : null}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="details">Detalii suplimentare</Label>
+                <div className="flex justify-between items-baseline">
+                  <Label htmlFor="details">Detalii suplimentare (optional)</Label>
+                  <span className="text-[10px] text-slate-400">
+                    {form.details.length}/2000
+                  </span>
+                </div>
                 <Textarea
                   id="details"
                   placeholder="Spune-ne daca produsul a fost deteriorat, daca lipseste ceva din colet sau orice detaliu util."
                   value={form.details}
-                  onChange={(event) => setForm((current) => ({ ...current, details: event.target.value }))}
+                  onChange={(event) => handleFieldChange('details', event.target.value)}
+                  maxLength={2000}
+                  className={validationErrors.details ? 'border-red-500 focus-visible:ring-red-500' : ''}
                 />
+                {validationErrors.details ? (
+                  <p className="text-xs font-semibold text-red-500">{validationErrors.details}</p>
+                ) : null}
               </div>
 
               {error ? <p className="text-sm font-semibold text-red-600">{error}</p> : null}
@@ -480,6 +568,8 @@ function Field({
   placeholder,
   value,
   onChange,
+  error,
+  maxLength,
 }: {
   label: string;
   id: string;
@@ -487,17 +577,31 @@ function Field({
   placeholder?: string;
   value: string;
   onChange: (value: string) => void;
+  error?: string;
+  maxLength?: number;
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex justify-between items-baseline">
+        <Label htmlFor={id}>{label}</Label>
+        {maxLength && value.length > 0 && (
+          <span className="text-[10px] text-slate-400">
+            {value.length}/{maxLength}
+          </span>
+        )}
+      </div>
       <Input
         id={id}
         type={type}
         placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        maxLength={maxLength}
+        className={error ? 'border-red-500 focus-visible:ring-red-500' : ''}
       />
+      {error ? (
+        <p className="text-xs font-semibold text-red-500">{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -509,4 +613,48 @@ function AdviceCard({ title, body }: { title: string; body: string }) {
       <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
     </div>
   );
+}
+
+function formatRomanianPhone(value: string): string {
+  const clean = value.replace(/[^\d+]/g, '');
+  
+  if (clean.startsWith('+')) {
+    if (clean.startsWith('+40')) {
+      const rest = clean.slice(3).replace(/\D/g, '');
+      return `+40 ${formatDigits(rest, false)}`.trim();
+    }
+    return clean;
+  }
+  
+  if (clean.startsWith('0040')) {
+    const rest = clean.slice(4).replace(/\D/g, '');
+    return `0040 ${formatDigits(rest, false)}`.trim();
+  }
+  
+  if (clean.startsWith('40') && clean.length > 2 && clean[2] !== '0') {
+    const rest = clean.slice(2).replace(/\D/g, '');
+    return `40 ${formatDigits(rest, false)}`.trim();
+  }
+  
+  return formatDigits(clean, true);
+}
+
+function formatDigits(digits: string, hasLeadingZero: boolean): string {
+  if (hasLeadingZero) {
+    if (digits.length <= 4) {
+      return digits;
+    }
+    if (digits.length <= 7) {
+      return `${digits.slice(0, 4)} ${digits.slice(4)}`;
+    }
+    return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 10)}`;
+  } else {
+    if (digits.length <= 3) {
+      return digits;
+    }
+    if (digits.length <= 6) {
+      return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+    }
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+  }
 }
