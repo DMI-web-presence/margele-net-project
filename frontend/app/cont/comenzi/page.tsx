@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import AccountSidebar from '@/components/account-sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getProductImageUrl } from '@/lib/product-image-variants';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -300,7 +301,7 @@ export default function ContComenziPage() {
                               <div className="relative h-20 w-20 overflow-hidden rounded-2xl border border-slate-200 bg-white">
                                 {item.productImageUrl ? (
                                   <Image
-                                    src={item.productImageUrl}
+                                    src={getProductImageUrl(item.productImageUrl, 'thumb')}
                                     alt={item.productName}
                                     fill
                                     sizes="80px"
