@@ -14,7 +14,7 @@ const infoLinks = [
 
 const socialLinks = [
   { label: 'Instagram', href: 'https://www.instagram.com/margelenet/', icon: 'instagram' },
-  { label: 'Facebook', href: 'https://www.facebook.com/margeleoradea', icon: 'facebook' },
+  { label: 'Facebook', href: 'https://www.facebook.com/mdisoftware', icon: 'facebook' },
   { label: 'TikTok', href: 'https://www.tiktok.com/@margelenet', icon: 'tiktok' },
   { label: 'YouTube', href: 'https://www.youtube.com/@margeledegetar9525', icon: 'youtube' },
 ] as const;
@@ -192,7 +192,7 @@ export default function Footer() {
             <p className="mx-auto max-w-xs text-sm leading-6 text-white/70 lg:mx-0">
               Accesorii creative si materiale atent selectate pentru proiectele tale handmade.
             </p>
-            <div className="flex items-center justify-center gap-2 pt-1 lg:justify-start">
+            <div className="relative z-10 flex items-center justify-center gap-2 pt-1 lg:justify-start">
               {socialLinks.map((item) => (
                 <a
                   key={item.label}
@@ -201,7 +201,7 @@ export default function Footer() {
                   rel="noreferrer noopener"
                   aria-label={item.label}
                   title={item.label}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/[0.08] text-white/80 transition hover:border-white/35 hover:bg-white/15 hover:text-white"
+                  className="relative inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-white/[0.08] text-white/80 transition hover:border-white/35 hover:bg-white/15 hover:text-white"
                 >
                   <SocialIcon icon={item.icon} />
                 </a>
