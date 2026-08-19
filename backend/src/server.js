@@ -4441,7 +4441,10 @@ async function buildTrustedOrderItems(rawItems) {
 
   if (productIds.length === 0) return [];
 
+  console.log('[DEBUG] buildTrustedOrderItems: rawItems =', JSON.stringify(rawItems, null, 2));
+  console.log('[DEBUG] buildTrustedOrderItems: productIds =', productIds);
   const products = await getCheckoutProducts(productIds);
+  console.log('[DEBUG] buildTrustedOrderItems: fetched keys =', Array.from(products.keys()));
   const orderItems = [];
 
   for (const item of rawItems) {
