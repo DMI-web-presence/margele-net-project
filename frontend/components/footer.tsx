@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const infoLinks = [
+  { label: 'Termeni si conditii', href: '/cum-cumpar' },
+  { label: 'Politica de confidentialitate', href: '/gdpr' },
   { label: 'Transport', href: '/transport' },
   { label: 'Formular de retragere', href: '/retur-produse' },
-  { label: 'Cum cumpar', href: '/cum-cumpar' },
   { label: 'Despre noi', href: '/despre-noi' },
-  { label: 'GDPR', href: '/gdpr' },
 ];
 
 const socialLinks = [
@@ -260,35 +260,52 @@ export default function Footer() {
                 </Link>
               </p>
             </div>
-            <div
-              data-footer-payment-badges
-              className="flex flex-nowrap items-center justify-center gap-2 pt-1 lg:justify-start"
-            >
-              <a
-                href="https://anpc.ro/"
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex rounded-xl border border-white/25 bg-white/10 p-2 transition hover:bg-white/20"
-                aria-label="Deschide site-ul ANPC"
-              >
-                <Image
-                  src="/anpc-logo.webp"
-                  alt="ANPC"
-                  width={170}
-                  height={44}
-                  className="h-auto w-[126px] sm:w-[170px]"
-                  style={{ height: 'auto' }}
-                />
-              </a>
-              <div className="inline-flex rounded-xl border border-white/25 bg-white/10 p-2">
-                <Image
-                  src="/netopia-white.webp"
-                  alt="Netopia Payments"
-                  width={170}
-                  height={44}
-                  className="h-auto w-[112px] sm:w-[140px]"
-                  style={{ height: 'auto' }}
-                />
+            <div className="flex flex-col items-center gap-2 pt-1 lg:items-start">
+              <div className="flex flex-col items-center gap-2 w-fit">
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <a
+                    href="https://anpc.ro/ce-este-sal/"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex rounded-xl border border-white/25 bg-white/10 p-2 transition hover:bg-white/20"
+                    aria-label="Deschide site-ul SAL"
+                  >
+                    <Image
+                      src="/sal-logo.svg"
+                      alt="Soluționarea Alternativă a Litigiilor"
+                      width={250}
+                      height={50}
+                      className="h-[25px] sm:h-[34px] w-auto"
+                      style={{ width: 'auto' }}
+                    />
+                  </a>
+                  <a
+                    href="https://ec.europa.eu/consumers/odr/"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex rounded-xl border border-white/25 bg-white/10 p-2 transition hover:bg-white/20"
+                    aria-label="Deschide site-ul SOL"
+                  >
+                    <Image
+                      src="/sol-logo.svg"
+                      alt="Soluționarea Online a Litigiilor"
+                      width={250}
+                      height={50}
+                      className="h-[25px] sm:h-[34px] w-auto"
+                      style={{ width: 'auto' }}
+                    />
+                  </a>
+                </div>
+                <div className="inline-flex rounded-xl border border-white/25 bg-white/10 p-2">
+                  <Image
+                    src="/netopia-white.png"
+                    alt="Netopia Payments"
+                    width={170}
+                    height={44}
+                    className="h-[25px] sm:h-[34px] w-auto"
+                    style={{ width: 'auto' }}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -297,7 +314,7 @@ export default function Footer() {
 
       <div data-footer-presence-bar className="border-t border-white/15 bg-black/20">
         <div className="mx-auto flex w-full max-w-[1400px] flex-col items-center gap-2 px-6 py-4 text-center text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between sm:px-10 sm:text-left lg:px-16">
-          <p>Pamil srl © 2005 - 2026. Toate drepturile rezervate.</p>
+          <p>S.C. PAMIL S.R.L. © 2005 - 2026. CIF: RO63653 | Reg. Com: J05/1012/1992</p>
           <p>
             Crafted with ❤️ by{' '}
             <a
