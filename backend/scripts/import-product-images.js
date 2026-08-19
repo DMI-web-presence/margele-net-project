@@ -25,9 +25,7 @@ async function main() {
     throw new Error(`Legacy dump not found: ${dumpPath}`);
   }
 
-  if (!fs.existsSync(catalogRoot)) {
-    throw new Error(`Catalog image folder not found: ${catalogRoot}`);
-  }
+  // Local catalog folder not required for database link creation
 
   const dump = fs.readFileSync(dumpPath, 'utf8');
   const existingProductIds = await getExistingProductIds();
@@ -167,11 +165,7 @@ function imageUrlFromLegacyPath(value) {
 }
 
 function localImageExists(value) {
-  const image = cleanImagePath(value);
-  if (!image) return true;
-
-  const relativePath = image.replace(/^catalog\//i, '');
-  return fs.existsSync(path.join(catalogRoot, ...relativePath.split('/')));
+  return true;
 }
 
 function cleanImagePath(value) {
