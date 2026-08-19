@@ -4845,7 +4845,7 @@ async function startNetopiaPayment({ order, items, customer, browserData, req })
     throw new Error(responseBody?.error?.message || responseBody?.message || 'NETOPIA a respins cererea de plata.');
   }
 
-  if (responseBody?.error?.code && !['00', '0', '100', 0, 100].includes(responseBody.error.code)) {
+  if (responseBody?.error?.code && !['00', '0', '100', '101', 0, 100, 101].includes(responseBody.error.code)) {
     throw new Error(responseBody.error.message || 'NETOPIA a returnat o eroare pentru plata.');
   }
 
@@ -5188,7 +5188,7 @@ function netopiaPaymentState(response) {
     };
   }
 
-  if (status === 15 || errorCode === '100') {
+  if (status === 15 || errorCode === '100' || errorCode === '101') {
     return {
       paymentStatus: 'pending',
       orderStatus: 'In asteptare plata',
@@ -5196,7 +5196,7 @@ function netopiaPaymentState(response) {
     };
   }
 
-  if ((errorCode && !['00', '0', '100'].includes(errorCode)) || status === 12) {
+  if ((errorCode && !['00', '0', '100', '101'].includes(errorCode)) || status === 12) {
     return {
       paymentStatus: 'failed',
       orderStatus: 'Plata esuata',
