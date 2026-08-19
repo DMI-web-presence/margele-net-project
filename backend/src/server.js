@@ -4823,6 +4823,11 @@ async function startNetopiaPayment({ order, items, customer, browserData, req })
       ? 'https://secure.mobilpay.ro/pay/payment/card/start'
       : 'https://secure.sandbox.netopia-payments.com/payment/card/start';
   const payload = buildNetopiaStartPayload({ order, items, customer, browserData, req });
+
+  console.log('[DEBUG] startNetopiaPayment: POST to endpoint =', endpoint);
+  console.log('[DEBUG] startNetopiaPayment: Authorization key length =', config.netopiaApiKey ? config.netopiaApiKey.length : 0);
+  console.log('[DEBUG] startNetopiaPayment: payload =', JSON.stringify(payload, null, 2));
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -4831,7 +4836,10 @@ async function startNetopiaPayment({ order, items, customer, browserData, req })
     },
     body: JSON.stringify(payload),
   });
+
   const responseBody = await response.json().catch(() => null);
+  console.log('[DEBUG] startNetopiaPayment: Netopia HTTP status =', response.status);
+  console.log('[DEBUG] startNetopiaPayment: Netopia responseBody =', JSON.stringify(responseBody, null, 2));
 
   if (!response.ok) {
     throw new Error(responseBody?.error?.message || responseBody?.message || 'NETOPIA a respins cererea de plata.');
