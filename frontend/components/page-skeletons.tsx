@@ -68,6 +68,50 @@ export function CatalogPageSkeleton({
   );
 }
 
+export function DigitalCatalogPageSkeleton() {
+  return (
+    <main className="bg-[linear-gradient(180deg,#ffffff_0%,#fbf9fb_100%)] px-4 py-8 sm:px-8 sm:py-12 lg:px-12 lg:py-14">
+      <div className="mx-auto w-full max-w-[1400px]">
+        <section className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_24px_70px_rgba(40,16,36,0.08)]">
+          <div className="border-b border-slate-100 px-5 py-7 sm:px-8 sm:py-9 lg:px-10">
+            <Skeleton className="h-3 w-36 bg-violet-100" />
+            <Skeleton className="mt-4 h-10 w-full max-w-xl rounded-full" />
+            <Skeleton className="mt-4 h-5 w-full max-w-md rounded-full" />
+          </div>
+
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="bg-[radial-gradient(circle_at_top,#fbf4f9_0%,#f8fafc_42%,#f1f5f9_100%)] p-3 sm:p-6 lg:p-8">
+              <Skeleton className="mx-auto aspect-[794/1123] w-full max-w-[46rem] rounded-2xl border border-slate-200 shadow-[0_18px_45px_rgba(15,23,42,0.12)]" />
+            </div>
+
+            <aside className="flex flex-col justify-between gap-8 border-t border-slate-200 bg-white p-6 sm:p-8 lg:border-l lg:border-t-0">
+              <div className="space-y-7">
+                <div className="flex gap-6">
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                </div>
+                <div className="h-px bg-slate-200" />
+                <Skeleton className="h-16 rounded-2xl" />
+                <div className="h-px bg-slate-200" />
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-full rounded-full" />
+                  <Skeleton className="h-4 w-5/6 rounded-full" />
+                  <Skeleton className="h-4 w-2/3 rounded-full" />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Skeleton className="h-12 rounded-xl bg-violet-100" />
+                <Skeleton className="h-12 rounded-xl border border-violet-100 bg-white" />
+              </div>
+            </aside>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
 export function HomePageSkeleton() {
   return (
     <main>

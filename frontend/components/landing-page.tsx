@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import DigitalCatalogBanner from '@/components/digital-catalog-banner';
 import ProductRangeSection from '@/components/product-range-section';
 import Reveal from '@/components/reveal';
 import ValuesSection from '@/components/values-section';
@@ -176,6 +177,9 @@ export default function LandingPage({ products }: LandingPageProps) {
       </Reveal>
       <Reveal>
         <ValuesSection />
+      </Reveal>
+      <Reveal>
+        <DigitalCatalogBanner />
       </Reveal>
       <Reveal>
         <HomepageReviewStrip />

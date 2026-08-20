@@ -558,7 +558,13 @@ export default function NavBar() {
           href="/"
           className="inline-flex items-center"
           aria-label="Margele.net"
-          onClick={() => setIsMobileMenuOpen(false)}
+          onClick={(event) => {
+            setIsMobileMenuOpen(false);
+            if (pathname === '/') {
+              event.preventDefault();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
         >
           <Image
             src="/margelenet-logo-nav-bar-cropped.png"
@@ -633,6 +639,18 @@ export default function NavBar() {
             }`}
           >
             Noutati
+          </Link>
+
+          <Link
+            href="/catalog-digital"
+            aria-current={pathname === '/catalog-digital' ? 'page' : undefined}
+            className={`inline-flex items-center rounded-full border font-semibold transition-[height,padding,font-size,background-color,border-color,color] duration-500 ease-out ${
+              pathname === '/catalog-digital'
+                ? 'border-violet-600 bg-violet-50 text-violet-800'
+                : 'border-violet-200 bg-white text-slate-700 hover:border-violet-300 hover:bg-slate-100 hover:text-slate-900'
+            } ${isNavCompact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-[13px]'}`}
+          >
+            Catalog digital
           </Link>
 
           <form
@@ -859,6 +877,14 @@ export default function NavBar() {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 Noutati
+              </Link>
+              <Link
+                href="/catalog-digital"
+                aria-current={pathname === '/catalog-digital' ? 'page' : undefined}
+                className="col-span-2 flex h-11 items-center justify-center rounded-full border border-violet-300 bg-violet-50 px-4 text-sm font-bold text-violet-800"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Catalog digital
               </Link>
             </div>
 
