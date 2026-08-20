@@ -3823,6 +3823,12 @@ async function handleOrderCreate(req, res) {
   }
 
   const body = await readJson(req);
+  const requestedPaymentMethod = cleanOptionalValue(body.paymentMethod);
+  if (requestedPaymentMethod && requestedPaymentMethod !== 'ramburs') {
+    sendJson(res, 400, { message: 'Metoda de plata selectata nu este disponibila.' });
+    return;
+  }
+  const paymentMethod = requestedPaymentMethod || 'manual';
   const orderItems = await buildTrustedOrderItems(body.items);
   if (orderItems.length === 0) {
     sendJson(res, 400, { message: 'Cosul este gol.' });
@@ -3853,7 +3859,7 @@ async function handleOrderCreate(req, res) {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
       `,
-      [user.id, orderNumber, 'Plasata', subtotal, deliveryTotal, total, 'RON', 'manual', 'unpaid'],
+      [user.id, orderNumber, 'Plasata', subtotal, deliveryTotal, total, 'RON', paymentMethod, 'unpaid'],
     );
     const order = orderResult.rows[0];
     const insertedItems = [];
