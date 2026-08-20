@@ -2,8 +2,21 @@
 
 import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
 import AccountSidebar from '@/components/account-sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
+
+const formatPhoneNumber = (value: string) => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 10);
+  if (limited.length <= 4) {
+    return limited;
+  } else if (limited.length <= 7) {
+    return `${limited.slice(0, 4)} ${limited.slice(4)}`;
+  } else {
+    return `${limited.slice(0, 4)} ${limited.slice(4, 7)} ${limited.slice(7)}`;
+  }
+};
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -203,11 +216,18 @@ function EditPersonalInfoModal({
 }: EditPersonalInfoModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [phoneVal, setPhoneVal] = useState('');
   const [selectedPreferences, setSelectedPreferences] = useState(
     initialValues.preferences === 'Persoana juridica'
       ? 'Persoana juridica'
       : 'Persoana fizica',
   );
+
+  useEffect(() => {
+    if (open) {
+      setPhoneVal(initialValues.phone === '--' ? '' : initialValues.phone);
+    }
+  }, [open, initialValues]);
 
   if (!open) return null;
 
@@ -217,17 +237,47 @@ function EditPersonalInfoModal({
     setIsSaving(true);
 
     const data = new FormData(event.currentTarget);
+    const values = {
+      fullName: String(data.get('fullName') ?? '').trim(),
+      phone: String(data.get('phone') ?? '').trim(),
+      preferences: String(data.get('preferences') ?? '').trim(),
+      birthDate: String(data.get('birthDate') ?? '').trim() || '--',
+      companyName: String(data.get('companyName') ?? '').trim(),
+      cui: String(data.get('cui') ?? '').trim(),
+      tradeRegisterNumber: String(data.get('tradeRegisterNumber') ?? '').trim(),
+    };
+
+    const personalInfoSchema = z.object({
+      fullName: z.string().min(3, 'Numele complet trebuie sa aiba cel putin 3 caractere.').max(100),
+      phone: z.string().refine((val) => {
+        const clean = val.replace(/\s+/g, '');
+        return /^0[0-9]{9}$/.test(clean);
+      }, {
+        message: 'Numarul de telefon trebuie sa aiba 10 cifre si sa inceapa cu 0 (ex: 0722 123 456).',
+      }),
+      preferences: z.string(),
+      birthDate: z.string().optional(),
+      companyName: z.string().optional(),
+      cui: z.string().optional(),
+      tradeRegisterNumber: z.string().optional(),
+    }).refine((dataVal) => {
+      if (dataVal.preferences === 'Persoana juridica') {
+        return Boolean(dataVal.companyName) && Boolean(dataVal.cui) && Boolean(dataVal.tradeRegisterNumber);
+      }
+      return true;
+    }, {
+      message: 'Datele companiei (Nume, CUI, Registru Comert) sunt obligatorii pentru persoana juridica.',
+    });
+
+    const check = personalInfoSchema.safeParse(values);
+    if (!check.success) {
+      setErrorMessage(check.error.issues[0].message);
+      setIsSaving(false);
+      return;
+    }
 
     try {
-      await onSave({
-        fullName: String(data.get('fullName') ?? '').trim(),
-        phone: String(data.get('phone') ?? '').trim(),
-        preferences: String(data.get('preferences') ?? '').trim(),
-        birthDate: String(data.get('birthDate') ?? '').trim() || '--',
-        companyName: String(data.get('companyName') ?? '').trim(),
-        cui: String(data.get('cui') ?? '').trim(),
-        tradeRegisterNumber: String(data.get('tradeRegisterNumber') ?? '').trim(),
-      });
+      await onSave(values);
       onClose();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Nu am putut salva modificarile.');
@@ -290,7 +340,10 @@ function EditPersonalInfoModal({
               <input
                 id="personal-phone"
                 name="phone"
-                defaultValue={initialValues.phone === '--' ? '' : initialValues.phone}
+                value={phoneVal}
+                onChange={(e) => setPhoneVal(formatPhoneNumber(e.target.value))}
+                placeholder="07xx xxx xxx"
+                maxLength={12}
                 className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
               />
             </div>
@@ -443,9 +496,18 @@ function EditEmailModal({
     setIsSaving(true);
 
     const data = new FormData(event.currentTarget);
+    const email = String(data.get('email') ?? '').trim();
+
+    const emailSchema = z.string().email('Adresa de email este invalida.');
+    const check = emailSchema.safeParse(email);
+    if (!check.success) {
+      setErrorMessage(check.error.issues[0].message);
+      setIsSaving(false);
+      return;
+    }
 
     try {
-      await onSave(String(data.get('email') ?? '').trim());
+      await onSave(email);
       onClose();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Nu am putut actualiza emailul.');
@@ -498,6 +560,7 @@ function EditEmailModal({
               type="email"
               required
               defaultValue={initialEmail === '--' ? '' : initialEmail}
+              maxLength={100}
               className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
             />
           </div>
@@ -556,13 +619,29 @@ function EditPasswordModal({
     setIsSaving(true);
 
     const data = new FormData(event.currentTarget);
+    const values = {
+      currentPassword: String(data.get('currentPassword') ?? '').trim(),
+      nextPassword: String(data.get('nextPassword') ?? '').trim(),
+      confirmPassword: String(data.get('confirmPassword') ?? '').trim(),
+    };
+
+    const passwordSchema = z.object({
+      currentPassword: z.string().min(1, 'Parola curenta este obligatorie.'),
+      nextPassword: z.string().min(8, 'Noua parola trebuie sa aiba cel putin 8 caractere.'),
+      confirmPassword: z.string(),
+    }).refine((dataVal) => dataVal.nextPassword === dataVal.confirmPassword, {
+      message: 'Confirmarea parolei nu se potriveste.',
+    });
+
+    const check = passwordSchema.safeParse(values);
+    if (!check.success) {
+      setErrorMessage(check.error.issues[0].message);
+      setIsSaving(false);
+      return;
+    }
 
     try {
-      await onSave({
-        currentPassword: String(data.get('currentPassword') ?? '').trim(),
-        nextPassword: String(data.get('nextPassword') ?? '').trim(),
-        confirmPassword: String(data.get('confirmPassword') ?? '').trim(),
-      });
+      await onSave(values);
       onClose();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Nu am putut actualiza parola.');

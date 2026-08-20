@@ -71,7 +71,23 @@ export default function CheckoutStatusContent() {
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(orderNumber));
   const [error, setError] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const copy = useMemo(() => statusCopy(order), [order]);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch(`${backendUrl}/auth/me`, { credentials: 'include' });
+        if (response.ok) {
+          const data = (await response.json()) as { authenticated?: boolean } | null;
+          setIsAuthenticated(Boolean(data?.authenticated));
+        }
+      } catch {
+        setIsAuthenticated(false);
+      }
+    };
+    void checkAuth();
+  }, []);
 
   useEffect(() => {
     if (!orderNumber) {
@@ -85,7 +101,7 @@ export default function CheckoutStatusContent() {
       setError('');
 
       try {
-        const response = await fetch(`${backendUrl}/auth/orders/${encodeURIComponent(orderNumber)}`, {
+        const response = await fetch(`${backendUrl}/orders/${encodeURIComponent(orderNumber)}`, {
           credentials: 'include',
         });
         const result = (await response.json().catch(() => null)) as Order | { message?: string } | null;
@@ -142,12 +158,21 @@ export default function CheckoutStatusContent() {
         ) : null}
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Link
-            href="/cont/comenzi"
-            className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-black"
-          >
-            Vezi comenzile
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              href="/cont/comenzi"
+              className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-black"
+            >
+              Vezi comenzile
+            </Link>
+          ) : (
+            <Link
+              href="/"
+              className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-black"
+            >
+              Mergi la pagina principala
+            </Link>
+          )}
           <Link
             href="/catalog"
             className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-6 py-3 text-base font-semibold text-slate-900 transition hover:bg-slate-50"

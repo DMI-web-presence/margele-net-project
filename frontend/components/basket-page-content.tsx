@@ -3,10 +3,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useCart } from '@/components/cart-provider';
 import Reveal from '@/components/reveal';
 import { getProductImageProps } from '@/lib/product-image-variants';
+import { z } from 'zod';
 
 type Product = {
   id: number;
@@ -53,6 +54,10 @@ const currencyFormatter = new Intl.NumberFormat('ro-RO', {
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
+
+function Skeleton({ className }: { className: string }) {
+  return <div className={`animate-pulse bg-slate-200 rounded ${className}`} />;
+}
 
 function collectBrowserData() {
   const screenPrint =
@@ -192,6 +197,18 @@ function EmptyBasketIllustration() {
   );
 }
 
+const formatPhoneNumber = (value: string) => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 10);
+  if (limited.length <= 4) {
+    return limited;
+  } else if (limited.length <= 7) {
+    return `${limited.slice(0, 4)} ${limited.slice(4)}`;
+  } else {
+    return `${limited.slice(0, 4)} ${limited.slice(4, 7)} ${limited.slice(7)}`;
+  }
+};
+
 function EmptyBasketState() {
   return (
     <main className="px-6 py-10 sm:px-10 lg:px-16">
@@ -233,6 +250,14 @@ function EmptyBasketState() {
   );
 }
 
+const ROMANIAN_COUNTIES = [
+  'Alba', 'Arad', 'Arges', 'Bacau', 'Bihor', 'Bistrita-Nasaud', 'Botosani', 'Brasov', 'Braila', 'Bucuresti',
+  'Buzau', 'Caras-Severin', 'Calarasi', 'Cluj', 'Constanta', 'Covasna', 'Dambovita', 'Dolj', 'Galati',
+  'Giurgiu', 'Gorj', 'Harghita', 'Hunedoara', 'Ialomita', 'Iasi', 'Ilfov', 'Maramures', 'Mehedinti',
+  'Mures', 'Neamt', 'Olt', 'Prahova', 'Satu Mare', 'Salaj', 'Sibiu', 'Suceava', 'Teleorman', 'Timis',
+  'Tulcea', 'Vaslui', 'Valcea', 'Vrancea'
+];
+
 export default function BasketPageContent({ products }: BasketPageContentProps) {
   const router = useRouter();
   const {
@@ -245,6 +270,78 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+
+  const [user, setUser] = useState<{ id: number; email: string; fullName?: string; cui?: string; trade_register_number?: string } | null>(null);
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+
+  const [customerDetails, setCustomerDetails] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+  });
+
+  const [shippingAddress, setShippingAddress] = useState({
+    prenume: '',
+    nume: '',
+    adresa1: '',
+    adresa2: '',
+    oras: '',
+    judet: '',
+    codPostal: '',
+    telefon: '',
+    companie: '',
+    tara: 'Romania',
+  });
+
+  const [useSameAddress, setUseSameAddress] = useState(true);
+  const [isCompanyBilling, setIsCompanyBilling] = useState(false);
+
+  const [billingAddress, setBillingAddress] = useState({
+    prenume: '',
+    nume: '',
+    adresa1: '',
+    adresa2: '',
+    oras: '',
+    judet: '',
+    codPostal: '',
+    telefon: '',
+    companie: '',
+    cui: '',
+    regCom: '',
+    tara: 'Romania',
+  });
+
+  useEffect(() => {
+    const loadUserAndAddresses = async () => {
+      setIsLoadingAuth(true);
+      try {
+        const meRes = await fetch(`${backendUrl}/auth/me`, { credentials: 'include' });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.authenticated && meData.user) {
+            setUser(meData.user);
+            const addrRes = await fetch(`${backendUrl}/auth/addresses`, { credentials: 'include' });
+            if (addrRes.ok) {
+              const addrData = await addrRes.json();
+              setAddresses(addrData);
+              const defaultAddr = addrData.find((a: any) => a.implicit_livrare) || addrData[0];
+              if (defaultAddr) {
+                setSelectedAddressId(defaultAddr.id);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading checkout auth:', err);
+      } finally {
+        setIsLoadingAuth(false);
+      }
+    };
+    void loadUserAndAddresses();
+  }, []);
+
   const productMap = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
     [products],
@@ -280,20 +377,151 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
 
   const handlePlaceOrder = async () => {
     setOrderError('');
+
+    const customerDetailsSchema = z.object({
+      fullName: z.string().min(3, 'Numele complet trebuie sa aiba cel putin 3 caractere.').max(100),
+      email: z.string().email('Adresa de email este invalida.'),
+      phone: z.string().refine((val) => {
+        const clean = val.replace(/\s+/g, '');
+        return /^0[0-9]{9}$/.test(clean);
+      }, {
+        message: 'Numarul de telefon trebuie sa aiba 10 cifre si sa inceapa cu 0 (ex: 0722 123 456).',
+      }),
+    });
+
+    const addressSchema = z.object({
+      prenume: z.string().min(2, 'Prenumele trebuie sa aiba cel putin 2 caractere.').max(50),
+      nume: z.string().min(2, 'Numele trebuie sa aiba cel putin 2 caractere.').max(50),
+      adresa1: z.string().min(5, 'Adresa este prea scurta (minim 5 caractere).').max(150),
+      adresa2: z.string().max(150).optional(),
+      oras: z.string().min(2, 'Orasul trebuie sa aiba cel putin 2 caractere.').max(50),
+      judet: z.string().min(2, 'Te rugam sa alegi judetul.'),
+      codPostal: z.string().optional().refine((val) => !val || /^[0-9]{6}$/.test(val), {
+        message: 'Codul postal trebuie sa aiba exact 6 cifre.',
+      }),
+      telefon: z.string().optional().refine((val) => {
+        if (!val) return true;
+        const clean = val.replace(/\s+/g, '');
+        return /^0[0-9]{9}$/.test(clean);
+      }, {
+        message: 'Numarul de telefon din adresa trebuie sa aiba 10 cifre si sa inceapa cu 0.',
+      }),
+      companie: z.string().optional(),
+      tara: z.string().default('Romania'),
+    });
+
+    const companyBillingSchema = z.object({
+      companie: z.string().min(3, 'Numele companiei este obligatoriu.'),
+      cui: z.string().min(2, 'CUI-ul este obligatoriu (ex: RO123456).'),
+      regCom: z.string().min(3, 'Registrul comertului este obligatoriu.'),
+      adresa1: z.string().min(5, 'Adresa de facturare este prea scurta.').max(150),
+      adresa2: z.string().max(150).optional(),
+      oras: z.string().min(2, 'Orasul de facturare trebuie sa aiba cel putin 2 caractere.').max(50),
+      judet: z.string().min(2, 'Te rugam sa alegi judetul de facturare.'),
+      codPostal: z.string().optional().refine((val) => !val || /^[0-9]{6}$/.test(val), {
+        message: 'Codul postal de facturare trebuie sa aiba exact 6 cifre.',
+      }),
+      telefon: z.string().optional(),
+      tara: z.string().default('Romania'),
+    });
+
+    if (!user) {
+      const detailsCheck = customerDetailsSchema.safeParse(customerDetails);
+      if (!detailsCheck.success) {
+        setOrderError(detailsCheck.error.issues[0].message);
+        return;
+      }
+      const shippingCheck = addressSchema.safeParse(shippingAddress);
+      if (!shippingCheck.success) {
+        setOrderError(shippingCheck.error.issues[0].message);
+        return;
+      }
+      if (!useSameAddress) {
+        if (isCompanyBilling) {
+          const billingCheck = companyBillingSchema.safeParse(billingAddress);
+          if (!billingCheck.success) {
+            setOrderError(billingCheck.error.issues[0].message);
+            return;
+          }
+        } else {
+          const billingCheck = addressSchema.safeParse(billingAddress);
+          if (!billingCheck.success) {
+            setOrderError(billingCheck.error.issues[0].message);
+            return;
+          }
+        }
+      }
+    } else {
+      if (addresses.length > 0 && !selectedAddressId) {
+        setOrderError('Te rugam sa selectezi o adresa de livrare.');
+        return;
+      }
+      if (addresses.length === 0) {
+        const shippingCheck = addressSchema.safeParse(shippingAddress);
+        if (!shippingCheck.success) {
+          setOrderError(shippingCheck.error.issues[0].message);
+          return;
+        }
+      }
+    }
+
     setIsPlacingOrder(true);
 
     try {
       const endpoint =
         paymentMethod === 'card'
-          ? `${backendUrl}/auth/payments/netopia/start`
-          : `${backendUrl}/auth/orders`;
-      const payload = {
+          ? `${backendUrl}${user ? '/auth' : ''}/payments/netopia/start`
+          : `${backendUrl}${user ? '/auth' : ''}/orders`;
+
+      const payload: any = {
         items: enrichedItems,
         deliveryTotal: delivery,
-        ...(paymentMethod === 'card'
-          ? { browserData: collectBrowserData() }
-          : { paymentMethod: 'ramburs' }),
       };
+
+      if (!user) {
+        payload.customerDetails = customerDetails;
+        payload.shippingAddress = {
+          ...shippingAddress,
+          telefon: shippingAddress.telefon || customerDetails.phone,
+        };
+        if (!useSameAddress) {
+          payload.billingAddress = isCompanyBilling
+            ? { ...billingAddress, prenume: '', nume: '' }
+            : { ...billingAddress, companie: '', cui: '', regCom: '' };
+        } else {
+          payload.billingAddress = payload.shippingAddress;
+        }
+      } else {
+        if (addresses.length > 0) {
+          const activeAddr = addresses.find((a) => a.id === selectedAddressId);
+          if (activeAddr) {
+            const formattedAddr = {
+              apelativ: activeAddr.apelativ || '',
+              prenume: activeAddr.prenume || '',
+              nume: activeAddr.nume || '',
+              tara: activeAddr.tara || 'Romania',
+              adresa1: activeAddr.adresa1 || '',
+              adresa2: activeAddr.adresa2 || '',
+              codPostal: activeAddr.cod_postal || '',
+              oras: activeAddr.oras || '',
+              judet: activeAddr.judet || '',
+              telefon: activeAddr.telefon || '',
+              companie: activeAddr.companie || activeAddr.company || '',
+            };
+            payload.shippingAddress = formattedAddr;
+            payload.billingAddress = formattedAddr;
+          }
+        } else {
+          payload.shippingAddress = shippingAddress;
+          payload.billingAddress = useSameAddress ? shippingAddress : billingAddress;
+        }
+      }
+
+      if (paymentMethod === 'card') {
+        payload.browserData = collectBrowserData();
+      } else {
+        payload.paymentMethod = 'ramburs';
+      }
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -486,6 +714,328 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                   );
                 })}
               </ul>
+            </div>
+            </Reveal>
+
+            <Reveal>
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900">Date de contact si livrare</h2>
+
+              {isLoadingAuth ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-12 w-full rounded-xl" />
+                </div>
+              ) : !user ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Nume complet *</label>
+                    <input
+                      type="text"
+                      value={customerDetails.fullName}
+                      onChange={(e) => setCustomerDetails({ ...customerDetails, fullName: e.target.value })}
+                      placeholder="Numele si prenumele tau"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Email *</label>
+                    <input
+                      type="email"
+                      value={customerDetails.email}
+                      onChange={(e) => setCustomerDetails({ ...customerDetails, email: e.target.value })}
+                      placeholder="email@exemplu.com"
+                      maxLength={100}
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Telefon *</label>
+                    <input
+                      type="tel"
+                      value={customerDetails.phone}
+                      onChange={(e) => setCustomerDetails({ ...customerDetails, phone: formatPhoneNumber(e.target.value) })}
+                      placeholder="07xx xxx xxx"
+                      maxLength={12}
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {user && addresses.length > 0 ? (
+                <div className="space-y-4">
+                  <p className="text-sm font-semibold text-slate-700">Alege o adresa salvata din cont:</p>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {addresses.map((addr: any) => (
+                      <button
+                        key={addr.id}
+                        type="button"
+                        onClick={() => setSelectedAddressId(addr.id)}
+                        className={`flex flex-col text-left p-4 rounded-2xl border transition ${
+                          selectedAddressId === addr.id
+                            ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="font-semibold text-sm">
+                          {addr.prenume} {addr.nume}
+                        </span>
+                        <span className="text-xs text-slate-500 mt-1">
+                          {addr.adresa1}{addr.adresa2 ? `, ${addr.adresa2}` : ''}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {addr.oras}, {addr.judet}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {addr.telefon}
+                        </span>
+                        {addr.companie ? (
+                          <span className="text-xs font-semibold text-violet-700 mt-1">
+                            {addr.companie}
+                          </span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : !isLoadingAuth ? (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-slate-800">Adresa de livrare</h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Prenume *</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.prenume}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, prenume: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Nume *</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.nume}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, nume: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Adresa *</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.adresa1}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, adresa1: e.target.value })}
+                        placeholder="Strada, numar, bloc, scara, apartament"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Adresa line 2 (optional)</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.adresa2}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, adresa2: e.target.value })}
+                        placeholder="Detalii suplimentare, repere"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Oras *</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.oras}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, oras: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Judet *</label>
+                      <select
+                        value={shippingAddress.judet}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, judet: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base bg-white text-slate-900 outline-none transition focus:border-slate-400"
+                      >
+                        <option value="">Alege judetul...</option>
+                        {ROMANIAN_COUNTIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Cod postal</label>
+                      <input
+                        type="text"
+                        value={shippingAddress.codPostal}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, codPostal: e.target.value })}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">Telefon livrare *</label>
+                      <input
+                        type="tel"
+                        value={shippingAddress.telefon}
+                        onChange={(e) => setShippingAddress({ ...shippingAddress, telefon: formatPhoneNumber(e.target.value) })}
+                        placeholder="07xx xxx xxx"
+                        maxLength={12}
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {!isLoadingAuth && (!user || addresses.length === 0) ? (
+                <div className="space-y-4 border-t border-slate-100 pt-6">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="useSameAddress"
+                      checked={useSameAddress}
+                      onChange={(e) => setUseSameAddress(e.target.checked)}
+                      className="h-5 w-5 rounded border-slate-300 accent-[#4f2048] transition cursor-pointer"
+                    />
+                    <label htmlFor="useSameAddress" className="text-base font-semibold text-slate-800 cursor-pointer select-none">
+                      Factureaza pe aceeasi adresa
+                    </label>
+                  </div>
+
+                  {!useSameAddress ? (
+                    <div className="space-y-4 border border-slate-100 rounded-2xl p-5 bg-slate-50/50">
+                      <h4 className="text-base font-bold text-slate-800">Date facturare</h4>
+                      
+                      <div className="flex items-center gap-3 mb-4">
+                        <input
+                          type="checkbox"
+                          id="isCompanyBilling"
+                          checked={isCompanyBilling}
+                          onChange={(e) => setIsCompanyBilling(e.target.checked)}
+                          className="h-5 w-5 rounded border-slate-300 accent-[#4f2048] transition cursor-pointer"
+                        />
+                        <label htmlFor="isCompanyBilling" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                          Factura pe Persoana Juridica (Companie)
+                        </label>
+                      </div>
+
+                      {isCompanyBilling ? (
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="sm:col-span-2">
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Nume Companie *</label>
+                            <input
+                              type="text"
+                              value={billingAddress.companie}
+                              onChange={(e) => setBillingAddress({ ...billingAddress, companie: e.target.value })}
+                              placeholder="SC Companie SRL"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">CUI *</label>
+                            <input
+                              type="text"
+                              value={billingAddress.cui}
+                              onChange={(e) => setBillingAddress({ ...billingAddress, cui: e.target.value })}
+                              placeholder="RO1234567"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Registru Comert *</label>
+                            <input
+                              type="text"
+                              value={billingAddress.regCom}
+                              onChange={(e) => setBillingAddress({ ...billingAddress, regCom: e.target.value })}
+                              placeholder="J40/123/2020"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Prenume *</label>
+                            <input
+                              type="text"
+                              value={billingAddress.prenume}
+                              onChange={(e) => setBillingAddress({ ...billingAddress, prenume: e.target.value })}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">Nume *</label>
+                            <input
+                              type="text"
+                              value={billingAddress.nume}
+                              onChange={(e) => setBillingAddress({ ...billingAddress, nume: e.target.value })}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid gap-4 sm:grid-cols-2 mt-4">
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Adresa facturare *</label>
+                          <input
+                            type="text"
+                            value={billingAddress.adresa1}
+                            onChange={(e) => setBillingAddress({ ...billingAddress, adresa1: e.target.value })}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Oras *</label>
+                          <input
+                            type="text"
+                            value={billingAddress.oras}
+                            onChange={(e) => setBillingAddress({ ...billingAddress, oras: e.target.value })}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Judet *</label>
+                          <select
+                            value={billingAddress.judet}
+                            onChange={(e) => setBillingAddress({ ...billingAddress, judet: e.target.value })}
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base bg-white text-slate-900 outline-none transition focus:border-slate-400"
+                          >
+                            <option value="">Alege judetul...</option>
+                            {ROMANIAN_COUNTIES.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Cod postal</label>
+                          <input
+                            type="text"
+                            value={billingAddress.codPostal}
+                            onChange={(e) => setBillingAddress({ ...billingAddress, codPostal: e.target.value })}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Telefon facturare</label>
+                          <input
+                            type="tel"
+                            value={billingAddress.telefon}
+                            onChange={(e) => setBillingAddress({ ...billingAddress, telefon: formatPhoneNumber(e.target.value) })}
+                            placeholder="07xx xxx xxx"
+                            maxLength={12}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             </Reveal>
 

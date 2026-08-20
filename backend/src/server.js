@@ -340,8 +340,19 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === 'POST' && requestUrl.pathname === '/auth/orders') {
+    if (req.method === 'POST' && (requestUrl.pathname === '/orders' || requestUrl.pathname === '/auth/orders')) {
       await handleOrderCreate(req, res);
+      return;
+    }
+
+    if (req.method === 'POST' && (requestUrl.pathname === '/payments/netopia/start' || requestUrl.pathname === '/auth/payments/netopia/start')) {
+      await handleNetopiaPaymentStart(req, res);
+      return;
+    }
+
+    const publicOrderMatch = requestUrl.pathname.match(/^\/orders\/([^/]+)$/);
+    if (publicOrderMatch && req.method === 'GET') {
+      await handlePublicOrderDetails(req, res, decodeURIComponent(publicOrderMatch[1]));
       return;
     }
 
@@ -352,11 +363,6 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && requestUrl.pathname === '/contact-messages') {
       await handleContactMessage(req, res);
-      return;
-    }
-
-    if (req.method === 'POST' && requestUrl.pathname === '/auth/payments/netopia/start') {
-      await handleNetopiaPaymentStart(req, res);
       return;
     }
 
@@ -1989,18 +1995,22 @@ async function getAdminCustomers(db = pool) {
     SELECT
       NULL::int AS id,
       MAX(o.legacy_customer_id)::int AS legacy_id,
-      COALESCE(NULLIF(BTRIM(MAX(o.legacy_customer_name)), ''), SPLIT_PART(lower(o.legacy_customer_email), '@', 1)) AS customer_name,
-      lower(o.legacy_customer_email) AS email,
-      MAX(o.legacy_customer_phone) AS phone,
+      COALESCE(
+        NULLIF(BTRIM(MAX(o.guest_name)), ''),
+        NULLIF(BTRIM(MAX(o.legacy_customer_name)), ''),
+        SPLIT_PART(lower(COALESCE(o.guest_email, o.legacy_customer_email)), '@', 1)
+      ) AS customer_name,
+      lower(COALESCE(o.guest_email, o.legacy_customer_email)) AS email,
+      COALESCE(MAX(o.guest_phone), MAX(o.legacy_customer_phone)) AS phone,
       NULL::varchar AS client_type,
       false AS requires_password_reset,
       MIN(o.created_at) AS created_at,
       MAX(o.updated_at) AS updated_at,
       COALESCE(
-        jsonb_agg(o.legacy_shipping_address ORDER BY o.created_at DESC NULLS LAST, o.id DESC)
+        jsonb_agg(COALESCE(o.shipping_address, o.legacy_shipping_address) ORDER BY o.created_at DESC NULLS LAST, o.id DESC)
           FILTER (
-            WHERE o.legacy_shipping_address IS NOT NULL
-              AND NULLIF(BTRIM(o.legacy_shipping_address->>'address1'), '') IS NOT NULL
+            WHERE COALESCE(o.shipping_address, o.legacy_shipping_address) IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(o.shipping_address->>'adresa1', o.legacy_shipping_address->>'address1', '')), '') IS NOT NULL
           ),
         '[]'::jsonb
       ) AS addresses,
@@ -2012,8 +2022,8 @@ async function getAdminCustomers(db = pool) {
       MIN(o.created_at) AS first_order_at
     FROM orders o
     WHERE o.user_id IS NULL
-      AND NULLIF(BTRIM(o.legacy_customer_email), '') IS NOT NULL
-    GROUP BY lower(o.legacy_customer_email)
+      AND NULLIF(BTRIM(COALESCE(o.guest_email, o.legacy_customer_email)), '') IS NOT NULL
+    GROUP BY lower(COALESCE(o.guest_email, o.legacy_customer_email))
     ORDER BY MAX(o.created_at) DESC NULLS LAST
   `);
 
@@ -3813,9 +3823,51 @@ async function handleOrderDetails(req, res, orderNumber) {
   sendJson(res, 200, orderResponse(order, itemsResult.rows.map(orderItemResponse)));
 }
 
+async function handlePublicOrderDetails(req, res, orderNumber) {
+  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  const orderResult = await pool.query(
+    `
+      SELECT *
+      FROM orders
+      WHERE order_number = $1
+      LIMIT 1
+    `,
+    [orderNumber],
+  );
+  const order = orderResult.rows[0];
+  if (!order) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  const itemsResult = await pool.query(
+    `
+      SELECT *
+      FROM order_items
+      WHERE order_id = $1
+      ORDER BY id ASC
+    `,
+    [order.id],
+  );
+
+  sendJson(res, 200, {
+    orderNumber: order.order_number,
+    status: order.status || 'Plasata',
+    paymentMethod: order.payment_method || 'manual',
+    paymentStatus: order.payment_status || 'unpaid',
+    paymentError: order.payment_error || null,
+    total: String(order.total || '0'),
+    currency: order.currency || 'RON',
+    items: itemsResult.rows.map(orderItemResponse),
+  });
+}
+
 async function handleOrderCreate(req, res) {
-  const user = await requireUser(req, res);
-  if (!user) return;
+  const user = await getCurrentUser(req);
 
   if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
     sendJson(res, 501, { message: 'Tabelele pentru comenzi nu exista inca.' });
@@ -3823,6 +3875,90 @@ async function handleOrderCreate(req, res) {
   }
 
   const body = await readJson(req);
+  let guestName = null;
+  let guestEmail = null;
+  let guestPhone = null;
+  let shippingAddress = null;
+  let billingAddress = null;
+
+  if (!user) {
+    const customerDetails = body.customerDetails || {};
+    guestEmail = cleanOptionalValue(customerDetails.email);
+    guestPhone = cleanOptionalValue(customerDetails.phone);
+    guestName = cleanOptionalValue(
+      customerDetails.fullName ||
+      [customerDetails.firstName, customerDetails.lastName].filter(Boolean).join(' ')
+    );
+
+    if (!guestEmail || !guestPhone || !guestName) {
+      sendJson(res, 400, { message: 'Numele, emailul si telefonul sunt obligatorii pentru comanda guest.' });
+      return;
+    }
+
+    shippingAddress = body.shippingAddress;
+    if (!shippingAddress || !shippingAddress.adresa1 || !shippingAddress.oras || !shippingAddress.judet) {
+      sendJson(res, 400, { message: 'Adresa de livrare este incompleta.' });
+      return;
+    }
+
+    billingAddress = body.billingAddress || null;
+  } else {
+    shippingAddress = body.shippingAddress || null;
+    billingAddress = body.billingAddress || null;
+
+    if (!shippingAddress) {
+      if (await hasTable('addresses')) {
+        const addressResult = await pool.query(
+          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY implicit_livrare DESC, id DESC LIMIT 1`,
+          [user.id]
+        );
+        const defaultAddr = addressResult.rows[0];
+        if (defaultAddr) {
+          shippingAddress = {
+            apelativ: defaultAddr.apelativ,
+            prenume: defaultAddr.prenume,
+            nume: defaultAddr.nume,
+            tara: defaultAddr.tara,
+            adresa1: defaultAddr.adresa1,
+            adresa2: defaultAddr.adresa2,
+            codPostal: defaultAddr.cod_postal,
+            oras: defaultAddr.oras,
+            judet: defaultAddr.judet,
+            telefon: defaultAddr.telefon,
+            companie: defaultAddr.companie || defaultAddr.company || '',
+          };
+        }
+      }
+    }
+
+    if (!billingAddress) {
+      if (await hasTable('addresses')) {
+        const addressResult = await pool.query(
+          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY implicit_facturare DESC, id DESC LIMIT 1`,
+          [user.id]
+        );
+        const defaultAddr = addressResult.rows[0];
+        if (defaultAddr) {
+          billingAddress = {
+            apelativ: defaultAddr.apelativ,
+            prenume: defaultAddr.prenume,
+            nume: defaultAddr.nume,
+            tara: defaultAddr.tara,
+            adresa1: defaultAddr.adresa1,
+            adresa2: defaultAddr.adresa2,
+            codPostal: defaultAddr.cod_postal,
+            oras: defaultAddr.oras,
+            judet: defaultAddr.judet,
+            telefon: defaultAddr.telefon,
+            companie: defaultAddr.companie || defaultAddr.company || '',
+            cui: user.cui || '',
+            regCom: user.trade_register_number || '',
+          };
+        }
+      }
+    }
+  }
+
   const requestedPaymentMethod = cleanOptionalValue(body.paymentMethod);
   if (requestedPaymentMethod && requestedPaymentMethod !== 'ramburs') {
     sendJson(res, 400, { message: 'Metoda de plata selectata nu este disponibila.' });
@@ -3854,12 +3990,32 @@ async function handleOrderCreate(req, res) {
           total,
           currency,
           payment_method,
-          payment_status
+          payment_status,
+          guest_name,
+          guest_email,
+          guest_phone,
+          shipping_address,
+          billing_address
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING *
       `,
-      [user.id, orderNumber, 'Plasata', subtotal, deliveryTotal, total, 'RON', paymentMethod, 'unpaid'],
+      [
+        user ? user.id : null,
+        orderNumber,
+        'Plasata',
+        subtotal,
+        deliveryTotal,
+        total,
+        'RON',
+        paymentMethod,
+        'unpaid',
+        guestName,
+        guestEmail,
+        guestPhone,
+        shippingAddress ? JSON.stringify(shippingAddress) : null,
+        billingAddress ? JSON.stringify(billingAddress) : null,
+      ],
     );
     const order = orderResult.rows[0];
     const insertedItems = [];
@@ -3900,7 +4056,11 @@ async function handleOrderCreate(req, res) {
 
     await client.query('COMMIT');
     const responsePayload = orderResponse(order, insertedItems);
-    void sendOrderEmails({ user, order: responsePayload, items: insertedItems });
+    const emailUser = user || {
+      email: guestEmail,
+      full_name: guestName,
+    };
+    void sendOrderEmails({ user: emailUser, order: responsePayload, items: insertedItems });
     sendJson(res, 201, responsePayload);
   } catch (error) {
     await client.query('ROLLBACK');
@@ -3911,8 +4071,7 @@ async function handleOrderCreate(req, res) {
 }
 
 async function handleNetopiaPaymentStart(req, res) {
-  const user = await requireUser(req, res);
-  if (!user) return;
+  const user = await getCurrentUser(req);
 
   if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
     sendJson(res, 501, { message: 'Tabelele pentru comenzi nu exista inca.' });
@@ -3928,6 +4087,90 @@ async function handleNetopiaPaymentStart(req, res) {
   }
 
   const body = await readJson(req);
+  let guestName = null;
+  let guestEmail = null;
+  let guestPhone = null;
+  let shippingAddress = null;
+  let billingAddress = null;
+
+  if (!user) {
+    const customerDetails = body.customerDetails || {};
+    guestEmail = cleanOptionalValue(customerDetails.email);
+    guestPhone = cleanOptionalValue(customerDetails.phone);
+    guestName = cleanOptionalValue(
+      customerDetails.fullName ||
+      [customerDetails.firstName, customerDetails.lastName].filter(Boolean).join(' ')
+    );
+
+    if (!guestEmail || !guestPhone || !guestName) {
+      sendJson(res, 400, { message: 'Numele, emailul si telefonul sunt obligatorii pentru comanda guest.' });
+      return;
+    }
+
+    shippingAddress = body.shippingAddress;
+    if (!shippingAddress || !shippingAddress.adresa1 || !shippingAddress.oras || !shippingAddress.judet) {
+      sendJson(res, 400, { message: 'Adresa de livrare este incompleta.' });
+      return;
+    }
+
+    billingAddress = body.billingAddress || null;
+  } else {
+    shippingAddress = body.shippingAddress || null;
+    billingAddress = body.billingAddress || null;
+
+    if (!shippingAddress) {
+      if (await hasTable('addresses')) {
+        const addressResult = await pool.query(
+          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY implicit_livrare DESC, id DESC LIMIT 1`,
+          [user.id]
+        );
+        const defaultAddr = addressResult.rows[0];
+        if (defaultAddr) {
+          shippingAddress = {
+            apelativ: defaultAddr.apelativ,
+            prenume: defaultAddr.prenume,
+            nume: defaultAddr.nume,
+            tara: defaultAddr.tara,
+            adresa1: defaultAddr.adresa1,
+            adresa2: defaultAddr.adresa2,
+            codPostal: defaultAddr.cod_postal,
+            oras: defaultAddr.oras,
+            judet: defaultAddr.judet,
+            telefon: defaultAddr.telefon,
+            companie: defaultAddr.companie || defaultAddr.company || '',
+          };
+        }
+      }
+    }
+
+    if (!billingAddress) {
+      if (await hasTable('addresses')) {
+        const addressResult = await pool.query(
+          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY implicit_facturare DESC, id DESC LIMIT 1`,
+          [user.id]
+        );
+        const defaultAddr = addressResult.rows[0];
+        if (defaultAddr) {
+          billingAddress = {
+            apelativ: defaultAddr.apelativ,
+            prenume: defaultAddr.prenume,
+            nume: defaultAddr.nume,
+            tara: defaultAddr.tara,
+            adresa1: defaultAddr.adresa1,
+            adresa2: defaultAddr.adresa2,
+            codPostal: defaultAddr.cod_postal,
+            oras: defaultAddr.oras,
+            judet: defaultAddr.judet,
+            telefon: defaultAddr.telefon,
+            companie: defaultAddr.companie || defaultAddr.company || '',
+            cui: user.cui || '',
+            regCom: user.trade_register_number || '',
+          };
+        }
+      }
+    }
+  }
+
   const orderItems = await buildTrustedOrderItems(body.items);
   if (orderItems.length === 0) {
     sendJson(res, 400, { message: 'Cosul este gol.' });
@@ -3938,7 +4181,37 @@ async function handleNetopiaPaymentStart(req, res) {
   const deliveryTotal = roundMoney(body.deliveryTotal || body.delivery || 0);
   const total = roundMoney(subtotal + deliveryTotal);
   const orderNumber = await generateOrderNumber();
-  const customer = await getCheckoutCustomer(user);
+
+  let customer;
+  if (user) {
+    customer = await getCheckoutCustomer(user);
+    if (shippingAddress) {
+      customer.firstName = shippingAddress.prenume || customer.firstName;
+      customer.lastName = shippingAddress.nume || customer.lastName;
+      customer.phone = shippingAddress.telefon || customer.phone;
+      customer.city = shippingAddress.oras || customer.city;
+      customer.state = shippingAddress.judet || customer.state;
+      customer.postalCode = shippingAddress.codPostal || customer.postalCode;
+      customer.details = [shippingAddress.adresa1, shippingAddress.adresa2].filter(Boolean).join(', ') || customer.details;
+    }
+  } else {
+    const parts = guestName.split(/\s+/);
+    const firstName = parts[0] || 'Client';
+    const lastName = parts.slice(1).join(' ') || 'Margele.net';
+    customer = {
+      email: guestEmail,
+      phone: guestPhone,
+      firstName,
+      lastName,
+      city: shippingAddress.oras,
+      country: 642,
+      countryName: 'Romania',
+      state: shippingAddress.judet,
+      postalCode: shippingAddress.codPostal || '',
+      details: [shippingAddress.adresa1, shippingAddress.adresa2].filter(Boolean).join(', '),
+    };
+  }
+
   const client = await pool.connect();
   let order = null;
   const insertedItems = [];
@@ -3957,13 +4230,18 @@ async function handleNetopiaPaymentStart(req, res) {
           currency,
           payment_method,
           payment_status,
-          payment_provider
+          payment_provider,
+          guest_name,
+          guest_email,
+          guest_phone,
+          shipping_address,
+          billing_address
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
       `,
       [
-        user.id,
+        user ? user.id : null,
         orderNumber,
         'In asteptare plata',
         subtotal,
@@ -3973,6 +4251,11 @@ async function handleNetopiaPaymentStart(req, res) {
         'card',
         'pending',
         'netopia',
+        guestName,
+        guestEmail,
+        guestPhone,
+        shippingAddress ? JSON.stringify(shippingAddress) : null,
+        billingAddress ? JSON.stringify(billingAddress) : null,
       ],
     );
     order = orderResult.rows[0];
@@ -4022,7 +4305,7 @@ async function handleNetopiaPaymentStart(req, res) {
   try {
     const netopiaResponse = await startNetopiaPayment({
       order,
-      items: orderItems,
+      items: insertedItems,
       customer,
       browserData: body.browserData || {},
       req,
@@ -4039,8 +4322,11 @@ async function handleNetopiaPaymentStart(req, res) {
       payment_error: paymentState.errorMessage || null,
     });
     const responseOrder = orderResponse(updatedOrder || order, insertedItems);
-    void sendOrderEmails({ user, order: responseOrder, items: insertedItems });
-    // Automatic invoicing disabled
+    const emailUser = user || {
+      email: guestEmail,
+      full_name: guestName,
+    };
+    void sendOrderEmails({ user: emailUser, order: responseOrder, items: insertedItems });
 
     sendJson(res, 201, {
       order: responseOrder,
@@ -5551,8 +5837,65 @@ function escapePdfText(value) {
 }
 
 async function getSmartBillCustomerForOrder(order, db = pool) {
+  const orderRowResult = await db.query('SELECT * FROM orders WHERE id = $1 LIMIT 1', [order.id]);
+  const orderRow = orderRowResult.rows[0];
+  if (!orderRow) {
+    throw new SmartBillError('Comanda nu a fost gasita.', { status: 400 });
+  }
+
+  const billingAddr = orderRow.billing_address;
+  const shippingAddr = orderRow.shipping_address;
+
+  if (orderRow.user_id === null || billingAddr || shippingAddr) {
+    const targetAddr = billingAddr || shippingAddr;
+    if (!targetAddr) {
+      if (orderRow.legacy_billing_address || orderRow.legacy_shipping_address) {
+        const legacyAddr = orderRow.legacy_billing_address || orderRow.legacy_shipping_address;
+        const name = orderRow.legacy_customer_name || 'Client';
+        const email = orderRow.legacy_customer_email || 'client@example.com';
+        const phone = orderRow.legacy_customer_phone || '';
+        return {
+          name,
+          vatCode: '0',
+          regCom: '',
+          isTaxPayer: false,
+          address: cleanOptionalValue(legacyAddr.address1 || legacyAddr.address_line_1 || ''),
+          city: cleanOptionalValue(legacyAddr.city || ''),
+          county: cleanOptionalValue(legacyAddr.zone || legacyAddr.county || legacyAddr.state || ''),
+          country: cleanOptionalValue(legacyAddr.country || 'Romania'),
+          email,
+          phone,
+        };
+      }
+      throw new SmartBillError('Adresa de facturare lipseste pentru aceasta comanda.', { status: 400 });
+    }
+
+    const companyName = cleanOptionalValue(targetAddr.companie || targetAddr.company);
+    const personName = cleanOptionalValue(`${targetAddr.prenume || ''} ${targetAddr.nume || ''}`).trim() || 
+                       cleanOptionalValue(orderRow.guest_name);
+    const vatCode = cleanOptionalValue(targetAddr.cui || targetAddr.vatCode) || '0';
+    const regCom = cleanOptionalValue(targetAddr.regCom || targetAddr.tradeRegisterNumber) || '';
+    const addressLine = [targetAddr.adresa1 || targetAddr.address_line_1, targetAddr.adresa2 || targetAddr.address_line_2]
+      .map(cleanOptionalValue)
+      .filter(Boolean)
+      .join(', ');
+
+    return {
+      name: companyName || personName || 'Client Margele.net',
+      vatCode,
+      regCom,
+      isTaxPayer: /^RO[0-9]+$/i.test(vatCode),
+      address: addressLine,
+      city: cleanOptionalValue(targetAddr.oras || targetAddr.city),
+      county: cleanOptionalValue(targetAddr.judet || targetAddr.county),
+      country: cleanOptionalValue(targetAddr.tara || targetAddr.country) || 'Romania',
+      email: cleanOptionalValue(orderRow.guest_email || order.customer?.email),
+      phone: cleanOptionalValue(targetAddr.telefon || targetAddr.phone || orderRow.guest_phone),
+    };
+  }
+
   const userResult = await db.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [
-    order.customer?.id,
+    orderRow.user_id,
   ]);
   const user = userResult.rows[0];
   if (!user) {
@@ -5593,9 +5936,9 @@ async function getSmartBillCustomerForOrder(order, db = pool) {
     cleanOptionalValue(user.cui) ||
     '0';
   const addressLine = [address.adresa1 || address.address_line_1, address.adresa2 || address.address_line_2]
-    .map(cleanOptionalValue)
-    .filter(Boolean)
-    .join(', ');
+     .map(cleanOptionalValue)
+     .filter(Boolean)
+     .join(', ');
 
   return {
     name: companyName || personName,
@@ -5809,10 +6152,16 @@ function adminOrderResponse(order) {
     smartbillEmailSentAt: order.smartbill_email_sent_at || null,
     smartbillLastAttemptAt: order.smartbill_last_attempt_at || null,
     smartbillError: order.smartbill_error || null,
+    guestName: order.guest_name || null,
+    guestEmail: order.guest_email || null,
+    guestPhone: order.guest_phone || null,
+    shippingAddress: order.shipping_address || null,
+    billingAddress: order.billing_address || null,
     customer: {
       id: order.user_id ?? null,
-      name: order.user_name || legacyCustomerName,
-      email: order.user_email || legacyCustomerEmail,
+      name: order.user_name || order.guest_name || legacyCustomerName,
+      email: order.user_email || order.guest_email || legacyCustomerEmail,
+      phone: order.guest_phone || order.legacy_customer_phone || null,
     },
     itemCount: Number(order.item_count || items.reduce((sum, item) => sum + item.quantity, 0)),
   };

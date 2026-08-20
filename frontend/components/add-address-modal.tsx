@@ -1,6 +1,19 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useState, useEffect } from 'react';
+import { z } from 'zod';
+
+const formatPhoneNumber = (value: string) => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 10);
+  if (limited.length <= 4) {
+    return limited;
+  } else if (limited.length <= 7) {
+    return `${limited.slice(0, 4)} ${limited.slice(4)}`;
+  } else {
+    return `${limited.slice(0, 4)} ${limited.slice(4, 7)} ${limited.slice(7)}`;
+  }
+};
 
 export type AddressFormValues = {
   apelativ: string;
@@ -33,6 +46,13 @@ export default function AddAddressModal({
 }: AddAddressModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [phoneVal, setPhoneVal] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setPhoneVal(initialValues?.telefon ?? '');
+    }
+  }, [open, initialValues]);
 
   if (!open) return null;
 
@@ -57,6 +77,32 @@ export default function AddAddressModal({
       implicitFacturare: data.get('implicitFacturare') === 'on',
       implicitLivrare: data.get('implicitLivrare') === 'on',
     };
+
+    const addressSchema = z.object({
+      prenume: z.string().min(2, 'Prenumele trebuie sa aiba cel putin 2 caractere.').max(50),
+      nume: z.string().min(2, 'Numele trebuie sa aiba cel putin 2 caractere.').max(50),
+      adresa1: z.string().min(5, 'Adresa este prea scurta (minim 5 caractere).').max(150),
+      adresa2: z.string().max(150).optional(),
+      oras: z.string().min(2, 'Orasul trebuie sa aiba cel putin 2 caractere.').max(50),
+      judet: z.string().min(2, 'Te rugam sa alegi judetul.'),
+      codPostal: z.string().optional().refine((val) => !val || /^[0-9]{6}$/.test(val), {
+        message: 'Codul postal trebuie sa aiba exact 6 cifre.',
+      }),
+      telefon: z.string().optional().refine((val) => {
+        if (!val) return true;
+        const clean = val.replace(/\s+/g, '');
+        return /^0[0-9]{9}$/.test(clean);
+      }, {
+        message: 'Numarul de telefon trebuie sa aiba 10 cifre si sa inceapa cu 0 (ex: 0722 123 456).',
+      }),
+    });
+
+    const check = addressSchema.safeParse(values);
+    if (!check.success) {
+      setErrorMessage(check.error.issues[0].message);
+      setIsSaving(false);
+      return;
+    }
 
     try {
       await onSave(values);
@@ -236,7 +282,10 @@ export default function AddAddressModal({
               id="telefon-adresa"
               name="telefon"
               type="tel"
-              defaultValue={initialValues?.telefon ?? ''}
+              value={phoneVal}
+              onChange={(e) => setPhoneVal(formatPhoneNumber(e.target.value))}
+              placeholder="07xx xxx xxx"
+              maxLength={12}
               className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
             />
           </div>

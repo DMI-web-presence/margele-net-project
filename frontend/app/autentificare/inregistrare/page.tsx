@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, useMemo, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { z } from 'zod';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -34,6 +35,42 @@ function InregistrareContent() {
     event.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
+
+    const values = {
+      email,
+      password,
+      firstName,
+      lastName,
+      clientType,
+      companyName,
+      cui,
+      tradeRegisterNumber,
+    };
+
+    const registerSchema = z.object({
+      email: z.string().email('Adresa de email este invalida.'),
+      password: z.string().min(8, 'Parola trebuie sa aiba cel putin 8 caractere.'),
+      firstName: z.string().min(2, 'Prenumele trebuie sa aiba cel putin 2 caractere.').max(50),
+      lastName: z.string().min(2, 'Numele trebuie sa aiba cel putin 2 caractere.').max(50),
+      clientType: z.enum(['Persoana fizica', 'Persoana juridica']),
+      companyName: z.string().optional(),
+      cui: z.string().optional(),
+      tradeRegisterNumber: z.string().optional(),
+    }).refine((data) => {
+      if (data.clientType === 'Persoana juridica') {
+        return Boolean(data.companyName?.trim()) && Boolean(data.cui?.trim()) && Boolean(data.tradeRegisterNumber?.trim());
+      }
+      return true;
+    }, {
+      message: 'Datele companiei (Nume, CUI, Registru Comert) sunt obligatorii pentru persoana juridica.',
+    });
+
+    const check = registerSchema.safeParse(values);
+    if (!check.success) {
+      setErrorMessage(check.error.issues[0].message);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -42,14 +79,7 @@ function InregistrareContent() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          email,
-          password,
-          firstName,
-          lastName,
-          clientType,
-          companyName,
-          cui,
-          tradeRegisterNumber,
+          ...values,
           newsletterSubscribed,
         }),
       });
