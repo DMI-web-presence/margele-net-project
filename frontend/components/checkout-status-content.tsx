@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 type Order = {
   orderNumber: string;
   status: string;
+  paymentMethod?: string | null;
   paymentStatus?: string | null;
   paymentError?: string | null;
   total: string;
@@ -30,6 +31,14 @@ function statusCopy(order: Order | null) {
       title: 'Se verifica plata',
       body: 'Asteptam confirmarea procesatorului de plata.',
       tone: 'text-slate-900',
+    };
+  }
+
+  if (order.paymentMethod === 'ramburs') {
+    return {
+      title: 'Comanda a fost plasata',
+      body: 'Ai ales plata ramburs. Vei plati direct la curier in momentul livrarii.',
+      tone: 'text-emerald-700',
     };
   }
 
@@ -125,6 +134,9 @@ export default function CheckoutStatusContent() {
           <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
             <p className="font-semibold text-slate-900">{order.orderNumber}</p>
             <p className="mt-1">Status comanda: {order.status}</p>
+            {order.paymentMethod === 'ramburs' ? (
+              <p className="mt-1">Metoda plata: Ramburs la livrare</p>
+            ) : null}
             <p className="mt-1">Total: {currencyFormatter.format(Number(order.total || 0))}</p>
           </div>
         ) : null}

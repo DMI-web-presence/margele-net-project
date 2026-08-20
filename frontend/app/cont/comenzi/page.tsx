@@ -120,6 +120,7 @@ function getOrderSummary(order: Order) {
 }
 
 function paymentStatusLabel(order: Order) {
+  if (order.paymentMethod === 'ramburs') return 'Ramburs la livrare';
   if (order.paymentStatus === 'paid') return 'Plata confirmata';
   if (order.paymentStatus === 'pending') return 'Plata in asteptare';
   if (order.paymentStatus === 'failed') return 'Plata esuata';

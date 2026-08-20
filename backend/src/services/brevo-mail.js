@@ -237,6 +237,7 @@ function createBrevoMailer(config = {}) {
         `Subtotal: ${order?.subtotal || '0'} lei`,
         `Livrare: ${order?.deliveryTotal || '0'} lei`,
         `Total: ${order?.total || '0'} lei`,
+        `Metoda plata: ${formatPaymentMethod(order?.paymentMethod)}`,
         `Status: ${order?.status || 'Plasata'}`,
         '',
         'Iti multumim,',
@@ -259,6 +260,7 @@ function createBrevoMailer(config = {}) {
           <p style="margin: 0 0 6px;"><strong>Subtotal:</strong> ${escapeHtml(String(order?.subtotal || '0'))} lei</p>
           <p style="margin: 0 0 6px;"><strong>Livrare:</strong> ${escapeHtml(String(order?.deliveryTotal || '0'))} lei</p>
           <p style="margin: 0 0 6px;"><strong>Total:</strong> ${escapeHtml(String(order?.total || '0'))} lei</p>
+          <p style="margin: 0 0 6px;"><strong>Metoda plata:</strong> ${escapeHtml(formatPaymentMethod(order?.paymentMethod))}</p>
           <p style="margin: 0 0 24px;"><strong>Status:</strong> ${escapeHtml(order?.status || 'Plasata')}</p>
           <p style="margin: 0;">Echipa Margele.net</p>
         </div>
@@ -295,6 +297,7 @@ function createBrevoMailer(config = {}) {
         `Comanda noua: ${order?.orderNumber || ''}`,
         `Client: ${user?.full_name || '-'} <${user?.email || '-'}>`,
         `Total: ${order?.total || '0'} lei`,
+        `Metoda plata: ${formatPaymentMethod(order?.paymentMethod)}`,
         `Status plata: ${order?.paymentStatus || '-'}`,
       ].join('\n'),
       htmlContent: `
@@ -302,6 +305,7 @@ function createBrevoMailer(config = {}) {
           <h2 style="margin: 0 0 16px;">Comanda noua ${escapeHtml(order?.orderNumber || '')}</h2>
           <p style="margin: 0 0 8px;"><strong>Client:</strong> ${escapeHtml(user?.full_name || '-')} (${escapeHtml(user?.email || '-')})</p>
           <p style="margin: 0 0 8px;"><strong>Total:</strong> ${escapeHtml(String(order?.total || '0'))} lei</p>
+          <p style="margin: 0 0 8px;"><strong>Metoda plata:</strong> ${escapeHtml(formatPaymentMethod(order?.paymentMethod))}</p>
           <p style="margin: 0 0 16px;"><strong>Status plata:</strong> ${escapeHtml(order?.paymentStatus || '-')}</p>
           <ul style="padding-left: 18px; margin: 0;">${itemsHtml}</ul>
         </div>
@@ -616,6 +620,13 @@ function formatSelectedOptions(selectedOptions) {
   }
 
   return '';
+}
+
+function formatPaymentMethod(method) {
+  if (method === 'ramburs') return 'Ramburs la livrare';
+  if (method === 'card') return 'Card online';
+  if (method === 'manual') return 'Manual';
+  return method || '-';
 }
 
 function humanizeLabel(value) {

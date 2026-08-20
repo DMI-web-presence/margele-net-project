@@ -38,6 +38,13 @@ type PaymentStartResponse = {
   message?: string;
 };
 
+type OrderCreateResponse = {
+  orderNumber?: string;
+  message?: string;
+};
+
+type PaymentMethod = 'card' | 'ramburs';
+
 const currencyFormatter = new Intl.NumberFormat('ro-RO', {
   style: 'currency',
   currency: 'RON',
@@ -109,33 +116,6 @@ function BasketIcon() {
     >
       <path d="M6 9h12l-1 10H7L6 9Z" />
       <path d="M9 9V7a3 3 0 0 1 6 0v2" />
-    </svg>
-  );
-}
-
-function VoucherIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5 fill-none stroke-current stroke-[1.8]"
-    >
-      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-9Z" />
-      <path d="M10 5v14" />
-      <circle cx="8" cy="9" r="1" />
-      <circle cx="12" cy="15" r="1" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={`h-5 w-5 fill-none stroke-current stroke-2 transition ${open ? 'rotate-180' : ''}`}
-    >
-      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
@@ -262,9 +242,9 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
     setCartQuantity,
     clearCart,
   } = useCart();
-  const [voucherOpen, setVoucherOpen] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
   const productMap = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
     [products],
@@ -303,29 +283,43 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
     setIsPlacingOrder(true);
 
     try {
-      const response = await fetch(`${backendUrl}/auth/payments/netopia/start`, {
+      const endpoint =
+        paymentMethod === 'card'
+          ? `${backendUrl}/auth/payments/netopia/start`
+          : `${backendUrl}/auth/orders`;
+      const payload = {
+        items: enrichedItems,
+        deliveryTotal: delivery,
+        ...(paymentMethod === 'card'
+          ? { browserData: collectBrowserData() }
+          : { paymentMethod: 'ramburs' }),
+      };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          items: enrichedItems,
-          deliveryTotal: delivery,
-          browserData: collectBrowserData(),
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const result = (await response.json().catch(() => null)) as PaymentStartResponse | null;
+      const result = (await response.json().catch(() => null)) as PaymentStartResponse | OrderCreateResponse | null;
       if (!response.ok) {
         throw new Error(result?.message || 'Nu am putut plasa comanda.');
       }
 
-      const orderNumber = result?.order?.orderNumber;
-      const redirectUrl = result?.payment?.redirectUrl;
-      const redirectMethod = result?.payment?.redirectMethod || 'GET';
+      const cardResult = result as PaymentStartResponse | null;
+      const rambursResult = result as OrderCreateResponse | null;
+      const orderNumber =
+        paymentMethod === 'card'
+          ? cardResult?.order?.orderNumber
+          : rambursResult?.orderNumber;
+      const redirectUrl = paymentMethod === 'card' ? cardResult?.payment?.redirectUrl : '';
+      const redirectMethod =
+        paymentMethod === 'card' ? cardResult?.payment?.redirectMethod || 'GET' : 'NONE';
 
       clearCart();
       if (redirectUrl && redirectMethod === 'POST') {
-        submitPaymentForm(redirectUrl, result?.payment?.formData || {});
+        submitPaymentForm(redirectUrl, cardResult?.payment?.formData || {});
         return;
       }
 
@@ -336,7 +330,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
 
       router.push(orderNumber ? `/checkout/status?orderNumber=${encodeURIComponent(orderNumber)}` : '/cont/comenzi');
     } catch (error) {
-      setOrderError(error instanceof Error ? error.message : 'Nu am putut porni plata online.');
+      setOrderError(error instanceof Error ? error.message : 'Nu am putut plasa comanda.');
     } finally {
       setIsPlacingOrder(false);
     }
@@ -509,28 +503,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
             className="animate-hero-item h-fit rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-24"
             style={{ animationDelay: '120ms' }}
           >
-            <button
-              type="button"
-              onClick={() => setVoucherOpen((current) => !current)}
-              className="flex w-full cursor-pointer items-center justify-between gap-3 text-left"
-              aria-expanded={voucherOpen}
-            >
-              <span className="flex items-center gap-3 text-xl font-semibold text-slate-900">
-                <VoucherIcon />
-                Vouchere
-              </span>
-              <ChevronIcon open={voucherOpen} />
-            </button>
-
-            {voucherOpen ? (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm leading-6 text-slate-600">
-                  Functionalitatea pentru coduri promotionale va fi adaugata in continuare.
-                </p>
-              </div>
-            ) : null}
-
-            <div className="mt-6 space-y-3 border-t border-slate-200 pt-6 text-lg text-slate-900">
+            <div className="space-y-3 text-lg text-slate-900">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-slate-700">Suma partiala</span>
                 <span className="font-medium">{currencyFormatter.format(subtotal)}</span>
@@ -546,35 +519,105 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
               <p className="text-sm text-slate-500">TVA inclus</p>
             </div>
 
+            <fieldset className="mt-6 space-y-3 border-t border-slate-200 pt-6">
+              <legend className="text-sm font-semibold text-slate-900">Metoda de plata</legend>
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('card')}
+                  aria-pressed={paymentMethod === 'card'}
+                  className={`flex min-h-16 w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition ${
+                    paymentMethod === 'card'
+                      ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">Card online</span>
+                    <span className="mt-1 block text-xs text-slate-500">Plata securizata prin NETOPIA</span>
+                  </span>
+                  <span
+                    className={`h-4 w-4 rounded-full border ${
+                      paymentMethod === 'card' ? 'border-[#4f2048] bg-[#4f2048]' : 'border-slate-300'
+                    }`}
+                    aria-hidden="true"
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('ramburs')}
+                  aria-pressed={paymentMethod === 'ramburs'}
+                  className={`flex min-h-16 w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition ${
+                    paymentMethod === 'ramburs'
+                      ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">Ramburs la livrare</span>
+                    <span className="mt-1 block text-xs text-slate-500">Platesti numerar cand primesti coletul</span>
+                  </span>
+                  <span
+                    className={`h-4 w-4 rounded-full border ${
+                      paymentMethod === 'ramburs' ? 'border-[#4f2048] bg-[#4f2048]' : 'border-slate-300'
+                    }`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+            </fieldset>
+
             <button
               type="button"
               onClick={handlePlaceOrder}
               disabled={isPlacingOrder}
               className="mt-6 inline-flex min-h-12 w-full cursor-pointer items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-base font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isPlacingOrder ? 'Se porneste plata...' : 'Continua spre plata'}
+              {isPlacingOrder
+                ? paymentMethod === 'card'
+                  ? 'Se porneste plata...'
+                  : 'Se trimite comanda...'
+                : paymentMethod === 'card'
+                  ? 'Continua spre plata'
+                  : 'Trimite comanda'}
             </button>
 
             {orderError ? (
               <p className="mt-3 text-sm font-semibold text-red-600">{orderError}</p>
             ) : null}
 
-            <div className="mt-6 space-y-3 border-t border-slate-200 pt-6">
-              <p className="text-sm font-semibold text-slate-900">Plata securizata prin NETOPIA</p>
-              <p className="text-sm leading-6 text-slate-600">
-                Vei fi redirectionat catre procesator pentru finalizarea platii cu cardul.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {['NETOPIA Payments', 'Visa', 'Mastercard', 'Maestro', 'Apple Pay'].map((label) => (
-                  <span
-                    key={label}
-                    className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700"
-                  >
-                    {label}
+            {paymentMethod === 'card' ? (
+              <div className="mt-6 space-y-3 border-t border-slate-200 pt-6">
+                <p className="text-sm font-semibold text-slate-900">Plată securizată prin NETOPIA Payments</p>
+                <p className="text-sm leading-6 text-slate-600">
+                  Vei fi redirectionat catre procesator pentru finalizarea platii cu cardul.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-3">
+                    <Image
+                      src="/visa-logo.svg"
+                      alt="Visa"
+                      width={72}
+                      height={24}
+                      className="h-6 w-auto object-contain"
+                    />
                   </span>
-                ))}
+                  <span className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-3">
+                    <Image
+                      src="/mastercard-logo.svg"
+                      alt="Mastercard"
+                      width={105}
+                      height={24}
+                      className="h-6 w-auto object-contain"
+                    />
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+                Vei plati comanda ramburs, direct la curier, in momentul livrarii.
+              </div>
+            )}
           </aside>
         </div>
       </div>
