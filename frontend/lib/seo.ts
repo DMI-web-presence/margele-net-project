@@ -10,6 +10,7 @@ export const defaultSeoDescription =
 export const publicStaticRoutes = [
   { path: '/', priority: 1, changeFrequency: 'daily' as const },
   { path: '/catalog', priority: 0.9, changeFrequency: 'daily' as const },
+  { path: '/catalog-digital', priority: 0.7, changeFrequency: 'weekly' as const },
   { path: '/noutati', priority: 0.7, changeFrequency: 'daily' as const },
   { path: '/cum-cumpar', priority: 0.5, changeFrequency: 'monthly' as const },
   { path: '/transport', priority: 0.5, changeFrequency: 'monthly' as const },
