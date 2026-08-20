@@ -12,6 +12,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { createFormSpamState } from '@/lib/form-spam-protection';
 import { z } from 'zod';
 
+const formatPhoneNumber = (value: string) => {
+  const clean = value.replace(/\D/g, '');
+  const limited = clean.slice(0, 10);
+  if (limited.length <= 4) {
+    return limited;
+  } else if (limited.length <= 7) {
+    return `${limited.slice(0, 4)} ${limited.slice(4)}`;
+  } else {
+    return `${limited.slice(0, 4)} ${limited.slice(4, 7)} ${limited.slice(7)}`;
+  }
+};
+
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
 
 const returnSteps = [
@@ -335,9 +347,9 @@ export default function ReturnPageContent() {
                   type="tel"
                   placeholder="07xx xxx xxx"
                   value={form.phone}
-                  onChange={(value) => handleFieldChange('phone', value)}
+                  onChange={(value) => handleFieldChange('phone', formatPhoneNumber(value))}
                   error={validationErrors.phone}
-                  maxLength={15}
+                  maxLength={12}
                 />
                 <Field
                   label="Numar comanda"

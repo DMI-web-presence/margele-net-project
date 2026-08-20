@@ -4797,6 +4797,79 @@ export default function AdminPanel() {
                     </DashboardSection>
                   ) : null}
 
+                  {selectedOrder.shippingAddress || selectedOrder.billingAddress || selectedOrder.guestPhone ? (
+                    <DashboardSection title="Date livrare si facturare" description="Adresele selectate de client pentru expeditie si factura.">
+                      <div className="grid gap-6 md:grid-cols-2">
+                        {selectedOrder.shippingAddress ? (
+                          <DashboardCard className="p-5 space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Adresa livrare</p>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {selectedOrder.shippingAddress.prenume} {selectedOrder.shippingAddress.nume}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {selectedOrder.shippingAddress.adresa1}
+                              {selectedOrder.shippingAddress.adresa2 ? `, ${selectedOrder.shippingAddress.adresa2}` : ''}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {selectedOrder.shippingAddress.oras}, {selectedOrder.shippingAddress.judet}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {selectedOrder.shippingAddress.codPostal || 'Fara cod postal'} · {selectedOrder.shippingAddress.tara || 'Romania'}
+                            </p>
+                            {selectedOrder.shippingAddress.telefon || selectedOrder.guestPhone ? (
+                              <p className="text-sm font-medium text-slate-900 mt-2">
+                                Telefon: {selectedOrder.shippingAddress.telefon || selectedOrder.guestPhone}
+                              </p>
+                            ) : null}
+                          </DashboardCard>
+                        ) : null}
+
+                        {selectedOrder.billingAddress ? (
+                          <DashboardCard className="p-5 space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Adresa facturare</p>
+                            {selectedOrder.billingAddress.companie ? (
+                              <>
+                                <p className="text-sm font-bold text-violet-700">Persoana Juridica</p>
+                                <p className="text-sm font-semibold text-slate-900">{selectedOrder.billingAddress.companie}</p>
+                                {selectedOrder.billingAddress.cui ? <p className="text-xs text-slate-500">CUI: {selectedOrder.billingAddress.cui}</p> : null}
+                                {selectedOrder.billingAddress.regCom ? <p className="text-xs text-slate-500">Reg. Com: {selectedOrder.billingAddress.regCom}</p> : null}
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-sm font-bold text-slate-700">Persoana Fizica</p>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  {selectedOrder.billingAddress.prenume} {selectedOrder.billingAddress.nume}
+                                </p>
+                              </>
+                            )}
+                            <p className="text-sm text-slate-600">
+                              {selectedOrder.billingAddress.adresa1}
+                              {selectedOrder.billingAddress.adresa2 ? `, ${selectedOrder.billingAddress.adresa2}` : ''}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {selectedOrder.billingAddress.oras}, {selectedOrder.billingAddress.judet}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              {selectedOrder.billingAddress.codPostal || 'Fara cod postal'} · {selectedOrder.billingAddress.tara || 'Romania'}
+                            </p>
+                            {selectedOrder.billingAddress.telefon ? (
+                              <p className="text-sm font-medium text-slate-900 mt-2">
+                                Telefon: {selectedOrder.billingAddress.telefon}
+                              </p>
+                            ) : null}
+                          </DashboardCard>
+                        ) : (
+                          selectedOrder.shippingAddress ? (
+                            <DashboardCard className="p-5 flex flex-col justify-center items-center text-center">
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400 mb-1">Adresa facturare</p>
+                              <p className="text-sm text-slate-500">Aceeasi cu adresa de livrare</p>
+                            </DashboardCard>
+                          ) : null
+                        )}
+                      </div>
+                    </DashboardSection>
+                  ) : null}
+
                   <DashboardSection title="Produse din comanda" description="Produsele incluse in comanda selectata.">
                     <div className="space-y-3">
                       {selectedOrder.items.map((item) => (

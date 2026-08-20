@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, useMemo, useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { z } from 'zod';
 
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:3001';
@@ -35,6 +36,23 @@ function ConectareContent() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage('');
+
+    const values = {
+      email,
+      password,
+    };
+
+    const loginSchema = z.object({
+      email: z.string().email('Adresa de email este invalida.'),
+      password: z.string().min(1, 'Parola este obligatorie.'),
+    });
+
+    const check = loginSchema.safeParse(values);
+    if (!check.success) {
+      setErrorMessage(check.error.issues[0].message);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -42,10 +60,7 @@ function ConectareContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          email,
-          password,
-        }),
+        body: JSON.stringify(values),
       });
 
       if (!response.ok) {

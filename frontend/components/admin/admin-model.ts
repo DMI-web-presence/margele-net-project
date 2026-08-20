@@ -252,11 +252,17 @@ export type OrderRecord = {
   smartbillEmailSentAt: string | null;
   smartbillLastAttemptAt: string | null;
   smartbillError: string | null;
+  guestName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  shippingAddress: any | null;
+  billingAddress: any | null;
   itemCount: number;
   customer: {
     id: number | null;
     name: string;
     email: string;
+    phone?: string | null;
   };
   items: OrderItemRecord[];
 };
