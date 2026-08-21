@@ -8,6 +8,7 @@ import { useCart } from '@/components/cart-provider';
 import Reveal from '@/components/reveal';
 import { getProductImageProps } from '@/lib/product-image-variants';
 import { z } from 'zod';
+import CityAutocompleteInput from '@/components/city-autocomplete';
 
 type Product = {
   id: number;
@@ -843,10 +844,10 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1">Oras *</label>
-                      <input
-                        type="text"
+                      <CityAutocompleteInput
                         value={shippingAddress.oras}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, oras: e.target.value })}
+                        onChange={(val) => setShippingAddress({ ...shippingAddress, oras: val })}
+                        onSelectCity={(city, county) => setShippingAddress({ ...shippingAddress, oras: city, judet: county })}
                         className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
                       />
                     </div>
@@ -989,10 +990,10 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-slate-700 mb-1">Oras *</label>
-                          <input
-                            type="text"
+                          <CityAutocompleteInput
                             value={billingAddress.oras}
-                            onChange={(e) => setBillingAddress({ ...billingAddress, oras: e.target.value })}
+                            onChange={(val) => setBillingAddress({ ...billingAddress, oras: val })}
+                            onSelectCity={(city, county) => setBillingAddress({ ...billingAddress, oras: city, judet: county })}
                             className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
                           />
                         </div>

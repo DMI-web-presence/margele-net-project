@@ -2,6 +2,7 @@
 
 import { FormEvent, useState, useEffect } from 'react';
 import { z } from 'zod';
+import CityAutocompleteInput from '@/components/city-autocomplete';
 
 const formatPhoneNumber = (value: string) => {
   const clean = value.replace(/\D/g, '');
@@ -47,10 +48,14 @@ export default function AddAddressModal({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [phoneVal, setPhoneVal] = useState('');
+  const [orasVal, setOrasVal] = useState('');
+  const [judetVal, setJudetVal] = useState('');
 
   useEffect(() => {
     if (open) {
       setPhoneVal(initialValues?.telefon ?? '');
+      setOrasVal(initialValues?.oras ?? '');
+      setJudetVal(initialValues?.judet ?? '');
     }
   }, [open, initialValues]);
 
@@ -252,11 +257,16 @@ export default function AddAddressModal({
               <label className="text-sm font-semibold text-slate-900" htmlFor="oras">
                 Oras
               </label>
-              <input
+              <CityAutocompleteInput
                 id="oras"
                 name="oras"
                 required
-                defaultValue={initialValues?.oras ?? ''}
+                value={orasVal}
+                onChange={(val) => setOrasVal(val)}
+                onSelectCity={(city, county) => {
+                  setOrasVal(city);
+                  setJudetVal(county);
+                }}
                 className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
               />
             </div>
@@ -268,7 +278,8 @@ export default function AddAddressModal({
                 id="judet"
                 name="judet"
                 required
-                defaultValue={initialValues?.judet ?? ''}
+                value={judetVal}
+                onChange={(e) => setJudetVal(e.target.value)}
                 className="w-full rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-500 focus:bg-white"
               />
             </div>
