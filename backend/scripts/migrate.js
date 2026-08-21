@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required in backend/.env');
 }
 
-const dbSearchPath = 'app_auth,catalog,commerce,content,public';
+const dbSearchPath = 'catalog,commerce,content,app_auth,public,auth';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
