@@ -8,7 +8,7 @@ loadEnv(path.join(__dirname, '..', '..', 'frontend', '.env'), false, [
   'FRONTEND_ORIGIN',
 ]);
 
-const dbSearchSchemas = ['app_auth', 'catalog', 'commerce', 'content', 'public', 'auth'];
+const dbSearchSchemas = ['catalog', 'commerce', 'content', 'app_auth', 'public', 'auth'];
 const dbSearchPath = dbSearchSchemas.join(',');
 
 const config = {
