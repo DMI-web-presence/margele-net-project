@@ -539,6 +539,9 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
         deliveryTotal: delivery,
         shippingMethod: shippingMethod === 'sediu' ? 'Ridicare de la sediu' : 'Livrare la domiciliu',
       };
+      if (!user) {
+        payload.customerDetails = customerDetails;
+      }
 
       const storeAddress = {
         prenume: 'Ridicare',
@@ -564,7 +567,6 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
         }
       } else {
         if (!user) {
-          payload.customerDetails = customerDetails;
           payload.shippingAddress = {
             ...shippingAddress,
             telefon: shippingAddress.telefon || customerDetails.phone,
