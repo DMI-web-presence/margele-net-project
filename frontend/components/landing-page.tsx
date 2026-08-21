@@ -56,8 +56,8 @@ const heroBenefits = [
     ),
   },
   {
-    title: 'Transport Gratuit*',
-    description: '* Prin Posta, la comenzile peste 150 de lei. Prin curier, la comenzile peste 300 de lei.',
+    title: 'Transport 25 Lei',
+    description: 'Tarif fix simplu si unic de 25 de lei pentru orice comanda oriunde in tara.',
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7">
         <path d="M3 6h11v9H3V6ZM14 9h3.8l3.2 3.2V15h-7V9Z" className="fill-none stroke-current stroke-[1.8]" />

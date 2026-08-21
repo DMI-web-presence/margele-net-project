@@ -16,6 +16,7 @@ const {
   buildSmartBillInvoicePayload,
   createSmartBillClient,
 } = require('./services/smartbill');
+const { createEcoletClient } = require('./services/ecolet');
 
 const uploadRoot = path.join(__dirname, '..', 'uploads');
 const productUploadDir = path.join(uploadRoot, 'products');
@@ -72,6 +73,8 @@ const smartBillClient = createSmartBillClient({
   dueDays: config.smartbillDueDays,
   sendEmail: config.smartbillSendEmail,
 });
+
+const ecoletClient = createEcoletClient();
 
 let userColumnsCache = null;
 let addressColumnsCache = null;
@@ -170,6 +173,35 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && requestUrl.pathname === '/admin/backup-status') {
       await handleAdminBackupStatus(req, res);
+      return;
+    }
+
+    const adminAwbGenerateMatch = requestUrl.pathname.match(
+      /^\/admin\/orders\/(\d+)\/awb$/
+    );
+    if (adminAwbGenerateMatch && req.method === 'POST') {
+      await handleAdminAwbCreate(req, res, Number(adminAwbGenerateMatch[1]));
+      return;
+    }
+
+    const adminAwbPdfMatch = requestUrl.pathname.match(
+      /^\/admin\/orders\/(\d+)\/awb\/pdf$/
+    );
+    if (adminAwbPdfMatch && req.method === 'GET') {
+      await handleAdminAwbPdf(req, res, Number(adminAwbPdfMatch[1]));
+      return;
+    }
+
+    const adminAwbCancelMatch = requestUrl.pathname.match(
+      /^\/admin\/orders\/(\d+)\/awb$/
+    );
+    if (adminAwbCancelMatch && req.method === 'DELETE') {
+      await handleAdminAwbCancel(req, res, Number(adminAwbCancelMatch[1]));
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/api/webhooks/ecolet') {
+      await handleEcoletWebhook(req, res);
       return;
     }
 
@@ -1668,6 +1700,189 @@ async function handleAdminOrderUpdate(req, res, orderId) {
   const updated = await getAdminOrderById(orderId);
 
   sendJson(res, 200, updated);
+}
+
+async function handleAdminAwbCreate(req, res, orderId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const order = await getAdminOrderById(orderId);
+  if (!order) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  if (order.awbNumber) {
+    sendJson(res, 409, { message: 'Comanda are deja un AWB generat.' });
+    return;
+  }
+
+  const body = await readJson(req);
+  try {
+    const result = await ecoletClient.createLabel(order, {
+      type: body.type || 'package',
+      weight: body.weight || '1.0',
+      length: body.length || '10',
+      width: body.width || '10',
+      height: body.height || '10',
+      service: body.service || 'fan_standard',
+    });
+
+    await updateRow('orders', orderId, {
+      awb_id: result.waybillId,
+      awb_number: result.awbNumber,
+      awb_status: 'Generated',
+      awb_carrier: result.carrier,
+      awb_pdf_url: `/admin/orders/${orderId}/awb/pdf`,
+      courier: result.carrier,
+      tracking_number: result.awbNumber,
+      tracking_url: `https://www.ecolet.ro/`,
+    });
+
+    const updatedOrder = await getAdminOrderById(orderId);
+    sendJson(res, 200, updatedOrder);
+  } catch (error) {
+    console.error('Ecolet AWB Creation error:', error);
+    sendJson(res, 500, {
+      message: error.message || 'Eroare la generarea AWB-ului prin Ecolet.',
+      details: error.details || null,
+    });
+  }
+}
+
+async function handleAdminAwbCancel(req, res, orderId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const order = await getAdminOrderById(orderId);
+  if (!order) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  if (!order.awbId) {
+    sendJson(res, 409, { message: 'Comanda nu are un AWB generat.' });
+    return;
+  }
+
+  try {
+    await ecoletClient.cancelLabel(order.awbId);
+
+    await updateRow('orders', orderId, {
+      awb_id: null,
+      awb_number: null,
+      awb_status: 'Cancelled',
+      awb_carrier: null,
+      awb_pdf_url: null,
+      courier: null,
+      tracking_number: null,
+      tracking_url: null,
+    });
+
+    const updatedOrder = await getAdminOrderById(orderId);
+    sendJson(res, 200, updatedOrder);
+  } catch (error) {
+    console.error('Ecolet AWB Cancellation error:', error);
+    sendJson(res, 500, {
+      message: error.message || 'Eroare la anularea AWB-ului prin Ecolet.',
+      details: error.details || null,
+    });
+  }
+}
+
+async function handleAdminAwbPdf(req, res, orderId) {
+  const user = await requireAdmin(req, res);
+  if (!user) return;
+
+  const order = await getAdminOrderById(orderId);
+  if (!order) {
+    sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
+    return;
+  }
+
+  if (!order.awbId) {
+    sendJson(res, 409, { message: 'Comanda nu are un AWB generat.' });
+    return;
+  }
+
+  try {
+    const pdfBuffer = await ecoletClient.getLabelPdf(order.awbId);
+    
+    res.writeHead(200, {
+      'Content-Type': 'application/pdf',
+      'Content-Length': pdfBuffer.length,
+      'Content-Disposition': `inline; filename="AWB-${order.awbNumber || orderId}.pdf"`,
+      'Cache-Control': 'private, no-store',
+    });
+    res.end(pdfBuffer);
+  } catch (error) {
+    console.error('Ecolet AWB PDF fetch error:', error);
+    sendJson(res, 500, {
+      message: error.message || 'Eroare la descarcarea PDF-ului AWB.',
+      details: error.details || null,
+    });
+  }
+}
+
+async function handleEcoletWebhook(req, res) {
+  try {
+    const body = await readJson(req);
+    console.log('Ecolet Webhook Received:', body);
+
+    const waybillId = String(body.order_id || body.id || '');
+    const awbNumber = String(body.waybill_number || '');
+    const ecoletStatus = String(body.status || '');
+
+    if (!waybillId && !awbNumber) {
+      sendJson(res, 400, { message: 'Missing waybill_number or order_id.' });
+      return;
+    }
+
+    let queryResult;
+    if (waybillId) {
+      queryResult = await pool.query('SELECT id, status FROM orders WHERE awb_id = $1 LIMIT 1', [waybillId]);
+    }
+    if ((!queryResult || queryResult.rows.length === 0) && awbNumber) {
+      queryResult = await pool.query('SELECT id, status FROM orders WHERE awb_number = $1 LIMIT 1', [awbNumber]);
+    }
+
+    if (!queryResult || queryResult.rows.length === 0) {
+      console.warn(`Ecolet Webhook: Order not found for waybillId=${waybillId}, awbNumber=${awbNumber}`);
+      sendJson(res, 200, { success: true, message: 'Order not found in database.' });
+      return;
+    }
+
+    const dbOrder = queryResult.rows[0];
+    const orderId = dbOrder.id;
+
+    let statusText = ecoletStatus;
+    if (ecoletStatus === 'in_transit') statusText = 'În tranzit';
+    else if (ecoletStatus === 'delivered') statusText = 'Livrată';
+    else if (ecoletStatus === 'canceled' || ecoletStatus === 'cancelled') statusText = 'Anulată';
+    else if (ecoletStatus === 'refused') statusText = 'Refuzată';
+    else if (ecoletStatus === 'returned') statusText = 'Returnată';
+
+    const updates = {
+      awb_status: statusText,
+    };
+
+    if (ecoletStatus === 'delivered') {
+      updates.status = 'Livrata';
+    } else if (ecoletStatus === 'refused' || ecoletStatus === 'returned') {
+      updates.status = 'Returnata';
+    } else if (ecoletStatus === 'in_transit') {
+      updates.status = 'Expediata';
+    }
+
+    await updateRow('orders', orderId, updates);
+
+    console.log(`Ecolet Webhook: Updated order ID ${orderId} status to ${updates.status || dbOrder.status} (AWB Status: ${statusText})`);
+
+    sendJson(res, 200, { success: true });
+  } catch (error) {
+    console.error('Ecolet Webhook error:', error);
+    sendJson(res, 500, { message: 'Internal server error processing webhook.' });
+  }
 }
 
 async function handleAdminSmartBillInvoiceCreate(req, res, orderId) {
@@ -6157,6 +6372,11 @@ function adminOrderResponse(order) {
     guestPhone: order.guest_phone || null,
     shippingAddress: order.shipping_address || null,
     billingAddress: order.billing_address || null,
+    awbId: order.awb_id || null,
+    awbNumber: order.awb_number || null,
+    awbStatus: order.awb_status || 'Not Generated',
+    awbCarrier: order.awb_carrier || null,
+    awbPdfUrl: order.awb_pdf_url || null,
     customer: {
       id: order.user_id ?? null,
       name: order.user_name || order.guest_name || legacyCustomerName,
