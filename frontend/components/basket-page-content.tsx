@@ -46,6 +46,7 @@ type OrderCreateResponse = {
 };
 
 type PaymentMethod = 'card' | 'ramburs';
+type ShippingMethod = 'posta' | 'curier';
 
 const currencyFormatter = new Intl.NumberFormat('ro-RO', {
   style: 'currency',
@@ -271,6 +272,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
+  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>('curier');
 
   const [user, setUser] = useState<{ id: number; email: string; fullName?: string; cui?: string; trade_register_number?: string } | null>(null);
   const [addresses, setAddresses] = useState<any[]>([]);
@@ -373,7 +375,13 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
     (sum, item) => sum + Number(item.product.price) * item.quantity,
     0,
   );
-  const delivery = 0;
+  const delivery = useMemo(() => {
+    if (shippingMethod === 'posta') {
+      return subtotal < 150 ? 17 : 0;
+    } else {
+      return subtotal < 300 ? 20 : 0;
+    }
+  }, [shippingMethod, subtotal]);
   const total = subtotal + delivery;
 
   const handlePlaceOrder = async () => {
@@ -477,6 +485,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
       const payload: any = {
         items: enrichedItems,
         deliveryTotal: delivery,
+        shippingMethod: shippingMethod === 'posta' ? 'Posta Romana' : 'Curier Rapid',
       };
 
       if (!user) {
@@ -1069,6 +1078,58 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
               </div>
               <p className="text-sm text-slate-500">TVA inclus</p>
             </div>
+
+            <fieldset className="mt-6 space-y-3 border-t border-slate-200 pt-6">
+              <legend className="text-sm font-semibold text-slate-900">Metoda de livrare</legend>
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShippingMethod('curier')}
+                  aria-pressed={shippingMethod === 'curier'}
+                  className={`flex min-h-16 w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition ${
+                    shippingMethod === 'curier'
+                      ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">Curier rapid (Door-to-door)</span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {subtotal >= 300 ? 'Livrare gratuita' : '20,00 lei'} • Nemo / DPD / GLS / Fan Courier
+                    </span>
+                  </span>
+                  <span
+                    className={`h-4 w-4 rounded-full border ${
+                      shippingMethod === 'curier' ? 'border-[#4f2048] bg-[#4f2048]' : 'border-slate-300'
+                    }`}
+                    aria-hidden="true"
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShippingMethod('posta')}
+                  aria-pressed={shippingMethod === 'posta'}
+                  className={`flex min-h-16 w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition ${
+                    shippingMethod === 'posta'
+                      ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>
+                    <span className="block text-sm font-semibold">Posta Romana</span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {subtotal >= 150 ? 'Livrare gratuita' : '17,00 lei'} • Ridicare de la oficiul postal
+                    </span>
+                  </span>
+                  <span
+                    className={`h-4 w-4 rounded-full border ${
+                      shippingMethod === 'posta' ? 'border-[#4f2048] bg-[#4f2048]' : 'border-slate-300'
+                    }`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+            </fieldset>
 
             <fieldset className="mt-6 space-y-3 border-t border-slate-200 pt-6">
               <legend className="text-sm font-semibold text-slate-900">Metoda de plata</legend>
