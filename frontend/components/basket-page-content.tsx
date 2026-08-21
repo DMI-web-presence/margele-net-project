@@ -17,6 +17,7 @@ type Product = {
   price: string;
   imageUrl: string | null;
   sku?: string | null;
+  searchTokens?: string[];
   variants?: Array<{
     id?: number | null;
     sku?: string | null;
@@ -360,6 +361,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
     for (const product of products) {
       const stableIdentifiers = [
         product.sku,
+        ...(product.searchTokens || []),
         ...(product.variants || []).flatMap((variant) => [variant.sku, variant.model]),
       ]
         .map((value) => String(value || '').trim())

@@ -15,6 +15,7 @@ type Product = {
   price: string;
   imageUrl: string | null;
   sku?: string | null;
+  searchTokens?: string[];
   categoryId: number | null;
   createdAt: string;
 };
@@ -23,7 +24,7 @@ async function getProducts(): Promise<Product[]> {
   const backendUrl =
     process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:3001';
 
-  const response = await fetch(`${backendUrl}/products`, {
+  const response = await fetch(`${backendUrl}/products?view=lite`, {
     cache: 'no-store',
   }).catch(() => null);
 
