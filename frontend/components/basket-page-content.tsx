@@ -17,6 +17,11 @@ type Product = {
   price: string;
   imageUrl: string | null;
   sku?: string | null;
+  variants?: Array<{
+    id?: number | null;
+    sku?: string | null;
+    model?: string | null;
+  }>;
   categoryId: number | null;
   createdAt: string;
 };
@@ -349,10 +354,33 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
     () => new Map(products.map((product) => [product.id, product])),
     [products],
   );
+  const productSkuMap = useMemo(() => {
+    const matches = new Map<string, Product | null>();
+
+    for (const product of products) {
+      const stableIdentifiers = [
+        product.sku,
+        ...(product.variants || []).flatMap((variant) => [variant.sku, variant.model]),
+      ]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+
+      for (const identifier of stableIdentifiers) {
+        const existing = matches.get(identifier);
+        matches.set(identifier, existing && existing.id !== product.id ? null : product);
+      }
+    }
+
+    return matches;
+  }, [products]);
   const enrichedItems = useMemo(
     () =>
       items.map((item) => {
-        const product = productMap.get(item.product.id);
+        const requestedSku = String(item.product.sku || '').trim();
+        const product =
+          productMap.get(item.product.id) ||
+          (requestedSku ? productSkuMap.get(requestedSku) || undefined : undefined);
+
         return {
           ...item,
           product: {
@@ -368,7 +396,31 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
           },
         };
       }),
-    [items, productMap],
+    [items, productMap, productSkuMap],
+  );
+  const checkoutItems = useMemo(
+    () =>
+      enrichedItems.map((item) => {
+        const requestedSku = String(item.product.sku || '').trim();
+        const product =
+          productMap.get(item.product.id) ||
+          (requestedSku ? productSkuMap.get(requestedSku) || undefined : undefined);
+        const currentVariant = product?.variants?.find(
+          (variant) =>
+            String(variant.sku || '').trim() === requestedSku ||
+            String(variant.model || '').trim() === requestedSku,
+        );
+
+        return {
+          ...item,
+          product: {
+            ...item.product,
+            id: product?.id ?? item.product.id,
+            variantId: currentVariant?.id ?? item.product.variantId ?? null,
+          },
+        };
+      }),
+    [enrichedItems, productMap, productSkuMap],
   );
 
   const subtotal = enrichedItems.reduce(
@@ -481,7 +533,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
           : `${backendUrl}${user ? '/auth' : ''}/orders`;
 
       const payload: any = {
-        items: enrichedItems,
+        items: checkoutItems,
         deliveryTotal: delivery,
         shippingMethod: shippingMethod === 'sediu' ? 'Ridicare de la sediu' : 'Livrare la domiciliu',
       };
