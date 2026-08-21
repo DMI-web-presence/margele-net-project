@@ -1690,7 +1690,7 @@ async function handleAdminOrderUpdate(req, res, orderId) {
   const body = await readJson(req);
   const input = normalizeAdminOrderUpdateInput(body, existing);
 
-  await updateRow('orders', orderId, input);
+  await updateRow('commerce.orders', orderId, input);
 
   if (input.payment_status === 'paid' && existing.paymentStatus !== 'paid') {
     await reduceStockForOrder(orderId).catch((err) => {
@@ -1729,7 +1729,7 @@ async function handleAdminAwbCreate(req, res, orderId) {
       service: body.service || 'fan_standard',
     });
 
-    await updateRow('orders', orderId, {
+    await updateRow('commerce.orders', orderId, {
       awb_id: result.waybillId,
       awb_number: result.awbNumber,
       awb_status: 'Generated',
@@ -1769,7 +1769,7 @@ async function handleAdminAwbCancel(req, res, orderId) {
   try {
     await ecoletClient.cancelLabel(order.awbId);
 
-    await updateRow('orders', orderId, {
+    await updateRow('commerce.orders', orderId, {
       awb_id: null,
       awb_number: null,
       awb_status: 'Cancelled',
@@ -1841,10 +1841,10 @@ async function handleEcoletWebhook(req, res) {
 
     let queryResult;
     if (waybillId) {
-      queryResult = await pool.query('SELECT id, status FROM orders WHERE awb_id = $1 LIMIT 1', [waybillId]);
+      queryResult = await pool.query('SELECT id, status FROM commerce.orders WHERE awb_id = $1 LIMIT 1', [waybillId]);
     }
     if ((!queryResult || queryResult.rows.length === 0) && awbNumber) {
-      queryResult = await pool.query('SELECT id, status FROM orders WHERE awb_number = $1 LIMIT 1', [awbNumber]);
+      queryResult = await pool.query('SELECT id, status FROM commerce.orders WHERE awb_number = $1 LIMIT 1', [awbNumber]);
     }
 
     if (!queryResult || queryResult.rows.length === 0) {
@@ -1875,7 +1875,7 @@ async function handleEcoletWebhook(req, res) {
       updates.status = 'Expediata';
     }
 
-    await updateRow('orders', orderId, updates);
+    await updateRow('commerce.orders', orderId, updates);
 
     console.log(`Ecolet Webhook: Updated order ID ${orderId} status to ${updates.status || dbOrder.status} (AWB Status: ${statusText})`);
 
@@ -1914,7 +1914,7 @@ async function handleAdminSmartBillInvoicePdf(req, res, orderId) {
 
   if (isMockSmartBillOrder(order)) {
     const pdf = buildMockSmartBillPdf(order);
-    await updateRow('orders', orderId, {
+    await updateRow('commerce.orders', orderId, {
       smartbill_pdf_fetched_at: new Date(),
       smartbill_error: null,
     });
@@ -1934,7 +1934,7 @@ async function handleAdminSmartBillInvoicePdf(req, res, orderId) {
       order.smartbillSeries,
       order.smartbillNumber,
     );
-    await updateRow('orders', orderId, {
+    await updateRow('commerce.orders', orderId, {
       smartbill_pdf_fetched_at: new Date(),
       smartbill_error: null,
     });
@@ -2105,7 +2105,7 @@ async function handleAdminConversationReply(req, res, conversationId) {
 }
 
 async function getAdminOrders(db = pool) {
-  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+  if (!(await hasTableInSchema('commerce', 'orders')) || !(await hasTableInSchema('commerce', 'order_items'))) {
     return [];
   }
 
@@ -2119,7 +2119,7 @@ async function getAdminCustomers(db = pool) {
   }
 
   const userColumns = await getUserColumns();
-  const hasOrders = await hasTable('orders');
+  const hasOrders = await hasTableInSchema('commerce', 'orders');
   const hasAddresses = await hasTableInSchema('app_auth', 'addresses');
   const nameSelect = buildAdminCustomerUserNameSql(userColumns);
   const phoneSelect = userColumns.has('phone') ? 'u.phone' : 'NULL';
@@ -2144,7 +2144,7 @@ async function getAdminCustomers(db = pool) {
         SELECT COALESCE(jsonb_agg(address_rows.address_entry), '[]'::jsonb) AS addresses
         FROM (
           SELECT o.legacy_shipping_address AS address_entry
-          FROM orders o
+          FROM commerce.orders o
           WHERE o.user_id = u.id
             AND o.legacy_shipping_address IS NOT NULL
             AND NULLIF(BTRIM(o.legacy_shipping_address->>'address1'), '') IS NOT NULL
@@ -2164,7 +2164,7 @@ async function getAdminCustomers(db = pool) {
           COALESCE(SUM(o.total), 0)::numeric AS total_spent,
           MAX(o.created_at) AS last_order_at,
           MIN(o.created_at) AS first_order_at
-        FROM orders o
+        FROM commerce.orders o
         WHERE o.user_id = u.id
       ) order_stats ON true
     `
@@ -2236,7 +2236,7 @@ async function getAdminCustomers(db = pool) {
       COALESCE(SUM(o.total), 0)::numeric AS total_spent,
       MAX(o.created_at) AS last_order_at,
       MIN(o.created_at) AS first_order_at
-    FROM orders o
+    FROM commerce.orders o
     WHERE o.user_id IS NULL
       AND NULLIF(BTRIM(COALESCE(o.guest_email, o.legacy_customer_email)), '') IS NOT NULL
     GROUP BY lower(COALESCE(o.guest_email, o.legacy_customer_email))
@@ -2464,7 +2464,7 @@ async function getAdminConversationById(conversationId, db = pool) {
 }
 
 async function getAdminOrderById(orderId, db = pool) {
-  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+  if (!(await hasTableInSchema('commerce', 'orders')) || !(await hasTableInSchema('commerce', 'order_items'))) {
     return null;
   }
 
@@ -2486,7 +2486,7 @@ async function adminOrderSelectSql() {
       ${shipmentSelect},
       COALESCE(items.items, '[]'::jsonb) AS items,
       COALESCE(items.item_count, 0)::int AS item_count
-    FROM orders o
+    FROM commerce.orders o
     LEFT JOIN app_auth.users u ON u.id = o.user_id
     LEFT JOIN LATERAL (
       SELECT
@@ -2506,7 +2506,7 @@ async function adminOrderSelectSql() {
           ORDER BY oi.id ASC
         ) AS items,
         COALESCE(SUM(oi.quantity), 0) AS item_count
-      FROM order_items oi
+      FROM commerce.order_items oi
       LEFT JOIN products p ON p.id = oi.product_id
       LEFT JOIN LATERAL (
         SELECT image_url
@@ -3953,7 +3953,7 @@ async function handleOrderList(req, requestUrl, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+  if (!(await hasTableInSchema('commerce', 'orders')) || !(await hasTableInSchema('commerce', 'order_items'))) {
     sendJson(res, 200, []);
     return;
   }
@@ -3969,7 +3969,7 @@ async function handleOrderList(req, requestUrl, res) {
   const ordersResult = await pool.query(
     `
       SELECT *
-      FROM orders
+      FROM commerce.orders
       WHERE user_id = $1${dateFilter}
       ORDER BY created_at DESC
     `,
@@ -3986,7 +3986,7 @@ async function handleOrderList(req, requestUrl, res) {
   const itemsResult = await pool.query(
     `
       SELECT *
-      FROM order_items
+      FROM commerce.order_items
       WHERE order_id = ANY($1::int[])
       ORDER BY id ASC
     `,
@@ -4011,7 +4011,7 @@ async function handleOrderDetails(req, res, orderNumber) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+  if (!(await hasTableInSchema('commerce', 'orders')) || !(await hasTableInSchema('commerce', 'order_items'))) {
     sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
     return;
   }
@@ -4019,7 +4019,7 @@ async function handleOrderDetails(req, res, orderNumber) {
   const orderResult = await pool.query(
     `
       SELECT *
-      FROM orders
+      FROM commerce.orders
       WHERE user_id = $1 AND order_number = $2
       LIMIT 1
     `,
@@ -4034,7 +4034,7 @@ async function handleOrderDetails(req, res, orderNumber) {
   const itemsResult = await pool.query(
     `
       SELECT *
-      FROM order_items
+      FROM commerce.order_items
       WHERE order_id = $1
       ORDER BY id ASC
     `,
@@ -4045,7 +4045,7 @@ async function handleOrderDetails(req, res, orderNumber) {
 }
 
 async function handlePublicOrderDetails(req, res, orderNumber) {
-  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+  if (!(await hasTableInSchema('commerce', 'orders')) || !(await hasTableInSchema('commerce', 'order_items'))) {
     sendJson(res, 404, { message: 'Comanda nu a fost gasita.' });
     return;
   }
@@ -4053,7 +4053,7 @@ async function handlePublicOrderDetails(req, res, orderNumber) {
   const orderResult = await pool.query(
     `
       SELECT *
-      FROM orders
+      FROM commerce.orders
       WHERE order_number = $1
       LIMIT 1
     `,
@@ -4068,7 +4068,7 @@ async function handlePublicOrderDetails(req, res, orderNumber) {
   const itemsResult = await pool.query(
     `
       SELECT *
-      FROM order_items
+      FROM commerce.order_items
       WHERE order_id = $1
       ORDER BY id ASC
     `,
@@ -4090,7 +4090,7 @@ async function handlePublicOrderDetails(req, res, orderNumber) {
 async function handleOrderCreate(req, res) {
   const user = await getCurrentUser(req);
 
-  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+  if (!(await hasTableInSchema('commerce', 'orders')) || !(await hasTableInSchema('commerce', 'order_items'))) {
     sendJson(res, 501, { message: 'Tabelele pentru comenzi nu exista inca.' });
     return;
   }
@@ -4202,7 +4202,7 @@ async function handleOrderCreate(req, res) {
     await client.query('BEGIN');
     const orderResult = await client.query(
       `
-        INSERT INTO orders (
+        INSERT INTO commerce.orders (
           user_id,
           order_number,
           status,
@@ -4244,7 +4244,7 @@ async function handleOrderCreate(req, res) {
     for (const item of orderItems) {
       const itemResult = await client.query(
         `
-          INSERT INTO order_items (
+          INSERT INTO commerce.order_items (
             order_id,
             product_id,
             variant_id,
@@ -4294,7 +4294,7 @@ async function handleOrderCreate(req, res) {
 async function handleNetopiaPaymentStart(req, res) {
   const user = await getCurrentUser(req);
 
-  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) {
+  if (!(await hasTableInSchema('commerce', 'orders')) || !(await hasTableInSchema('commerce', 'order_items'))) {
     sendJson(res, 501, { message: 'Tabelele pentru comenzi nu exista inca.' });
     return;
   }
@@ -4441,7 +4441,7 @@ async function handleNetopiaPaymentStart(req, res) {
     await client.query('BEGIN');
     const orderResult = await client.query(
       `
-        INSERT INTO orders (
+        INSERT INTO commerce.orders (
           user_id,
           order_number,
           status,
@@ -4484,7 +4484,7 @@ async function handleNetopiaPaymentStart(req, res) {
     for (const item of orderItems) {
       const itemResult = await client.query(
         `
-          INSERT INTO order_items (
+          INSERT INTO commerce.order_items (
             order_id,
             product_id,
             variant_id,
@@ -4587,7 +4587,7 @@ async function handleNetopiaNotify(req, requestUrl, res) {
     return;
   }
 
-  const orderResult = await pool.query('SELECT * FROM orders WHERE order_number = $1 LIMIT 1', [
+  const orderResult = await pool.query('SELECT * FROM commerce.orders WHERE order_number = $1 LIMIT 1', [
     orderNumber,
   ]);
   const order = orderResult.rows[0];
@@ -4612,7 +4612,7 @@ async function handleNetopiaNotify(req, requestUrl, res) {
   try {
     await dbClient.query('BEGIN');
 
-    await updateRowWithClient(dbClient, 'orders', order.id, {
+    await updateRowWithClient(dbClient, 'commerce.orders', order.id, {
       status: paymentState.orderStatus,
       payment_status: paymentState.paymentStatus,
       provider_payment_id: payment.ntpID || order.provider_payment_id || null,
@@ -4752,7 +4752,7 @@ async function getAddressColumns() {
 
 async function getOrderColumns() {
   if (orderColumnsCache) return orderColumnsCache;
-  orderColumnsCache = await getColumns('orders');
+  orderColumnsCache = await getColumns('orders', 'commerce');
   return orderColumnsCache;
 }
 
@@ -5782,7 +5782,7 @@ function netopiaAmountMatches(providerAmount, orderTotal) {
 }
 
 async function updateOrderPayment(orderId, updates) {
-  return updateRow('orders', orderId, updates);
+  return updateRow('commerce.orders', orderId, updates);
 }
 
 async function reduceStockForOrder(orderId, client = null) {
@@ -5796,7 +5796,7 @@ async function reduceStockForOrder(orderId, client = null) {
 
     // Lock the order row to prevent concurrent updates
     const orderResult = await dbClient.query(
-      'SELECT id, payment_status, stock_reduced FROM orders WHERE id = $1 FOR UPDATE',
+      'SELECT id, payment_status, stock_reduced FROM commerce.orders WHERE id = $1 FOR UPDATE',
       [orderId]
     );
     const order = orderResult.rows[0];
@@ -5807,7 +5807,7 @@ async function reduceStockForOrder(orderId, client = null) {
     // Only reduce stock if it has not been reduced already
     if (!order.stock_reduced) {
       const itemsResult = await dbClient.query(
-        'SELECT product_id, variant_id, quantity FROM order_items WHERE order_id = $1',
+        'SELECT product_id, variant_id, quantity FROM commerce.order_items WHERE order_id = $1',
         [orderId]
       );
       const items = itemsResult.rows;
@@ -5835,7 +5835,7 @@ async function reduceStockForOrder(orderId, client = null) {
 
       // Mark stock as reduced
       await dbClient.query(
-        'UPDATE orders SET stock_reduced = true, updated_at = NOW() WHERE id = $1',
+        'UPDATE commerce.orders SET stock_reduced = true, updated_at = NOW() WHERE id = $1',
         [orderId]
       );
       console.log(`[STOCK] Order ID ${orderId} stock marked as reduced`);
@@ -5900,7 +5900,7 @@ async function issueSmartBillInvoice(orderId, options = {}) {
       new Date(),
     );
 
-    await updateRowWithClient(client, 'orders', orderId, {
+    await updateRowWithClient(client, 'commerce.orders', orderId, {
       invoice_status: 'in_generare',
       invoice_provider: 'smartbill',
       smartbill_last_attempt_at: new Date(),
@@ -5915,7 +5915,7 @@ async function issueSmartBillInvoice(orderId, options = {}) {
       config.backendPublicUrl,
     ).toString();
 
-    await updateRowWithClient(client, 'orders', orderId, {
+    await updateRowWithClient(client, 'commerce.orders', orderId, {
       invoice_number: `${result.series}${result.number}`,
       invoice_status: 'generata',
       invoice_url: invoiceUrl,
@@ -5998,7 +5998,7 @@ async function sendSmartBillInvoiceWithClient(order, client) {
   }
 
   if (isMockSmartBillOrder(order)) {
-    await updateRowWithClient(client, 'orders', order.id, {
+    await updateRowWithClient(client, 'commerce.orders', order.id, {
       invoice_status: 'trimisa',
       smartbill_email_sent_at: new Date(),
       smartbill_error: null,
@@ -6022,7 +6022,7 @@ async function sendSmartBillInvoiceWithClient(order, client) {
     ].join('\n'),
   });
 
-  await updateRowWithClient(client, 'orders', order.id, {
+  await updateRowWithClient(client, 'commerce.orders', order.id, {
     invoice_status: 'trimisa',
     smartbill_email_sent_at: new Date(),
     smartbill_error: null,
@@ -6095,7 +6095,7 @@ function escapePdfText(value) {
 }
 
 async function getSmartBillCustomerForOrder(order, db = pool) {
-  const orderRowResult = await db.query('SELECT * FROM orders WHERE id = $1 LIMIT 1', [order.id]);
+  const orderRowResult = await db.query('SELECT * FROM commerce.orders WHERE id = $1 LIMIT 1', [order.id]);
   const orderRow = orderRowResult.rows[0];
   if (!orderRow) {
     throw new SmartBillError('Comanda nu a fost gasita.', { status: 400 });
@@ -6253,7 +6253,7 @@ async function recordSmartBillError(orderId, error, options = {}) {
     updates.invoice_status = 'eroare';
   }
 
-  await updateRowWithClient(db, 'orders', orderId, updates).catch((updateError) => {
+  await updateRowWithClient(db, 'commerce.orders', orderId, updates).catch((updateError) => {
     console.error(`Could not persist SmartBill error for order ${orderId}:`, updateError);
   });
 }
@@ -6264,7 +6264,7 @@ async function generateOrderNumber() {
     const randomPart = crypto.randomBytes(3).toString('hex').toUpperCase();
     const orderNumber = `MN-${datePart}-${randomPart}`;
     const existing = await pool.query(
-      'SELECT 1 FROM orders WHERE order_number = $1 LIMIT 1',
+      'SELECT 1 FROM commerce.orders WHERE order_number = $1 LIMIT 1',
       [orderNumber],
     );
     if (existing.rowCount === 0) return orderNumber;
@@ -6675,7 +6675,7 @@ function validateProductReviewInput(input) {
 }
 
 async function findVerifiedProductPurchase(productId, { userId, email }, db = pool) {
-  if (!(await hasTable('orders')) || !(await hasTable('order_items'))) return null;
+  if (!(await hasTableInSchema('commerce', 'orders')) || !(await hasTableInSchema('commerce', 'order_items'))) return null;
 
   const normalizedEmail = normalizeEmail(email);
   const conditions = ['oi.product_id = $1'];
@@ -6696,8 +6696,8 @@ async function findVerifiedProductPurchase(productId, { userId, email }, db = po
   const result = await db.query(
     `
       SELECT o.id AS order_id
-      FROM orders o
-      JOIN order_items oi ON oi.order_id = o.id
+      FROM commerce.orders o
+      JOIN commerce.order_items oi ON oi.order_id = o.id
       WHERE oi.product_id = $1
         AND (${conditions.slice(1).join(' OR ')})
       ORDER BY o.created_at DESC
