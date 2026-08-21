@@ -22,7 +22,7 @@ const benefits = [
   },
   {
     title: 'Transport',
-    description: 'Gratuit prin Posta peste 150 lei si prin curier peste 300 lei.',
+    description: 'Tarif fix de 25 de lei pentru orice comanda oriunde in tara.',
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-9 w-9 fill-none stroke-current stroke-[1.7]">
         <path d="M3 6h11v10H3V6Z" />
@@ -44,7 +44,7 @@ const benefits = [
   },
   {
     title: 'Plata sigura',
-    description: 'Comenzile pot fi pregatite pentru plata online si confirmare rapida.',
+    description: 'Comenzile pot fi pregatite pentru plata online si confirmare raspida.',
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" className="h-9 w-9 fill-none stroke-current stroke-[1.7]">
         <rect x="3" y="6" width="18" height="12" rx="2" />

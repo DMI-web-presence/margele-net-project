@@ -3,32 +3,26 @@ import Reveal from '@/components/reveal';
 const shippingTiers = [
   {
     title: 'Posta Romana',
-    price: '17 lei',
-    threshold: 'Sub 150 lei',
-    description: 'Livrare economica pentru comenzile mici, cu acoperire larga in toata tara.',
+    price: '25 lei',
+    threshold: 'Orice comanda',
+    description: 'Livrare economica cu ridicare de la oficiul postal.',
   },
   {
     title: 'Curier rapid',
-    price: '20 lei',
-    threshold: 'Sub 300 lei',
+    price: '25 lei',
+    threshold: 'Orice comanda',
     description: 'Livrare door-to-door prin Fan Courier, Nemo, DPD, GLS si alti parteneri disponibili.',
-  },
-  {
-    title: 'Transport gratuit',
-    price: '0 lei',
-    threshold: 'Peste 300 lei',
-    description: 'Ai livrare gratuita door-to-door prin curier rapid, fara costuri suplimentare.',
   },
 ];
 
 const highlights = [
   {
-    title: 'Transport gratuit cu Posta Romana',
-    body: 'Pentru comenzile care depasesc 150 de lei beneficiezi de transport gratuit prin Posta Romana.',
+    title: 'Tarif unic 25 lei',
+    body: 'Pentru orice comanda, transportul costa exact 25 de lei, indiferent de modalitatea de livrare aleasa.',
   },
   {
-    title: 'Curier gratuit la comenzi mai mari',
-    body: 'La comenzile peste 300 de lei, transportul door-to-door este gratuit prin firma de curierat.',
+    title: 'Acoperire nationala',
+    body: 'Livram oriunde in tara prin curier rapid direct la tine acasa sau prin Posta Romana cu ridicare de la oficiu.',
   },
   {
     title: 'Livrare rapida',
@@ -53,9 +47,7 @@ export default function TransportPageContent() {
                     Costuri Transport
                   </h1>
                   <p className="max-w-xl text-sm leading-6 text-slate-600 sm:text-base">
-                    Alegem varianta de livrare care se potriveste cel mai bine comenzii tale, cu
-                    praguri clare pentru transport gratuit si costuri simple atunci cand comanda este
-                    sub valoarea minima.
+                    Alegem varianta de livrare care se potriveste cel mai bine comenzii tale, cu un tarif unic fix si simplu de transport.
                   </p>
                 </div>
 
@@ -108,10 +100,8 @@ export default function TransportPageContent() {
               Praguri de transport
             </h2>
             <div className="mt-5 space-y-4">
-              <SummaryRow label="Sub 150 lei" value="17 lei" note="Posta Romana" />
-              <SummaryRow label="150 lei +" value="gratuit" note="Posta Romana" />
-              <SummaryRow label="Sub 300 lei" value="20 lei" note="Curier rapid" />
-              <SummaryRow label="300 lei +" value="gratuit" note="Door-to-door" />
+              <SummaryRow label="Orice comanda" value="25 lei" note="Posta Romana" />
+              <SummaryRow label="Orice comanda" value="25 lei" note="Curier rapid" />
             </div>
           </article>
 

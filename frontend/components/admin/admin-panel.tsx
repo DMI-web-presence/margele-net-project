@@ -83,6 +83,14 @@ export default function AdminPanel() {
   const [packageDraftTrackingNumber, setPackageDraftTrackingNumber] = useState('');
   const [packageDraftTrackingUrl, setPackageDraftTrackingUrl] = useState('');
   const [packageDraftCount, setPackageDraftCount] = useState('1');
+  const [awbDraftType, setAwbDraftType] = useState<'package' | 'envelope'>('package');
+  const [awbDraftWeight, setAwbDraftWeight] = useState('1.0');
+  const [awbDraftService, setAwbDraftService] = useState('fan_standard');
+  const [awbDraftLength, setAwbDraftLength] = useState('10');
+  const [awbDraftWidth, setAwbDraftWidth] = useState('10');
+  const [awbDraftHeight, setAwbDraftHeight] = useState('10');
+  const [awbIsGenerating, setAwbIsGenerating] = useState(false);
+  const [awbIsCancelling, setAwbIsCancelling] = useState(false);
   const [billingPaymentStatusFilter, setBillingPaymentStatusFilter] = useState<string>('');
   const [billingInvoiceStatusFilter, setBillingInvoiceStatusFilter] = useState<string>('');
   const [billingDraftPaymentStatus, setBillingDraftPaymentStatus] = useState<string>('unpaid');
@@ -842,6 +850,15 @@ export default function AdminPanel() {
     setPackageDraftTrackingNumber(order.trackingNumber || '');
     setPackageDraftTrackingUrl(order.trackingUrl || '');
     setPackageDraftCount(String(order.packageCount || 1));
+    
+    // Set default AWB options
+    setAwbDraftType('package');
+    setAwbDraftWeight('1.0');
+    setAwbDraftService('fan_standard');
+    setAwbDraftLength('10');
+    setAwbDraftWidth('10');
+    setAwbDraftHeight('10');
+
     setIsPackageModalOpen(true);
     setMessage('');
     setErrorMessage('');
@@ -1209,6 +1226,107 @@ export default function AdminPanel() {
       setErrorMessage('Factura nu a putut fi trimisa prin SmartBill.');
     } finally {
       setSmartBillAction(null);
+    }
+  }
+
+  async function handleEcoletAwbGenerate() {
+    if (!selectedPackage) return;
+    setErrorMessage('');
+    setMessage('');
+    setAwbIsGenerating(true);
+
+    try {
+      const response = await fetch(`${backendUrl}/admin/orders/${selectedPackage.id}/awb`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          type: awbDraftType,
+          weight: awbDraftWeight,
+          service: awbDraftService,
+          length: awbDraftLength,
+          width: awbDraftWidth,
+          height: awbDraftHeight,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setErrorMessage(data?.message || 'AWB-ul nu a putut fi generat prin Ecolet.');
+        return;
+      }
+
+      await loadAdminData(selectedProductId);
+      setPackageDraftCourier(data.awbCarrier || '');
+      setPackageDraftTrackingNumber(data.awbNumber || '');
+      setPackageDraftStatus('pregatit');
+
+      setMessage(`AWB-ul ${data.awbNumber} a fost generat prin Ecolet.`);
+    } catch {
+      setErrorMessage('Generarea AWB-ului a esuat.');
+    } finally {
+      setAwbIsGenerating(false);
+    }
+  }
+
+  async function handleEcoletAwbCancel() {
+    if (!selectedPackage) return;
+    setErrorMessage('');
+    setMessage('');
+    setAwbIsCancelling(true);
+
+    try {
+      const response = await fetch(`${backendUrl}/admin/orders/${selectedPackage.id}/awb`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setErrorMessage(data?.message || 'AWB-ul nu a putut fi anulat.');
+        return;
+      }
+
+      await loadAdminData(selectedProductId);
+      setPackageDraftCourier('');
+      setPackageDraftTrackingNumber('');
+      setPackageDraftStatus('nepregatit');
+
+      setMessage('AWB-ul a fost anulat cu succes.');
+    } catch {
+      setErrorMessage('Anularea AWB-ului a esuat.');
+    } finally {
+      setAwbIsCancelling(false);
+    }
+  }
+
+  async function handleEcoletAwbPdf() {
+    if (!selectedPackage) return;
+    setErrorMessage('');
+    setMessage('');
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/admin/orders/${selectedPackage.id}/awb/pdf`,
+        { credentials: 'include' },
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        setErrorMessage(data?.message || 'Eticheta AWB nu a putut fi descarcata.');
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `AWB-${selectedPackage.trackingNumber || selectedPackage.orderNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setErrorMessage('Descarcarea etichetei AWB a esuat.');
     }
   }
 
@@ -4958,6 +5076,112 @@ export default function AdminPanel() {
                       <p className="mt-3 text-2xl font-semibold text-slate-950">{selectedPackage.packageCount}</p>
                     </DashboardCard>
                   </div>
+
+                  <DashboardSection title="Generare AWB (Ecolet)" description="Genereaza AWB prin servicii de curierat integrate (FAN, Sameday, DPD, GLS).">
+                    {selectedPackage.awbNumber ? (
+                      <div className="rounded-[24px] border border-slate-100 bg-slate-50/80 p-5 space-y-4">
+                        <div className="grid gap-4 md:grid-cols-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Curier AWB</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">{selectedPackage.awbCarrier}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Numar AWB</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">{selectedPackage.awbNumber}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Status Livrare</p>
+                            <p className="mt-1 text-sm font-semibold text-violet-700">{selectedPackage.awbStatus}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                          <Button
+                            type="button"
+                            onClick={handleEcoletAwbPdf}
+                            className="cursor-pointer rounded-2xl bg-slate-900 text-white hover:bg-slate-800"
+                          >
+                            Printeaza AWB (PDF)
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={handleEcoletAwbCancel}
+                            disabled={awbIsCancelling}
+                            className="cursor-pointer rounded-2xl border border-red-200 text-red-600 bg-white hover:bg-red-50"
+                          >
+                            {awbIsCancelling ? 'Se anuleaza...' : 'Anuleaza AWB'}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <DashboardField label="Tip colet">
+                          <DashboardSelect
+                            value={awbDraftType}
+                            onChange={(event) => setAwbDraftType(event.target.value as 'package' | 'envelope')}
+                          >
+                            <option value="package">Colet (Package)</option>
+                            <option value="envelope">Plic (Envelope)</option>
+                          </DashboardSelect>
+                        </DashboardField>
+                        <DashboardField label="Curier partener">
+                          <DashboardSelect
+                            value={awbDraftService}
+                            onChange={(event) => setAwbDraftService(event.target.value)}
+                          >
+                            <option value="fan_standard">FAN Courier (Standard)</option>
+                            <option value="sameday_standard">Sameday (Standard)</option>
+                            <option value="dpd_standard">DPD (Standard)</option>
+                            <option value="gls_standard">GLS (Standard)</option>
+                          </DashboardSelect>
+                        </DashboardField>
+                        <DashboardField label="Greutate (kg)">
+                          <DashboardInput
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={awbDraftWeight}
+                            onChange={(event) => setAwbDraftWeight(event.target.value)}
+                          />
+                        </DashboardField>
+                        <div className="grid grid-cols-3 gap-2">
+                          <DashboardField label="Lungime (cm)">
+                            <DashboardInput
+                              type="number"
+                              min="1"
+                              value={awbDraftLength}
+                              onChange={(event) => setAwbDraftLength(event.target.value)}
+                            />
+                          </DashboardField>
+                          <DashboardField label="Latime (cm)">
+                            <DashboardInput
+                              type="number"
+                              min="1"
+                              value={awbDraftWidth}
+                              onChange={(event) => setAwbDraftWidth(event.target.value)}
+                            />
+                          </DashboardField>
+                          <DashboardField label="Inaltime (cm)">
+                            <DashboardInput
+                              type="number"
+                              min="1"
+                              value={awbDraftHeight}
+                              onChange={(event) => setAwbDraftHeight(event.target.value)}
+                            />
+                          </DashboardField>
+                        </div>
+                        <div className="md:col-span-2 pt-2">
+                          <Button
+                            type="button"
+                            onClick={handleEcoletAwbGenerate}
+                            disabled={awbIsGenerating}
+                            className="cursor-pointer rounded-2xl bg-violet-600 text-white hover:bg-violet-700 px-6"
+                          >
+                            {awbIsGenerating ? 'Se genereaza AWB...' : 'Genereaza AWB prin Ecolet'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </DashboardSection>
 
                   <DashboardSection title="Date livrare" description="Completeaza curierul, AWB-ul si starea coletului.">
                     <div className="grid gap-4 md:grid-cols-2">

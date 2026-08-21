@@ -46,7 +46,7 @@ type OrderCreateResponse = {
 };
 
 type PaymentMethod = 'card' | 'ramburs';
-type ShippingMethod = 'posta' | 'curier';
+type ShippingMethod = 'curier' | 'sediu';
 
 const currencyFormatter = new Intl.NumberFormat('ro-RO', {
   style: 'currency',
@@ -375,13 +375,7 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
     (sum, item) => sum + Number(item.product.price) * item.quantity,
     0,
   );
-  const delivery = useMemo(() => {
-    if (shippingMethod === 'posta') {
-      return subtotal < 150 ? 17 : 0;
-    } else {
-      return subtotal < 300 ? 20 : 0;
-    }
-  }, [shippingMethod, subtotal]);
+  const delivery = shippingMethod === 'sediu' ? 0 : 25;
   const total = subtotal + delivery;
 
   const handlePlaceOrder = async () => {
@@ -440,10 +434,12 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
         setOrderError(detailsCheck.error.issues[0].message);
         return;
       }
-      const shippingCheck = addressSchema.safeParse(shippingAddress);
-      if (!shippingCheck.success) {
-        setOrderError(shippingCheck.error.issues[0].message);
-        return;
+      if (shippingMethod !== 'sediu') {
+        const shippingCheck = addressSchema.safeParse(shippingAddress);
+        if (!shippingCheck.success) {
+          setOrderError(shippingCheck.error.issues[0].message);
+          return;
+        }
       }
       if (!useSameAddress) {
         if (isCompanyBilling) {
@@ -461,15 +457,17 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
         }
       }
     } else {
-      if (addresses.length > 0 && !selectedAddressId) {
-        setOrderError('Te rugam sa selectezi o adresa de livrare.');
-        return;
-      }
-      if (addresses.length === 0) {
-        const shippingCheck = addressSchema.safeParse(shippingAddress);
-        if (!shippingCheck.success) {
-          setOrderError(shippingCheck.error.issues[0].message);
+      if (shippingMethod !== 'sediu') {
+        if (addresses.length > 0 && !selectedAddressId) {
+          setOrderError('Te rugam sa selectezi o adresa de livrare.');
           return;
+        }
+        if (addresses.length === 0) {
+          const shippingCheck = addressSchema.safeParse(shippingAddress);
+          if (!shippingCheck.success) {
+            setOrderError(shippingCheck.error.issues[0].message);
+            return;
+          }
         }
       }
     }
@@ -485,45 +483,69 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
       const payload: any = {
         items: enrichedItems,
         deliveryTotal: delivery,
-        shippingMethod: shippingMethod === 'posta' ? 'Posta Romana' : 'Curier Rapid',
+        shippingMethod: shippingMethod === 'sediu' ? 'Ridicare de la sediu' : 'Livrare la domiciliu',
       };
 
-      if (!user) {
-        payload.customerDetails = customerDetails;
-        payload.shippingAddress = {
-          ...shippingAddress,
-          telefon: shippingAddress.telefon || customerDetails.phone,
-        };
-        if (!useSameAddress) {
+      const storeAddress = {
+        prenume: 'Ridicare',
+        nume: 'Sediu',
+        adresa1: 'Str. Sovata 5, bl PC26, ap. 2',
+        adresa2: '',
+        oras: 'Oradea',
+        judet: 'Bihor',
+        codPostal: '410221',
+        telefon: '0259267109',
+        tara: 'Romania',
+        companie: 'S.C. PAMIL S.R.L.'
+      };
+
+      if (shippingMethod === 'sediu') {
+        payload.shippingAddress = storeAddress;
+        if (!user && !useSameAddress) {
           payload.billingAddress = isCompanyBilling
             ? { ...billingAddress, prenume: '', nume: '' }
             : { ...billingAddress, companie: '', cui: '', regCom: '' };
         } else {
-          payload.billingAddress = payload.shippingAddress;
+          payload.billingAddress = storeAddress;
         }
       } else {
-        if (addresses.length > 0) {
-          const activeAddr = addresses.find((a) => a.id === selectedAddressId);
-          if (activeAddr) {
-            const formattedAddr = {
-              apelativ: activeAddr.apelativ || '',
-              prenume: activeAddr.prenume || '',
-              nume: activeAddr.nume || '',
-              tara: activeAddr.tara || 'Romania',
-              adresa1: activeAddr.adresa1 || '',
-              adresa2: activeAddr.adresa2 || '',
-              codPostal: activeAddr.cod_postal || '',
-              oras: activeAddr.oras || '',
-              judet: activeAddr.judet || '',
-              telefon: activeAddr.telefon || '',
-              companie: activeAddr.companie || activeAddr.company || '',
-            };
-            payload.shippingAddress = formattedAddr;
-            payload.billingAddress = formattedAddr;
+        if (!user) {
+          payload.customerDetails = customerDetails;
+          payload.shippingAddress = {
+            ...shippingAddress,
+            telefon: shippingAddress.telefon || customerDetails.phone,
+          };
+          if (!useSameAddress) {
+            payload.billingAddress = isCompanyBilling
+              ? { ...billingAddress, prenume: '', nume: '' }
+              : { ...billingAddress, companie: '', cui: '', regCom: '' };
+          } else {
+            payload.billingAddress = payload.shippingAddress;
           }
         } else {
-          payload.shippingAddress = shippingAddress;
-          payload.billingAddress = useSameAddress ? shippingAddress : billingAddress;
+          if (addresses.length > 0) {
+            const activeAddr = addresses.find((a) => a.id === selectedAddressId);
+            if (activeAddr) {
+              const formattedAddr = {
+                apelativ: activeAddr.apelativ || '',
+                prenume: activeAddr.prenume || '',
+                nume: activeAddr.nume || '',
+                tara: activeAddr.tara || 'Romania',
+                adresa1: activeAddr.adresa1 || '',
+                adresa2: activeAddr.adresa2 || '',
+                codPostal: activeAddr.cod_postal || '',
+                oras: activeAddr.oras || '',
+                judet: activeAddr.judet || '',
+                telefon: activeAddr.telefon || '',
+                companie: activeAddr.companie || activeAddr.company || '',
+              };
+              payload.shippingAddress = formattedAddr;
+              payload.billingAddress = formattedAddr;
+            }
+          } else {
+            payload.shippingAddress = shippingAddress;
+            payload.billingAddress = useSameAddress ? shippingAddress : billingAddress;
+          }
         }
       }
 
@@ -773,131 +795,147 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                 </div>
               ) : null}
 
-              {user && addresses.length > 0 ? (
-                <div className="space-y-4">
-                  <p className="text-sm font-semibold text-slate-700">Alege o adresa salvata din cont:</p>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {addresses.map((addr: any) => (
-                      <button
-                        key={addr.id}
-                        type="button"
-                        onClick={() => setSelectedAddressId(addr.id)}
-                        className={`flex flex-col text-left p-4 rounded-2xl border transition ${
-                          selectedAddressId === addr.id
-                            ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
-                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="font-semibold text-sm">
-                          {addr.prenume} {addr.nume}
-                        </span>
-                        <span className="text-xs text-slate-500 mt-1">
-                          {addr.adresa1}{addr.adresa2 ? `, ${addr.adresa2}` : ''}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {addr.oras}, {addr.judet}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {addr.telefon}
-                        </span>
-                        {addr.companie ? (
-                          <span className="text-xs font-semibold text-violet-700 mt-1">
-                            {addr.companie}
-                          </span>
-                        ) : null}
-                      </button>
-                    ))}
+              {shippingMethod === 'sediu' ? (
+                <div className="rounded-2xl border border-violet-100 bg-violet-50/30 p-5 space-y-3">
+                  <h3 className="text-base font-bold text-violet-950 flex items-center gap-2">
+                    <span>📍</span> Locație ridicare comandă
+                  </h3>
+                  <div className="text-sm text-violet-900 space-y-1.5 leading-relaxed">
+                    <p className="font-semibold text-violet-950">S.C. PAMIL S.R.L.</p>
+                    <p>Str. Sovata nr. 5, bl. PC26, ap. 2, Oradea, Bihor</p>
+                    <p className="text-xs text-violet-700 font-medium">Orar: Luni - Vineri: 09:00 - 17:00</p>
+                    <p className="mt-2 text-xs text-violet-600 italic">Te vom notifica prin e-mail de îndată ce comanda ta este pregătită pentru ridicare.</p>
                   </div>
                 </div>
-              ) : !isLoadingAuth ? (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-bold text-slate-800">Adresa de livrare</h3>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Prenume *</label>
-                      <input
-                        type="text"
-                        value={shippingAddress.prenume}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, prenume: e.target.value })}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Nume *</label>
-                      <input
-                        type="text"
-                        value={shippingAddress.nume}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, nume: e.target.value })}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Adresa *</label>
-                      <input
-                        type="text"
-                        value={shippingAddress.adresa1}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, adresa1: e.target.value })}
-                        placeholder="Strada, numar, bloc, scara, apartament"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Adresa line 2 (optional)</label>
-                      <input
-                        type="text"
-                        value={shippingAddress.adresa2}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, adresa2: e.target.value })}
-                        placeholder="Detalii suplimentare, repere"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Oras *</label>
-                      <CityAutocompleteInput
-                        value={shippingAddress.oras}
-                        onChange={(val) => setShippingAddress({ ...shippingAddress, oras: val })}
-                        onSelectCity={(city, county) => setShippingAddress({ ...shippingAddress, oras: city, judet: county })}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Judet *</label>
-                      <select
-                        value={shippingAddress.judet}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, judet: e.target.value })}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base bg-white text-slate-900 outline-none transition focus:border-slate-400"
-                      >
-                        <option value="">Alege judetul...</option>
-                        {ROMANIAN_COUNTIES.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
+              ) : (
+                <>
+                  {user && addresses.length > 0 ? (
+                    <div className="space-y-4">
+                      <p className="text-sm font-semibold text-slate-700">Alege o adresa salvata din cont:</p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {addresses.map((addr: any) => (
+                          <button
+                            key={addr.id}
+                            type="button"
+                            onClick={() => setSelectedAddressId(addr.id)}
+                            className={`flex flex-col text-left p-4 rounded-2xl border transition ${
+                              selectedAddressId === addr.id
+                                ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
+                                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="font-semibold text-sm">
+                              {addr.prenume} {addr.nume}
+                            </span>
+                            <span className="text-xs text-slate-500 mt-1">
+                              {addr.adresa1}{addr.adresa2 ? `, ${addr.adresa2}` : ''}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {addr.oras}, {addr.judet}
+                            </span>
+                            <span className="text-xs text-slate-500">
+                              {addr.telefon}
+                            </span>
+                            {addr.companie ? (
+                              <span className="text-xs font-semibold text-violet-700 mt-1">
+                                {addr.companie}
+                              </span>
+                            ) : null}
+                          </button>
                         ))}
-                      </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Cod postal</label>
-                      <input
-                        type="text"
-                        value={shippingAddress.codPostal}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, codPostal: e.target.value })}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
-                      />
+                  ) : !isLoadingAuth ? (
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-bold text-slate-800">Adresa de livrare</h3>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Prenume *</label>
+                          <input
+                            type="text"
+                            value={shippingAddress.prenume}
+                            onChange={(e) => setShippingAddress({ ...shippingAddress, prenume: e.target.value })}
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Nume *</label>
+                          <input
+                            type="text"
+                            value={shippingAddress.nume}
+                            onChange={(e) => setShippingAddress({ ...shippingAddress, nume: e.target.value })}
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Adresa *</label>
+                          <input
+                            type="text"
+                            value={shippingAddress.adresa1}
+                            onChange={(e) => setShippingAddress({ ...shippingAddress, adresa1: e.target.value })}
+                            placeholder="Nume strada, numar, bloc..."
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Apartament, etaj, interfon etc. (optional)</label>
+                          <input
+                            type="text"
+                            value={shippingAddress.adresa2}
+                            onChange={(e) => setShippingAddress({ ...shippingAddress, adresa2: e.target.value })}
+                            placeholder="Ex: ap. 12, etaj 3, interfon 12"
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Oras *</label>
+                          <CityAutocompleteInput
+                            value={shippingAddress.oras}
+                            onChange={(val) => setShippingAddress({ ...shippingAddress, oras: val })}
+                            onSelectCity={(city, county) => setShippingAddress({ ...shippingAddress, oras: city, judet: county })}
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Judet *</label>
+                          <select
+                            value={shippingAddress.judet}
+                            onChange={(e) => setShippingAddress({ ...shippingAddress, judet: e.target.value })}
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400 bg-white"
+                          >
+                            <option value="">Alege judet...</option>
+                            {ROMANIAN_COUNTIES.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Cod postal (optional)</label>
+                          <input
+                            type="text"
+                            value={shippingAddress.codPostal}
+                            onChange={(e) => setShippingAddress({ ...shippingAddress, codPostal: e.target.value })}
+                            placeholder="Cod postal din 6 cifre"
+                            maxLength={6}
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Telefon secundar (optional)</label>
+                          <input
+                            type="tel"
+                            value={shippingAddress.telefon}
+                            onChange={(e) => setShippingAddress({ ...shippingAddress, telefon: formatPhoneNumber(e.target.value) })}
+                            placeholder="07xx xxx xxx"
+                            maxLength={12}
+                            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">Telefon livrare *</label>
-                      <input
-                        type="tel"
-                        value={shippingAddress.telefon}
-                        onChange={(e) => setShippingAddress({ ...shippingAddress, telefon: formatPhoneNumber(e.target.value) })}
-                        placeholder="07xx xxx xxx"
-                        maxLength={12}
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-slate-400"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+                  ) : null}
+                </>
+              )}
 
               {!isLoadingAuth && (!user || addresses.length === 0) ? (
                 <div className="space-y-4 border-t border-slate-100 pt-6">
@@ -1086,20 +1124,44 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                   type="button"
                   onClick={() => setShippingMethod('curier')}
                   aria-pressed={shippingMethod === 'curier'}
-                  className={`flex min-h-16 w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition ${
+                  className={`flex min-h-24 w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition ${
                     shippingMethod === 'curier'
                       ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <span>
-                    <span className="block text-sm font-semibold">Curier rapid (Door-to-door)</span>
+                  <span className="w-full">
+                    <span className="block text-sm font-semibold">Livrare la domiciliu (Curier / Poșta)</span>
                     <span className="mt-1 block text-xs text-slate-500">
-                      {subtotal >= 300 ? 'Livrare gratuita' : '20,00 lei'} • Nemo / DPD / GLS / Fan Courier
+                      25,00 lei · Livrare door-to-door prin curieri parteneri sau Poșta Română (Prioripost)
                     </span>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-md bg-white border border-slate-100 px-1.5 py-0.5 text-[9px] font-black italic tracking-tight shadow-sm select-none">
+                        <span className="text-[#007b3d]">FAN</span>
+                        <span className="text-[#e31e24] text-[8px] font-bold ml-0.5">Courier</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-[#dc2626] px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm select-none font-sans">
+                        <span className="h-1.5 w-1.5 bg-white rounded-sm" />
+                        dpd
+                      </span>
+                      <span className="inline-flex items-center rounded-md bg-[#002f6c] px-1.5 py-0.5 text-[9px] font-extrabold italic text-white tracking-tighter shadow-sm select-none font-sans">
+                        GLS
+                        <span className="text-yellow-400 font-bold ml-0.5">➔</span>
+                      </span>
+                      <span className="inline-flex items-center rounded-md bg-[#f68923] px-1.5 py-0.5 text-[9px] font-black italic text-white tracking-tight shadow-sm select-none font-sans">
+                        NEMO
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-[#002f6c] px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm select-none">
+                        <svg viewBox="0 0 100 100" className="h-2.5 w-2.5 fill-current text-yellow-400">
+                          <path d="M 50 15 A 35 35 0 1 0 85 50 A 35 35 0 0 0 50 15 Z M 50 25 A 25 25 0 1 1 25 50 A 25 25 0 0 1 50 25 Z" />
+                          <path d="M 75 40 L 88 32 L 88 48 Z" />
+                        </svg>
+                        Poșta Română
+                      </span>
+                    </div>
                   </span>
                   <span
-                    className={`h-4 w-4 rounded-full border ${
+                    className={`h-4 w-4 shrink-0 rounded-full border ${
                       shippingMethod === 'curier' ? 'border-[#4f2048] bg-[#4f2048]' : 'border-slate-300'
                     }`}
                     aria-hidden="true"
@@ -1107,23 +1169,28 @@ export default function BasketPageContent({ products }: BasketPageContentProps) 
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShippingMethod('posta')}
-                  aria-pressed={shippingMethod === 'posta'}
-                  className={`flex min-h-16 w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition ${
-                    shippingMethod === 'posta'
+                  onClick={() => setShippingMethod('sediu')}
+                  aria-pressed={shippingMethod === 'sediu'}
+                  className={`flex min-h-20 w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition ${
+                    shippingMethod === 'sediu'
                       ? 'border-[#4f2048] bg-[#4f2048]/5 text-slate-900'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <span>
-                    <span className="block text-sm font-semibold">Posta Romana</span>
+                  <span className="w-full">
+                    <span className="block text-sm font-semibold">Ridicare de la sediu (Oradea)</span>
                     <span className="mt-1 block text-xs text-slate-500">
-                      {subtotal >= 150 ? 'Livrare gratuita' : '17,00 lei'} • Ridicare de la oficiul postal
+                      Gratuit (0,00 lei) · Str. Sovata nr. 5
                     </span>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-md bg-[#4f2048] px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm select-none">
+                        📍 Sediul PAMIL
+                      </span>
+                    </div>
                   </span>
                   <span
-                    className={`h-4 w-4 rounded-full border ${
-                      shippingMethod === 'posta' ? 'border-[#4f2048] bg-[#4f2048]' : 'border-slate-300'
+                    className={`h-4 w-4 shrink-0 rounded-full border ${
+                      shippingMethod === 'sediu' ? 'border-[#4f2048] bg-[#4f2048]' : 'border-slate-300'
                     }`}
                     aria-hidden="true"
                   />

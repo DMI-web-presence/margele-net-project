@@ -235,6 +235,11 @@ export type OrderRecord = {
   courier: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  awbId?: string | null;
+  awbNumber?: string | null;
+  awbStatus?: string | null;
+  awbCarrier?: string | null;
+  awbPdfUrl?: string | null;
   packageStatus: string;
   packageCount: number;
   packedAt: string | null;
