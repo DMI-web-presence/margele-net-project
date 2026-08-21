@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { findCheckoutProduct } = require('./checkout-products');
+const { cartLineRequiresResolvedVariant, findCheckoutProduct } = require('./checkout-products');
 
 function checkoutProducts() {
   return new Map([
@@ -26,4 +26,60 @@ test('findCheckoutProduct keeps the direct product match when no stable identifi
   const product = findCheckoutProduct(checkoutProducts(), 2, null, null);
 
   assert.equal(product?.id, 2);
+});
+
+test('a simple product SKU does not require a variant', () => {
+  const product = { id: 3, sku: 'margele-shamballa', variants: [] };
+
+  assert.equal(
+    cartLineRequiresResolvedVariant(product, {
+      requestedSku: 'margele-shamballa',
+      requestedVariantId: null,
+      selectedOptions: null,
+      requiresVariantSelection: false,
+    }),
+    false,
+  );
+});
+
+test('a variant SKU still requires a matching variant', () => {
+  const product = { id: 1, sku: 'rotunde-semimate-2mm', variants: [] };
+
+  assert.equal(
+    cartLineRequiresResolvedVariant(product, {
+      requestedSku: '12155',
+      requestedVariantId: null,
+      selectedOptions: null,
+      requiresVariantSelection: false,
+    }),
+    true,
+  );
+});
+
+test('a product with selectable variants still requires a resolved variant', () => {
+  const product = { id: 1, sku: 'rotunde-semimate-2mm', variants: [{ id: 9406, sku: '12155' }] };
+
+  assert.equal(
+    cartLineRequiresResolvedVariant(product, {
+      requestedSku: 'rotunde-semimate-2mm',
+      requestedVariantId: null,
+      selectedOptions: null,
+      requiresVariantSelection: true,
+    }),
+    true,
+  );
+});
+
+test('a product SKU keeps requiring resolution when variant rows exist', () => {
+  const product = { id: 1, sku: 'rotunde-semimate-2mm', variants: [{ id: 9406, sku: '12155' }] };
+
+  assert.equal(
+    cartLineRequiresResolvedVariant(product, {
+      requestedSku: 'rotunde-semimate-2mm',
+      requestedVariantId: null,
+      selectedOptions: null,
+      requiresVariantSelection: false,
+    }),
+    true,
+  );
 });

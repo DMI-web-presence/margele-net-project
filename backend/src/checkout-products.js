@@ -25,4 +25,21 @@ function findCheckoutProduct(products, requestedProductId, requestedSku, request
   return directMatch || null;
 }
 
-module.exports = { findCheckoutProduct };
+function cartLineRequiresResolvedVariant(
+  product,
+  { requestedSku, requestedVariantId, selectedOptions, requiresVariantSelection },
+) {
+  const sku = String(requestedSku || '').trim();
+  const productSku = String(product?.sku || '').trim();
+  const hasVariants = Array.isArray(product?.variants) && product.variants.length > 0;
+  const requestsSpecificVariant = Boolean(sku && (sku !== productSku || hasVariants));
+
+  return Boolean(
+    requestedVariantId ||
+      selectedOptions ||
+      requiresVariantSelection ||
+      requestsSpecificVariant
+  );
+}
+
+module.exports = { cartLineRequiresResolvedVariant, findCheckoutProduct };

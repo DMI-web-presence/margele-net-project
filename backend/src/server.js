@@ -17,7 +17,7 @@ const {
   createSmartBillClient,
 } = require('./services/smartbill');
 const { createEcoletClient } = require('./services/ecolet');
-const { findCheckoutProduct } = require('./checkout-products');
+const { cartLineRequiresResolvedVariant, findCheckoutProduct } = require('./checkout-products');
 
 const uploadRoot = path.join(__dirname, '..', 'uploads');
 const productUploadDir = path.join(uploadRoot, 'products');
@@ -5016,10 +5016,13 @@ async function buildTrustedOrderItems(rawItems) {
       selectedOptions,
       requestedVariantId,
     );
-    if (
-      (requestedVariantId || requestedSku || selectedOptions || productRequiresVariantSelection(product)) &&
-      !selectedVariant
-    ) {
+    const requiresResolvedVariant = cartLineRequiresResolvedVariant(product, {
+      requestedSku,
+      requestedVariantId,
+      selectedOptions,
+      requiresVariantSelection: productRequiresVariantSelection(product),
+    });
+    if (requiresResolvedVariant && !selectedVariant) {
       const error = new Error(`Selectia pentru produsul "${product.name}" nu mai este valida.`);
       error.status = 400;
       throw error;
