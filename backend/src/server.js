@@ -17,6 +17,7 @@ const {
   createSmartBillClient,
 } = require('./services/smartbill');
 const { createEcoletClient } = require('./services/ecolet');
+const { findCheckoutProduct } = require('./checkout-products');
 
 const uploadRoot = path.join(__dirname, '..', 'uploads');
 const productUploadDir = path.join(uploadRoot, 'products');
@@ -4948,6 +4949,16 @@ function validateAddressData(data) {
 async function buildTrustedOrderItems(rawItems) {
   if (!Array.isArray(rawItems) || rawItems.length === 0) return [];
 
+  const requestedSkus = Array.from(
+    new Set(
+      rawItems
+        .map((item) => {
+          const product = item && typeof item === 'object' ? item.product || item : {};
+          return cleanOptionalValue(product.sku || item.sku);
+        })
+        .filter(Boolean),
+    ),
+  );
   const productIds = Array.from(
     new Set(
       rawItems
@@ -4959,18 +4970,17 @@ async function buildTrustedOrderItems(rawItems) {
     ),
   );
 
-  if (productIds.length === 0) return [];
+  if (productIds.length === 0 && requestedSkus.length === 0) return [];
 
-  console.log('[DEBUG] buildTrustedOrderItems: rawItems =', JSON.stringify(rawItems, null, 2));
-  console.log('[DEBUG] buildTrustedOrderItems: productIds =', productIds);
-  const products = await getCheckoutProducts(productIds);
-  console.log('[DEBUG] buildTrustedOrderItems: fetched keys =', Array.from(products.keys()));
+  const products = await getCheckoutProducts(productIds, requestedSkus);
   const orderItems = [];
 
   for (const item of rawItems) {
     const productInput = item && typeof item === 'object' ? item.product || item : {};
     const productId = normalizeInteger(productInput.id || item.productId || item.product_id);
-    const product = products.get(productId);
+    const requestedSku = cleanOptionalValue(productInput.sku || item.sku);
+    const requestedVariantId = normalizeInteger(productInput.variantId || item.variantId || item.variant_id);
+    const product = findCheckoutProduct(products, productId, requestedSku, requestedVariantId);
     if (!product) {
       const error = new Error('Un produs din cos nu mai este disponibil.');
       error.status = 400;
@@ -4980,9 +4990,7 @@ async function buildTrustedOrderItems(rawItems) {
     const quantity = Math.max(1, Math.min(999, Math.floor(Number(item.quantity || 1))));
     if (!Number.isFinite(quantity)) continue;
 
-    const requestedSku = cleanOptionalValue(productInput.sku || item.sku);
     const selectedOptions = cleanOptionalValue(productInput.selectedSize || item.selectedSize);
-    const requestedVariantId = normalizeInteger(productInput.variantId || item.variantId || item.variant_id);
     const selectedVariant = findVariantForCartLine(
       product.variants,
       requestedSku,
@@ -5027,7 +5035,7 @@ async function buildTrustedOrderItems(rawItems) {
   return orderItems;
 }
 
-async function getCheckoutProducts(productIds) {
+async function getCheckoutProducts(productIds, requestedSkus = []) {
   const result = await pool.query(
     `
       SELECT
@@ -5070,10 +5078,23 @@ async function getCheckoutProducts(productIds) {
         LIMIT 1
       ) primary_image ON true
       LEFT JOIN product_option_values pov ON pov.product_id = p.id
-      WHERE p.id = ANY($1::int[]) AND COALESCE(p.status, 'active') = 'active'
+      WHERE COALESCE(p.status, 'active') = 'active'
+        AND (
+          p.id = ANY($1::int[])
+          OR p.sku = ANY($2::text[])
+          OR EXISTS (
+            SELECT 1
+            FROM product_option_values checkout_variant
+            WHERE checkout_variant.product_id = p.id
+              AND (
+                checkout_variant.sku = ANY($2::text[])
+                OR checkout_variant.model = ANY($2::text[])
+              )
+          )
+        )
       GROUP BY p.id, c.name, primary_image.image_url
     `,
-    [productIds],
+    [productIds, requestedSkus],
   );
 
   return new Map(
