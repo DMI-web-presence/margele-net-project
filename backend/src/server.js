@@ -5068,23 +5068,23 @@ async function getCheckoutProducts(productIds, requestedSkus = []) {
           ) FILTER (WHERE pov.id IS NOT NULL),
           '[]'::jsonb
         ) AS variants
-      FROM products p
-      LEFT JOIN categories c ON c.id = p.category_id
+      FROM catalog.products p
+      LEFT JOIN catalog.categories c ON c.id = p.category_id
       LEFT JOIN LATERAL (
         SELECT image_url
-        FROM product_images
+        FROM catalog.product_images
         WHERE product_id = p.id
         ORDER BY is_primary DESC, sort_order ASC, id ASC
         LIMIT 1
       ) primary_image ON true
-      LEFT JOIN product_option_values pov ON pov.product_id = p.id
+      LEFT JOIN catalog.product_option_values pov ON pov.product_id = p.id
       WHERE COALESCE(p.status, 'active') = 'active'
         AND (
           p.id = ANY($1::int[])
           OR p.sku = ANY($2::text[])
           OR EXISTS (
             SELECT 1
-            FROM product_option_values checkout_variant
+            FROM catalog.product_option_values checkout_variant
             WHERE checkout_variant.product_id = p.id
               AND (
                 checkout_variant.sku = ANY($2::text[])
