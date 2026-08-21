@@ -692,7 +692,7 @@ async function handleEmailExists(requestUrl, res) {
     return;
   }
 
-  const result = await pool.query('SELECT 1 FROM users WHERE lower(email) = lower($1) LIMIT 1', [
+  const result = await pool.query('SELECT 1 FROM app_auth.users WHERE lower(email) = lower($1) LIMIT 1', [
     email,
   ]);
   sendJson(res, 200, { exists: result.rowCount > 0 });
@@ -2114,13 +2114,13 @@ async function getAdminOrders(db = pool) {
 }
 
 async function getAdminCustomers(db = pool) {
-  if (!(await hasTable('users'))) {
+  if (!(await hasTableInSchema('app_auth', 'users'))) {
     return [];
   }
 
   const userColumns = await getUserColumns();
   const hasOrders = await hasTable('orders');
-  const hasAddresses = await hasTable('addresses');
+  const hasAddresses = await hasTableInSchema('app_auth', 'addresses');
   const nameSelect = buildAdminCustomerUserNameSql(userColumns);
   const phoneSelect = userColumns.has('phone') ? 'u.phone' : 'NULL';
   const clientTypeSelect = userColumns.has('client_type') ? 'u.client_type' : 'NULL';
@@ -2133,7 +2133,7 @@ async function getAdminCustomers(db = pool) {
     ? `
       LEFT JOIN LATERAL (
         SELECT jsonb_agg(to_jsonb(a) ORDER BY a.implicit_facturare DESC, a.implicit_livrare DESC, a.id DESC) AS addresses
-        FROM addresses a
+        FROM app_auth.addresses a
         WHERE a.user_id = u.id
       ) addresses ON true
     `
@@ -2195,7 +2195,7 @@ async function getAdminCustomers(db = pool) {
       COALESCE(order_stats.total_spent, 0)::numeric AS total_spent,
       order_stats.last_order_at,
       order_stats.first_order_at
-    FROM users u
+    FROM app_auth.users u
     ${addressesJoin}
     ${legacyOrderAddressesJoin}
     ${orderStatsJoin}
@@ -2487,7 +2487,7 @@ async function adminOrderSelectSql() {
       COALESCE(items.items, '[]'::jsonb) AS items,
       COALESCE(items.item_count, 0)::int AS item_count
     FROM orders o
-    LEFT JOIN users u ON u.id = o.user_id
+    LEFT JOIN app_auth.users u ON u.id = o.user_id
     LEFT JOIN LATERAL (
       SELECT
         jsonb_agg(
@@ -3379,19 +3379,24 @@ async function handleGoogleCallback(req, requestUrl, res) {
     return;
   }
 
-  const user = await findOrCreateGoogleUser({ email, fullName });
-  const authToken = signToken({ sub: user.id, email: user.email });
-  res.setHeader('Set-Cookie', [
-    buildCookie(config.cookieName, authToken, {
-      maxAge: 60 * 60 * 24 * 7,
-      crossSite: shouldUseCrossSiteAuthCookie(),
-    }),
-    buildCookie('google_oauth_state', '', {
-      maxAge: 0,
-      sameSite: 'Lax',
-    }),
-  ]);
-  redirectToFrontend(res, '/');
+  try {
+    const user = await findOrCreateGoogleUser({ email, fullName });
+    const authToken = signToken({ sub: user.id, email: user.email });
+    res.setHeader('Set-Cookie', [
+      buildCookie(config.cookieName, authToken, {
+        maxAge: 60 * 60 * 24 * 7,
+        crossSite: shouldUseCrossSiteAuthCookie(),
+      }),
+      buildCookie('google_oauth_state', '', {
+        maxAge: 0,
+        sameSite: 'Lax',
+      }),
+    ]);
+    redirectToFrontend(res, '/');
+  } catch (error) {
+    console.error('Google OAuth callback failed:', error);
+    redirectToFrontend(res, '/autentificare?error=google');
+  }
 }
 
 async function handleRegister(req, res) {
@@ -3463,7 +3468,7 @@ async function handleRegister(req, res) {
 
 async function findOrCreateGoogleUser({ email, fullName }) {
   const existing = await pool.query(
-    'SELECT * FROM users WHERE lower(email) = lower($1) LIMIT 1',
+    'SELECT * FROM app_auth.users WHERE lower(email) = lower($1) LIMIT 1',
     [email],
   );
 
@@ -3493,7 +3498,7 @@ async function issueEmailVerification(user) {
     return { skipped: true, reason: 'email_verification_not_required' };
   }
 
-  if (!(await hasTable('email_verification_tokens'))) {
+  if (!(await hasTableInSchema('app_auth', 'email_verification_tokens'))) {
     return { skipped: true, reason: 'missing_email_verification_tokens_table' };
   }
 
@@ -3505,7 +3510,7 @@ async function issueEmailVerification(user) {
   await withTransaction(async (client) => {
     await client.query(
       `
-        UPDATE email_verification_tokens
+        UPDATE app_auth.email_verification_tokens
         SET used_at = CURRENT_TIMESTAMP
         WHERE user_id = $1 AND used_at IS NULL
       `,
@@ -3513,7 +3518,7 @@ async function issueEmailVerification(user) {
     );
     await client.query(
       `
-        INSERT INTO email_verification_tokens (user_id, token_hash, expires_at)
+        INSERT INTO app_auth.email_verification_tokens (user_id, token_hash, expires_at)
         VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '24 hours')
       `,
       [user.id, tokenHash],
@@ -3530,7 +3535,7 @@ async function issueEmailVerification(user) {
 
 async function handleEmailVerificationConfirm(requestUrl, res) {
   const token = String(requestUrl.searchParams.get('token') || '').trim();
-  if (!token || !(await hasTable('email_verification_tokens'))) {
+  if (!token || !(await hasTableInSchema('app_auth', 'email_verification_tokens'))) {
     redirectToFrontend(res, '/autentificare?error=email-verification');
     return;
   }
@@ -3546,8 +3551,8 @@ async function handleEmailVerificationConfirm(requestUrl, res) {
     const tokenResult = await client.query(
       `
         SELECT evt.id, evt.user_id, u.email, u.full_name
-        FROM email_verification_tokens evt
-        JOIN users u ON u.id = evt.user_id
+        FROM app_auth.email_verification_tokens evt
+        JOIN app_auth.users u ON u.id = evt.user_id
         WHERE evt.token_hash = $1
           AND evt.used_at IS NULL
           AND evt.expires_at > CURRENT_TIMESTAMP
@@ -3561,7 +3566,7 @@ async function handleEmailVerificationConfirm(requestUrl, res) {
     const updatedAtSet = columns.has('updated_at') ? ', updated_at = CURRENT_TIMESTAMP' : '';
     const userResult = await client.query(
       `
-        UPDATE users
+        UPDATE app_auth.users
         SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP)${updatedAtSet}
         WHERE id = $1
         RETURNING *
@@ -3569,7 +3574,7 @@ async function handleEmailVerificationConfirm(requestUrl, res) {
       [verificationToken.user_id],
     );
     await client.query(
-      'UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      'UPDATE app_auth.email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1',
       [verificationToken.id],
     );
     return userResult.rows[0] || null;
@@ -3604,7 +3609,7 @@ async function handleLogin(req, res) {
     : '';
   const selectEmailVerifiedAt = userColumns.has('email_verified_at') ? ', email_verified_at' : '';
   const result = await pool.query(
-    `SELECT id, full_name, email, password_hash${selectRole}${selectRequiresPasswordReset}${selectEmailVerifiedAt} FROM users WHERE lower(email) = lower($1) LIMIT 1`,
+    `SELECT id, full_name, email, password_hash${selectRole}${selectRequiresPasswordReset}${selectEmailVerifiedAt} FROM app_auth.users WHERE lower(email) = lower($1) LIMIT 1`,
     [email],
   );
   const user = result.rows[0];
@@ -3660,16 +3665,16 @@ async function handlePasswordResetRequest(req, res) {
   }
 
   const result = await pool.query(
-    'SELECT id, full_name, email FROM users WHERE lower(email) = lower($1) LIMIT 1',
+    'SELECT id, full_name, email FROM app_auth.users WHERE lower(email) = lower($1) LIMIT 1',
     [email],
   );
   const user = result.rows[0];
 
-  if (user && (await hasTable('password_reset_tokens'))) {
+  if (user && (await hasTableInSchema('app_auth', 'password_reset_tokens'))) {
     const cooldownResult = await pool.query(
       `
         SELECT created_at
-        FROM password_reset_tokens
+        FROM app_auth.password_reset_tokens
         WHERE user_id = $1
           AND used_at IS NULL
           AND created_at > CURRENT_TIMESTAMP - ($2::int * INTERVAL '1 second')
@@ -3699,7 +3704,7 @@ async function handlePasswordResetRequest(req, res) {
     await withTransaction(async (client) => {
       await client.query(
         `
-          UPDATE password_reset_tokens
+          UPDATE app_auth.password_reset_tokens
           SET used_at = CURRENT_TIMESTAMP
           WHERE user_id = $1 AND used_at IS NULL
         `,
@@ -3707,7 +3712,7 @@ async function handlePasswordResetRequest(req, res) {
       );
       await client.query(
         `
-          INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+          INSERT INTO app_auth.password_reset_tokens (user_id, token_hash, expires_at)
           VALUES ($1, $2, CURRENT_TIMESTAMP + INTERVAL '1 hour')
         `,
         [user.id, tokenHash],
@@ -3747,7 +3752,7 @@ async function handlePasswordResetConfirm(req, res) {
     return;
   }
 
-  if (!(await hasTable('password_reset_tokens'))) {
+  if (!(await hasTableInSchema('app_auth', 'password_reset_tokens'))) {
     sendJson(res, 503, { message: 'Resetarea parolei nu este configurata.' });
     return;
   }
@@ -3758,8 +3763,8 @@ async function handlePasswordResetConfirm(req, res) {
     const tokenResult = await client.query(
       `
         SELECT prt.id, prt.user_id, u.email
-        FROM password_reset_tokens prt
-        JOIN users u ON u.id = prt.user_id
+        FROM app_auth.password_reset_tokens prt
+        JOIN app_auth.users u ON u.id = prt.user_id
         WHERE prt.token_hash = $1
           AND prt.used_at IS NULL
           AND prt.expires_at > CURRENT_TIMESTAMP
@@ -3776,7 +3781,7 @@ async function handlePasswordResetConfirm(req, res) {
       : '';
     const userResult = await client.query(
       `
-        UPDATE users
+        UPDATE app_auth.users
         SET password_hash = $1${resetFlagUpdate}, updated_at = CURRENT_TIMESTAMP
         WHERE id = $2
         RETURNING id, email
@@ -3784,7 +3789,7 @@ async function handlePasswordResetConfirm(req, res) {
       [passwordHash, resetToken.user_id],
     );
     await client.query(
-      'UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      'UPDATE app_auth.password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1',
       [resetToken.id],
     );
     return userResult.rows[0] || null;
@@ -3924,7 +3929,7 @@ async function handleAddressList(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (!(await hasTable('addresses'))) {
+  if (!(await hasTableInSchema('app_auth', 'addresses'))) {
     sendJson(res, 200, []);
     return;
   }
@@ -3937,7 +3942,7 @@ async function handleAddressList(req, res) {
   }
 
   const result = await pool.query(
-    'SELECT * FROM addresses WHERE user_id = $1 ORDER BY id DESC',
+    'SELECT * FROM app_auth.addresses WHERE user_id = $1 ORDER BY id DESC',
     [user.id],
   );
 
@@ -4123,9 +4128,9 @@ async function handleOrderCreate(req, res) {
     billingAddress = body.billingAddress || null;
 
     if (!shippingAddress) {
-      if (await hasTable('addresses')) {
+      if (await hasTableInSchema('app_auth', 'addresses')) {
         const addressResult = await pool.query(
-          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY implicit_livrare DESC, id DESC LIMIT 1`,
+          `SELECT * FROM app_auth.addresses WHERE user_id = $1 ORDER BY implicit_livrare DESC, id DESC LIMIT 1`,
           [user.id]
         );
         const defaultAddr = addressResult.rows[0];
@@ -4148,9 +4153,9 @@ async function handleOrderCreate(req, res) {
     }
 
     if (!billingAddress) {
-      if (await hasTable('addresses')) {
+      if (await hasTableInSchema('app_auth', 'addresses')) {
         const addressResult = await pool.query(
-          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY implicit_facturare DESC, id DESC LIMIT 1`,
+          `SELECT * FROM app_auth.addresses WHERE user_id = $1 ORDER BY implicit_facturare DESC, id DESC LIMIT 1`,
           [user.id]
         );
         const defaultAddr = addressResult.rows[0];
@@ -4335,9 +4340,9 @@ async function handleNetopiaPaymentStart(req, res) {
     billingAddress = body.billingAddress || null;
 
     if (!shippingAddress) {
-      if (await hasTable('addresses')) {
+      if (await hasTableInSchema('app_auth', 'addresses')) {
         const addressResult = await pool.query(
-          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY implicit_livrare DESC, id DESC LIMIT 1`,
+          `SELECT * FROM app_auth.addresses WHERE user_id = $1 ORDER BY implicit_livrare DESC, id DESC LIMIT 1`,
           [user.id]
         );
         const defaultAddr = addressResult.rows[0];
@@ -4360,9 +4365,9 @@ async function handleNetopiaPaymentStart(req, res) {
     }
 
     if (!billingAddress) {
-      if (await hasTable('addresses')) {
+      if (await hasTableInSchema('app_auth', 'addresses')) {
         const addressResult = await pool.query(
-          `SELECT * FROM addresses WHERE user_id = $1 ORDER BY implicit_facturare DESC, id DESC LIMIT 1`,
+          `SELECT * FROM app_auth.addresses WHERE user_id = $1 ORDER BY implicit_facturare DESC, id DESC LIMIT 1`,
           [user.id]
         );
         const defaultAddr = addressResult.rows[0];
@@ -4639,7 +4644,7 @@ async function handleAddressCreate(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (!(await hasTable('addresses'))) {
+  if (!(await hasTableInSchema('app_auth', 'addresses'))) {
     sendJson(res, 501, { message: 'Tabela addresses nu exista inca.' });
     return;
   }
@@ -4654,7 +4659,7 @@ async function handleAddressCreate(req, res) {
   }
 
   await clearDefaultAddresses(user.id, insertData);
-  const address = await insertRow('addresses', insertData);
+  const address = await insertRow('app_auth.addresses', insertData);
   sendJson(res, 201, addressResponse(address));
 }
 
@@ -4662,7 +4667,7 @@ async function handleAddressUpdate(req, res, addressId) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (!(await hasTable('addresses'))) {
+  if (!(await hasTableInSchema('app_auth', 'addresses'))) {
     sendJson(res, 501, { message: 'Tabela addresses nu exista inca.' });
     return;
   }
@@ -4677,7 +4682,7 @@ async function handleAddressUpdate(req, res, addressId) {
   }
 
   await clearDefaultAddresses(user.id, updates, addressId);
-  const address = await updateRowForUser('addresses', addressId, user.id, updates);
+  const address = await updateRowForUser('app_auth.addresses', addressId, user.id, updates);
 
   if (!address) {
     sendJson(res, 404, { message: 'Adresa nu a fost gasita.' });
@@ -4691,12 +4696,12 @@ async function handleAddressDelete(req, res, addressId) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (!(await hasTable('addresses'))) {
+  if (!(await hasTableInSchema('app_auth', 'addresses'))) {
     sendJson(res, 204, {});
     return;
   }
 
-  await pool.query('DELETE FROM addresses WHERE id = $1 AND user_id = $2', [addressId, user.id]);
+  await pool.query('DELETE FROM app_auth.addresses WHERE id = $1 AND user_id = $2', [addressId, user.id]);
   sendJson(res, 200, { ok: true });
 }
 
@@ -4706,8 +4711,8 @@ async function getCurrentUser(req, includePassword = false) {
   if (!payload?.sub) return null;
 
   const select = includePassword
-    ? 'SELECT * FROM users WHERE id = $1 LIMIT 1'
-    : 'SELECT * FROM users WHERE id = $1 LIMIT 1';
+    ? 'SELECT * FROM app_auth.users WHERE id = $1 LIMIT 1'
+    : 'SELECT * FROM app_auth.users WHERE id = $1 LIMIT 1';
   const result = await pool.query(select, [payload.sub]);
   return result.rows[0] || null;
 }
@@ -4735,13 +4740,13 @@ async function requireAdmin(req, res, includePassword = false) {
 
 async function getUserColumns() {
   if (userColumnsCache) return userColumnsCache;
-  userColumnsCache = await getColumns('users');
+  userColumnsCache = await getColumns('users', 'app_auth');
   return userColumnsCache;
 }
 
 async function getAddressColumns() {
   if (addressColumnsCache) return addressColumnsCache;
-  addressColumnsCache = await getColumns('addresses');
+  addressColumnsCache = await getColumns('addresses', 'app_auth');
   return addressColumnsCache;
 }
 
@@ -4757,7 +4762,21 @@ async function getConversationMessageColumns() {
   return conversationMessageColumnsCache;
 }
 
-async function getColumns(tableName) {
+async function getColumns(tableName, schemaName = null) {
+  if (schemaName) {
+    const result = await pool.query(
+      `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = $2
+        ORDER BY ordinal_position
+      `,
+      [schemaName, tableName],
+    );
+
+    return new Set(result.rows.map((row) => row.column_name));
+  }
+
   const result = await pool.query(
     `
       SELECT column_name
@@ -4800,7 +4819,7 @@ async function hasTableInSchema(schemaName, tableName) {
 }
 
 async function insertUser(data) {
-  return insertRow('users', data);
+  return insertRow('app_auth.users', data);
 }
 
 async function insertRow(tableName, data) {
@@ -4821,7 +4840,7 @@ async function insertRowWithClient(db, tableName, data) {
 }
 
 async function updateUser(userId, updates) {
-  return updateRow('users', userId, updates);
+  return updateRow('app_auth.users', userId, updates);
 }
 
 async function updateRow(tableName, id, updates) {
@@ -5320,11 +5339,11 @@ async function getCheckoutCustomer(user) {
   const fallbackLastName = fullNameParts.slice(1).join(' ') || 'Margele.net';
   let address = null;
 
-  if (await hasTable('addresses')) {
+  if (await hasTableInSchema('app_auth', 'addresses')) {
     const addressResult = await pool.query(
       `
         SELECT *
-        FROM addresses
+        FROM app_auth.addresses
         WHERE user_id = $1
         ORDER BY implicit_facturare DESC, implicit_livrare DESC, id DESC
         LIMIT 1
@@ -6130,7 +6149,7 @@ async function getSmartBillCustomerForOrder(order, db = pool) {
     };
   }
 
-  const userResult = await db.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [
+  const userResult = await db.query('SELECT * FROM app_auth.users WHERE id = $1 LIMIT 1', [
     orderRow.user_id,
   ]);
   const user = userResult.rows[0];
@@ -6139,11 +6158,11 @@ async function getSmartBillCustomerForOrder(order, db = pool) {
   }
 
   let address = null;
-  if (await hasTable('addresses')) {
+  if (await hasTableInSchema('app_auth', 'addresses')) {
     const addressResult = await db.query(
       `
         SELECT *
-        FROM addresses
+        FROM app_auth.addresses
         WHERE user_id = $1
         ORDER BY implicit_facturare DESC, implicit_livrare DESC, id DESC
         LIMIT 1
@@ -6279,11 +6298,11 @@ async function clearDefaultAddresses(userId, data, exceptAddressId = null) {
   }
 
   if (data.implicit_facturare === true) {
-    updates.push(`UPDATE addresses SET implicit_facturare = false WHERE ${where}`);
+    updates.push(`UPDATE app_auth.addresses SET implicit_facturare = false WHERE ${where}`);
   }
 
   if (data.implicit_livrare === true) {
-    updates.push(`UPDATE addresses SET implicit_livrare = false WHERE ${where}`);
+    updates.push(`UPDATE app_auth.addresses SET implicit_livrare = false WHERE ${where}`);
   }
 
   for (const sql of updates) {

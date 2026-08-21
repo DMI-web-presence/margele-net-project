@@ -8,7 +8,9 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is required in backend/.env');
 }
 
-const dbSearchPath = 'catalog,commerce,content,app_auth,public,auth';
+// Legacy migrations were authored with auth-owned tables first in the search path.
+// New domain-specific migrations must qualify their target schema explicitly.
+const dbSearchPath = 'app_auth,catalog,commerce,content,public,auth';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
